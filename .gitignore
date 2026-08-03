@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Node / Vue
+node_modules/
+dist/
+.vite/
+*.local
+
+# OS & Environment
+.env
+.DS_Store
+Thumbs.db

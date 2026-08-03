@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://your-app.monsterasp.net/api/:path*"
+    },
+    {
+      "source": "/hubs/:path*",
+      "destination": "http://your-app.monsterasp.net/hubs/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
