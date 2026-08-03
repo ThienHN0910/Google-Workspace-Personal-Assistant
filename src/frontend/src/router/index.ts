@@ -45,6 +45,21 @@ const routes = [
         name: 'EmailOps',
         component: () => import('@/views/EmailOpsView.vue'),
       },
+      {
+        path: 'calendar',
+        name: 'Calendar',
+        component: () => import('@/views/CalendarView.vue'),
+      },
+      {
+        path: 'finance',
+        name: 'Finance',
+        component: () => import('@/views/FinanceView.vue'),
+      },
+      {
+        path: 'drive-guard',
+        name: 'DriveGuard',
+        component: () => import('@/views/DriveGuardView.vue'),
+      },
     ],
   },
 

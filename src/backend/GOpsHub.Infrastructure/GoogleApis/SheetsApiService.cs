@@ -1,0 +1,91 @@
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Services;
+using Google.Apis.Sheets.v4;
+using Google.Apis.Sheets.v4.Data;
+using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
+
+namespace GOpsHub.Infrastructure.GoogleApis;
+
+public class SheetsApiService : ISheetsService
+{
+    private readonly IRepository<AdminUser> _userRepo;
+    private readonly ITokenEncryptionService _encryptionService;
+    private readonly ILogger<SheetsApiService> _logger;
+    private const string AdminEmail = "hnt.vn.vn@gmail.com";
+
+    public SheetsApiService(
+        IRepository<AdminUser> userRepo,
+        ITokenEncryptionService encryptionService,
+        ILogger<SheetsApiService> logger)
+    {
+        _userRepo = userRepo;
+        _encryptionService = encryptionService;
+        _logger = logger;
+    }
+
+    private async Task<SheetsService?> GetSheetsClientAsync(CancellationToken ct = default)
+    {
+        var user = await _userRepo.FindOneAsync(u => u.Email == AdminEmail, ct);
+        if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
+        {
+            _logger.LogWarning("Admin user token not found for Sheets API calls.");
+            return null;
+        }
+
+        var accessToken = _encryptionService.Decrypt(user.GoogleAccessToken);
+        var credential = GoogleCredential.FromAccessToken(accessToken);
+
+        return new SheetsService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "G-Ops Hub"
+        });
+    }
+
+    public async Task AppendRowAsync(string spreadsheetId, string sheetName, IList<object> values, CancellationToken ct = default)
+    {
+        var service = await GetSheetsClientAsync(ct);
+        if (service == null) return;
+
+        var valueRange = new ValueRange
+        {
+            Values = new List<IList<object>> { values }
+        };
+
+        var request = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, $"{sheetName}!A1");
+        request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+
+        await request.ExecuteAsync(ct);
+    }
+
+    public async Task<IList<IList<object>>> GetRangeAsync(string spreadsheetId, string range, CancellationToken ct = default)
+    {
+        var service = await GetSheetsClientAsync(ct);
+        if (service == null) return Array.Empty<IList<object>>();
+
+        var response = await service.Spreadsheets.Values.Get(spreadsheetId, range).ExecuteAsync(ct);
+        return response.Values ?? Array.Empty<IList<object>>();
+    }
+
+    public async Task<string> CreateSheetTabAsync(string spreadsheetId, string sheetName, CancellationToken ct = default)
+    {
+        var service = await GetSheetsClientAsync(ct);
+        if (service == null) return string.Empty;
+
+        var addSheetRequest = new AddSheetRequest
+        {
+            Properties = new SheetProperties { Title = sheetName }
+        };
+
+        var batchUpdate = new BatchUpdateSpreadsheetRequest
+        {
+            Requests = new List<Request> { new Request { AddSheet = addSheetRequest } }
+        };
+
+        var response = await service.Spreadsheets.BatchUpdate(batchUpdate, spreadsheetId).ExecuteAsync(ct);
+        return response.Replies.FirstOrDefault()?.AddSheet?.Properties?.SheetId?.ToString() ?? string.Empty;
+    }
+}

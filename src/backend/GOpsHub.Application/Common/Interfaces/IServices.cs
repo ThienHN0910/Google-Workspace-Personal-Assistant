@@ -9,6 +9,9 @@ public interface IAIService
     Task<AIScheduleResult?> ExtractScheduleFromEmailAsync(string emailContent, CancellationToken ct = default);
     Task<AITransactionResult?> ParseTransactionEmailAsync(string emailContent, string bankName, CancellationToken ct = default);
     Task<string> SummarizeEmailThreadAsync(string threadContent, CancellationToken ct = default);
+    Task<int> ScoreEmailPriorityAsync(string from, string subject, string snippet, CancellationToken ct = default);
+    Task<List<string>> ExtractTasksFromEmailAsync(string emailContent, CancellationToken ct = default);
+    Task<string> GenerateExecutiveReportAsync(string periodStats, CancellationToken ct = default);
 }
 
 public class AIReplyResult
@@ -113,6 +116,5 @@ public interface ISheetsService
 /// </summary>
 public interface INotificationService
 {
-    Task SendDashboardNotificationAsync(string title, string message, string severity, string category, string? actionUrl = null, CancellationToken ct = default);
-    Task SendDiscordNotificationAsync(string message, CancellationToken ct = default);
+    Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default);
 }

@@ -16,9 +16,24 @@
           <i class="pi pi-inbox"></i>
           <span>Email Operations</span>
         </router-link>
-        <router-link to="/public/calendar" class="nav-item">
+        <router-link to="/calendar" class="nav-item">
           <i class="pi pi-calendar"></i>
-          <span>Public View</span>
+          <span>Scheduling</span>
+        </router-link>
+        <router-link to="/finance" class="nav-item">
+          <i class="pi pi-wallet"></i>
+          <span>Finance Telemetry</span>
+        </router-link>
+        <router-link to="/drive-guard" class="nav-item">
+          <i class="pi pi-shield"></i>
+          <span>Drive Guard</span>
+        </router-link>
+
+        <div class="nav-divider"></div>
+
+        <router-link to="/public/calendar" class="nav-item public-item">
+          <i class="pi pi-eye"></i>
+          <span>Public Guest View</span>
         </router-link>
       </nav>
 
@@ -87,6 +102,12 @@ const handleLogout = () => {
   flex: 1;
 }
 
+.nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0.75rem 0;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -102,6 +123,11 @@ const handleLogout = () => {
     background: rgba(99, 102, 241, 0.15);
     color: #6366f1;
   }
+}
+
+.public-item {
+  color: #64748b;
+  font-size: 0.85rem;
 }
 
 .user-profile {

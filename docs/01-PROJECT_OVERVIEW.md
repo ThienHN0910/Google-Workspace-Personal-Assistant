@@ -139,16 +139,16 @@ Hệ thống sử dụng mô hình **đơn giản hóa**:
 
 ## 6. Roadmap & Sprint Assignment
 
-| Phase | Use Cases | AI Agent | Lý do |
-|-------|-----------|----------|-------|
-| **v0.1 Foundation** | Auth (Google OAuth), Base Infrastructure, MongoDB setup | 🧠 **Opus** | Kiến trúc nền tảng, cần chính xác |
-| **v0.2 Email Engine** | UC01 (Auto-Clean), UC02 (AI Draft) | 🧠 **Opus** | Gmail API phức tạp, AI integration |
-| **v0.3 Smart Scheduling** | UC03 (Schedule Extractor) | ⚡ **Flash** | Pattern tương tự UC02, ít complexity |
-| **v0.4 Finance Tracker** | UC04 (Transaction Logging) | ⚡ **Flash** | CRUD + parsing, clear pattern |
-| **v0.5 Drive Guard** | UC05 (Audit), UC06 (File Guard) | 🧠 **Opus** | Webhook + real-time, security-critical |
-| **v1.0 MVP Polish** | Testing, bug fixes, deploy | 🧠 **Opus** | Production readiness |
-| **v1.1 Enhanced** | UC07, UC09, UC10, UC12, UC13, UC14, UC16 | ⚡ **Flash** | Follow established patterns |
-| **v1.2 Full Suite** | UC08, UC11, UC15, UC17, UC18 | ⚡ **Flash** | Extension features |
+| Phase | Use Cases | AI Agent | Trạng thái |
+|-------|-----------|----------|-----------|
+| **v0.1 Foundation** | Auth (Google OAuth), Base Infrastructure, MongoDB setup | 🧠 **Opus** | ✅ **Completed** |
+| **v0.2 Email Engine** | UC01 (Auto-Clean), UC02 (AI Draft) | 🧠 **Opus** | ✅ **Completed** |
+| **v0.3 Smart Scheduling** | UC03 (Schedule Extractor) | ⚡ **Flash** | ✅ **Completed** |
+| **v0.4 Finance Tracker** | UC04 (Transaction Logging) | ⚡ **Flash** | ✅ **Completed** |
+| **v0.5 Drive Guard** | UC05 (Audit), UC06 (File Guard) | 🧠 **Opus** | ✅ **Completed** |
+| **v1.0 MVP Polish** | Testing, bug fixes, deploy | 🧠 **Opus** | ✅ **Completed** |
+| **v1.1 Enhanced** | UC07, UC09, UC10, UC12, UC13, UC14, UC16 | ⚡ **Flash** | ✅ **Completed** |
+| **v1.2 Full Suite** | UC08, UC11, UC15, UC17, UC18 | ⚡ **Flash** | ✅ **Completed** |
 
 ### 📋 Agent Handoff Guide
 

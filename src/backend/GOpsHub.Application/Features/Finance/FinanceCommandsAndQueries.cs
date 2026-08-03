@@ -1,0 +1,110 @@
+using GOpsHub.Application.Common.CQRS;
+using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Application.Common.Models;
+using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Enums;
+using GOpsHub.Domain.Interfaces;
+
+namespace GOpsHub.Application.Features.Finance;
+
+public record ParseTransactionEmailCommand(string GmailMessageId, string BankName, string SpreadsheetId) : ICommand<Transaction?>;
+
+public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransactionEmailCommand, Transaction?>
+{
+    private readonly IRepository<Transaction> _transactionRepo;
+    private readonly IGmailService _gmailService;
+    private readonly IAIService _aiService;
+    private readonly ISheetsService _sheetsService;
+
+    public ParseTransactionEmailCommandHandler(
+        IRepository<Transaction> transactionRepo,
+        IGmailService gmailService,
+        IAIService aiService,
+        ISheetsService sheetsService)
+    {
+        _transactionRepo = transactionRepo;
+        _gmailService = gmailService;
+        _aiService = aiService;
+        _sheetsService = sheetsService;
+    }
+
+    public async Task<Transaction?> HandleAsync(ParseTransactionEmailCommand command, CancellationToken ct = default)
+    {
+        var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
+        if (email == null) return null;
+
+        var aiResult = await _aiService.ParseTransactionEmailAsync(email.Snippet, command.BankName, ct);
+        if (aiResult == null) return null;
+
+        var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
+            ? TransactionType.Credit
+            : TransactionType.Debit;
+
+        var transaction = new Transaction
+        {
+            SourceEmailId = email.Id,
+            TransactionDate = aiResult.TransactionDate,
+            BankName = command.BankName,
+            TransactionType = transactionType,
+            Amount = aiResult.Amount,
+            Currency = "VND",
+            Description = aiResult.Description,
+            Category = aiResult.Category,
+            BalanceAfter = aiResult.BalanceAfter,
+            IsAutoRead = true
+        };
+
+        var saved = await _transactionRepo.CreateAsync(transaction, ct);
+
+        // Sync to Google Sheets if spreadsheet ID provided
+        if (!string.IsNullOrEmpty(command.SpreadsheetId))
+        {
+            var sheetName = $"Transactions_{saved.TransactionDate:yyyy_MM}";
+            var rowValues = new List<object>
+            {
+                saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                saved.BankName,
+                saved.TransactionType.ToString(),
+                saved.Amount,
+                saved.Category,
+                saved.Description,
+                saved.BalanceAfter ?? 0
+            };
+
+            await _sheetsService.AppendRowAsync(command.SpreadsheetId, sheetName, rowValues, ct);
+        }
+
+        return saved;
+    }
+}
+
+public record GetTransactionsQuery(int Page = 1, int PageSize = 20) : IQuery<PagedResult<Transaction>>;
+
+public class GetTransactionsQueryHandler : IQueryHandler<GetTransactionsQuery, PagedResult<Transaction>>
+{
+    private readonly IRepository<Transaction> _transactionRepo;
+
+    public GetTransactionsQueryHandler(IRepository<Transaction> transactionRepo)
+    {
+        _transactionRepo = transactionRepo;
+    }
+
+    public async Task<PagedResult<Transaction>> HandleAsync(GetTransactionsQuery query, CancellationToken ct = default)
+    {
+        var (items, total) = await _transactionRepo.GetPagedAsync(
+            null,
+            query.Page,
+            query.PageSize,
+            x => x.TransactionDate,
+            true,
+            ct);
+
+        return new PagedResult<Transaction>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = query.Page,
+            PageSize = query.PageSize
+        };
+    }
+}

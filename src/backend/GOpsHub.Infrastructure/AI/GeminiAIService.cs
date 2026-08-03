@@ -118,6 +118,62 @@ Chỉ trả về JSON thuần hợp lệ.";
         return await CallGeminiApiAsync(prompt, ct);
     }
 
+    /// <summary>
+    /// UC13 — Smart Email Priority Scoring (1-10)
+    /// </summary>
+    public async Task<int> ScoreEmailPriorityAsync(string from, string subject, string snippet, CancellationToken ct = default)
+    {
+        var prompt = $@"Đánh giá độ ưu tiên của email sau trên thang điểm từ 1 đến 10 (10 là rất khẩn cấp/quan trọng).
+Người gửi: {from}
+Tiêu đề: {subject}
+Nội dung: {snippet}
+
+Chỉ trả về 1 con số nguyên duy nhất từ 1 đến 10.";
+
+        var responseText = await CallGeminiApiAsync(prompt, ct);
+        if (int.TryParse(responseText.Trim(), out var score))
+        {
+            return Math.Clamp(score, 1, 10);
+        }
+        return 5;
+    }
+
+    /// <summary>
+    /// UC18 — Extract TODO Tasks from Email
+    /// </summary>
+    public async Task<List<string>> ExtractTasksFromEmailAsync(string emailContent, CancellationToken ct = default)
+    {
+        var prompt = $@"Trích xuất các việc cần làm (action items) từ email sau thành danh sách JSON các chuỗi:
+{emailContent}
+
+Ví dụ trả về: [""Gửi báo cáo trước 5h chiều"", ""Họp với team thiết kế""]
+Chỉ trả về JSON array hợp lệ.";
+
+        var responseText = await CallGeminiApiAsync(prompt, ct);
+        try
+        {
+            var cleanedJson = CleanJsonResponse(responseText);
+            return JsonSerializer.Deserialize<List<string>>(cleanedJson) ?? new List<string>();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// UC14 — Recurring Report Generator
+    /// </summary>
+    public async Task<string> GenerateExecutiveReportAsync(string periodStats, CancellationToken ct = default)
+    {
+        var prompt = $@"Soạn báo cáo vận hành tóm tắt cấp cao (Executive Summary Report) bằng tiếng Việt cho Thien HN dựa trên số liệu sau:
+{periodStats}
+
+Định dạng bằng Markdown đẹp mắt với các tiêu đề rõ ràng.";
+
+        return await CallGeminiApiAsync(prompt, ct);
+    }
+
     private async Task<string> CallGeminiApiAsync(string prompt, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(_apiKey))

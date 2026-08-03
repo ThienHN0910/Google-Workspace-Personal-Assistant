@@ -1,6 +1,7 @@
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Interfaces;
 using GOpsHub.Infrastructure.AI;
+using GOpsHub.Infrastructure.Alerting;
 using GOpsHub.Infrastructure.GoogleApis;
 using GOpsHub.Infrastructure.Persistence;
 using GOpsHub.Infrastructure.Persistence.Repositories;
@@ -34,9 +35,13 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<ITokenEncryptionService, TokenEncryptionService>();
 
-        // Google & AI Services
+        // Google, AI & Alerting Services
         services.AddScoped<IGmailService, GmailApiService>();
+        services.AddScoped<ICalendarService, CalendarApiService>();
+        services.AddScoped<ISheetsService, SheetsApiService>();
+        services.AddScoped<IDriveService, DriveApiService>();
         services.AddScoped<IAIService, GeminiAIService>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         return services;
     }
