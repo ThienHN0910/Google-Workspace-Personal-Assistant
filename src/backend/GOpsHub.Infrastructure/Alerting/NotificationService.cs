@@ -1,8 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using GOpsHub.Application.Common.Interfaces;
-using GOpsHub.API.Hubs;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -10,37 +8,24 @@ namespace GOpsHub.Infrastructure.Alerting;
 
 public class NotificationService : INotificationService
 {
-    private readonly IHubContext<NotificationHub>? _hubContext;
     private readonly HttpClient _httpClient;
     private readonly string? _discordWebhookUrl;
     private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         IConfiguration configuration,
-        ILogger<NotificationService> logger,
-        IHubContext<NotificationHub>? hubContext = null)
+        ILogger<NotificationService> logger)
     {
         _httpClient = new HttpClient();
         _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"];
         _logger = logger;
-        _hubContext = hubContext;
     }
 
     public async Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default)
     {
-        // 1. SignalR Real-time push to Dashboard
-        if (_hubContext != null)
-        {
-            await _hubContext.Clients.All.SendAsync("ReceiveNotification", new
-            {
-                Title = title,
-                Message = message,
-                Type = type,
-                Timestamp = DateTime.UtcNow
-            }, ct);
-        }
+        _logger.LogInformation("Notification [{Type}]: {Title} - {Message}", type, title, message);
 
-        // 2. Discord Webhook Push (UC12 Multi-Channel Alerting)
+        // Discord Webhook Push (UC12 Multi-Channel Alerting)
         if (!string.IsNullOrEmpty(_discordWebhookUrl))
         {
             try
