@@ -146,22 +146,7 @@ public class GmailApiService : IGmailService
 
                 if (msg != null)
                 {
-                    var email = new EmailMessage
-                    {
-                        Id = msg.Id,
-                        ThreadId = msg.ThreadId,
-                        Labels = msg.LabelIds?.ToList() ?? new List<string>()
-                    };
-
-                    ParseMessagePayload(msg.Payload, email);
-
-                    // Re-check read status manually from labels just in case
-                    email.IsRead = !email.Labels.Contains("UNREAD");
-
-                    if (msg.InternalDate.HasValue)
-                        email.ReceivedAt = DateTimeOffset.FromUnixTimeMilliseconds(msg.InternalDate.Value).UtcDateTime;
-
-                    emailMessages.Add(email);
+                    emailMessages.Add(MapToEmailMessage(msg));
                 }
             }
 
