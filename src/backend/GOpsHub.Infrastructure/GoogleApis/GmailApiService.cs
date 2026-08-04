@@ -281,10 +281,72 @@ public class GmailApiService : IGmailService
             To = to,
             Subject = subject,
             Snippet = msg.Snippet ?? string.Empty,
-            Body = msg.Snippet, // Simple fallback for body snippet
+            Body = ExtractEmailBody(msg.Payload),
             ReceivedAt = date,
             IsRead = msg.LabelIds == null || !msg.LabelIds.Contains("UNREAD"),
             Labels = msg.LabelIds?.ToList() ?? new List<string>()
         };
+    }
+
+    private static string ExtractEmailBody(MessagePart payload)
+    {
+        if (payload == null) return string.Empty;
+
+        if (payload.Parts == null || !payload.Parts.Any())
+        {
+            return DecodeBase64Url(payload.Body?.Data);
+        }
+
+        var htmlPart = FindPart(payload.Parts, "text/html");
+        if (htmlPart != null)
+        {
+            return DecodeBase64Url(htmlPart.Body?.Data);
+        }
+
+        var textPart = FindPart(payload.Parts, "text/plain");
+        if (textPart != null)
+        {
+            return DecodeBase64Url(textPart.Body?.Data);
+        }
+
+        return string.Empty;
+    }
+
+    private static MessagePart? FindPart(IList<MessagePart> parts, string mimeType)
+    {
+        if (parts == null) return null;
+        foreach (var part in parts)
+        {
+            if (part.MimeType == mimeType && !string.IsNullOrEmpty(part.Body?.Data))
+                return part;
+
+            if (part.Parts != null && part.Parts.Any())
+            {
+                var found = FindPart(part.Parts, mimeType);
+                if (found != null)
+                    return found;
+            }
+        }
+        return null;
+    }
+
+    private static string DecodeBase64Url(string? base64Url)
+    {
+        if (string.IsNullOrEmpty(base64Url)) return string.Empty;
+        var base64 = base64Url.Replace('-', '+').Replace('_', '/');
+        switch (base64.Length % 4)
+        {
+            case 2: base64 += "=="; break;
+            case 3: base64 += "="; break;
+        }
+        try
+        {
+            var bytes = Convert.FromBase64String(base64);
+            return System.Text.Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 }

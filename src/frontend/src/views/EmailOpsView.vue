@@ -27,8 +27,8 @@
           <h3>{{ selectedEmail.subject }}</h3>
           <p>Từ: {{ selectedEmail.from }} | Lúc: {{ formatDate(selectedEmail.receivedAt) }}</p>
         </div>
-        <div class="detail-body">
-          <p>{{ selectedEmail.snippet }}</p>
+        <div class="detail-body email-html-body">
+          <div v-html="selectedEmail.body || selectedEmail.snippet"></div>
         </div>
         <div class="detail-actions">
           <button class="btn-cancel" @click="markAsRead(selectedEmail.id)" v-if="!selectedEmail.isRead"><i class="pi pi-check"></i> Đánh dấu đã đọc</button>
@@ -40,7 +40,7 @@
 
         <div class="reply-box">
           <h4>Trả lời</h4>
-          <textarea v-model="replyText" rows="5" placeholder="Nhập nội dung phản hồi..."></textarea>
+          <Editor v-model="replyText" editorStyle="height: 250px" placeholder="Nhập nội dung phản hồi..." />
           <button class="btn-submit mt-2" @click="sendReply(selectedEmail.id)" :disabled="sendingReply || !replyText">
             <i class="pi pi-send"></i> {{ sendingReply ? 'Đang gửi...' : 'Gửi phản hồi' }}
           </button>
@@ -93,6 +93,7 @@
 import { ref, onMounted, watch } from 'vue';
 import api from '@/services/api.service';
 import CleanupRuleList from '@/components/email/CleanupRuleList.vue';
+import Editor from 'primevue/editor';
 
 const activeTab = ref('inbox');
 const emails = ref<any[]>([]);
@@ -421,5 +422,14 @@ button {
     resize: vertical;
     &:focus { outline: none; border-color: #6366f1; }
   }
+}
+.email-html-body {
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 1rem;
+  background-color: #fff;
+  color: #333;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 }
 </style>
