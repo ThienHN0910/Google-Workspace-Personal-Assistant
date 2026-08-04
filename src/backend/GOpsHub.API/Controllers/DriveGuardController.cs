@@ -68,4 +68,24 @@ public class DriveGuardController : ControllerBase
         var result = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<bool>.Ok(result, "Đã cách ly file nguy hiểm."));
     }
+
+    /// <summary>
+    /// Get Drive Guard polling interval in minutes
+    /// </summary>
+    [HttpGet("interval")]
+    public async Task<ActionResult<ApiResponse<int>>> GetInterval()
+    {
+        var interval = await _dispatcher.QueryAsync(new GetDriveGuardIntervalQuery());
+        return Ok(ApiResponse<int>.Ok(interval));
+    }
+
+    /// <summary>
+    /// Update Drive Guard polling interval
+    /// </summary>
+    [HttpPost("interval")]
+    public async Task<ActionResult<ApiResponse<int>>> UpdateInterval([FromBody] UpdateDriveGuardIntervalCommand command)
+    {
+        var interval = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<int>.Ok(interval, "Đã cập nhật chu kỳ quét thành công."));
+    }
 }

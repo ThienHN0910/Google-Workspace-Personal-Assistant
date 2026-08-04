@@ -119,10 +119,14 @@ app.UseHangfireDashboard("/hangfire");
 using (var scope = app.Services.CreateScope())
 {
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+    var configRepo = scope.ServiceProvider.GetRequiredService<GOpsHub.Domain.Interfaces.IRepository<GOpsHub.Domain.Entities.AppConfiguration>>();
+    var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
+    var interval = config != null && int.TryParse(config.Value, out int min) ? min : 5;
+    
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
         "drive-guard-audit", 
         job => job.RunAuditAsync(CancellationToken.None), 
-        "*/5 * * * *");
+        $"*/{interval} * * * *");
 }
 
 app.MapControllers();

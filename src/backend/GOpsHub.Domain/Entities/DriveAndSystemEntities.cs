@@ -35,6 +35,9 @@ public class MonitoredFolder : BaseEntity
 
     [BsonElement("lastCheckedAt")]
     public DateTime? LastCheckedAt { get; set; }
+
+    [BsonElement("knownFileIds")]
+    public List<string> KnownFileIds { get; set; } = new();
 }
 
 /// <summary>
@@ -161,4 +164,16 @@ public class BackupRecord : BaseEntity
 
     [BsonElement("completedAt")]
     public DateTime? CompletedAt { get; set; }
+}
+
+/// <summary>
+/// System configuration key-value store.
+/// </summary>
+public class AppConfiguration : BaseEntity
+{
+    [BsonElement("key")]
+    public string Key { get; set; } = string.Empty;
+
+    [BsonElement("value")]
+    public string Value { get; set; } = string.Empty;
 }

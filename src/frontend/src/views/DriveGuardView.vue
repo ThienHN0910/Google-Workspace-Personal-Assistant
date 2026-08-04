@@ -6,9 +6,19 @@
     </header>
 
     <div class="sections">
-      <!-- Section 1: Monitored Folders (UC05) -->
+      <!-- Section 1: Monitored Folders & Config (UC05) -->
       <div class="card-section">
-        <h2>📂 Cấu hình Thư mục Theo dõi</h2>
+        <div class="section-header">
+          <h2>📂 Cấu hình Thư mục & Hệ thống</h2>
+          <div class="config-interval">
+            <label>Chu kỳ quét (phút):</label>
+            <input type="number" v-model="intervalMinutes" min="1" max="60" />
+            <button class="btn-small" @click="updateInterval" :disabled="updatingInterval">
+              {{ updatingInterval ? 'Đang lưu...' : 'Áp dụng' }}
+            </button>
+          </div>
+        </div>
+        
         <form @submit.prevent="addFolder" class="add-folder-form">
           <input v-model="newFolder.folderName" placeholder="Tên gợi nhớ (VD: Tài liệu mật)" required />
           <input v-model="newFolder.googleFolderId" placeholder="Google Folder ID" required />
@@ -75,8 +85,16 @@ const folders = ref<any[]>([]);
 const addingFolder = ref(false);
 const newFolder = ref({ folderName: '', googleFolderId: '' });
 
+const intervalMinutes = ref(5);
+const updatingInterval = ref(false);
+
 const fetchData = async () => {
   try {
+    const resInterval: any = await api.get('/driveguard/interval');
+    if (resInterval.success) {
+      intervalMinutes.value = resInterval.data;
+    }
+
     const resFolders: any = await api.get('/driveguard/folders');
     if (resFolders.success && resFolders.data) {
       folders.value = resFolders.data;
@@ -112,6 +130,20 @@ const addFolder = async () => {
   }
 };
 
+const updateInterval = async () => {
+  updatingInterval.value = true;
+  try {
+    const res: any = await api.post('/driveguard/interval', { minutes: intervalMinutes.value });
+    if (res.success) {
+      alert('Đã cập nhật chu kỳ quét thành công! Hệ thống sẽ quét theo lịch mới.');
+    }
+  } catch (e) {
+    alert('Lỗi cập nhật cấu hình.');
+  } finally {
+    updatingInterval.value = false;
+  }
+};
+
 const handleQuarantine = async (fileId: string) => {
   try {
     const res: any = await api.post('/driveguard/quarantine', {
@@ -144,7 +176,49 @@ onMounted(fetchData);
   border-radius: 1rem;
   padding: 1.5rem;
 
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    
+    h2 { margin-bottom: 0; }
+  }
+
   h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 1rem; color: #f8fafc; }
+}
+
+.config-interval {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255,255,255,0.05);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+
+  label { font-size: 0.85rem; color: #cbd5e1; }
+  input {
+    width: 60px;
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #fff;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    text-align: center;
+  }
+}
+
+.btn-small {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover:not(:disabled) { background: #059669; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .empty { color: #94a3b8; font-size: 0.9rem; }

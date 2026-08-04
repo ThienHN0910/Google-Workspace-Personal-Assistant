@@ -142,3 +142,60 @@ public class GetSecurityAlertsQueryHandler : IQueryHandler<GetSecurityAlertsQuer
         };
     }
 }
+
+public record GetDriveGuardIntervalQuery() : IQuery<int>;
+
+public class GetDriveGuardIntervalQueryHandler : IQueryHandler<GetDriveGuardIntervalQuery, int>
+{
+    private readonly IRepository<AppConfiguration> _configRepo;
+
+    public GetDriveGuardIntervalQueryHandler(IRepository<AppConfiguration> configRepo)
+    {
+        _configRepo = configRepo;
+    }
+
+    public async Task<int> HandleAsync(GetDriveGuardIntervalQuery query, CancellationToken ct = default)
+    {
+        var config = await _configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", ct);
+        if (config == null) return 5;
+        return int.TryParse(config.Value, out int minutes) ? minutes : 5;
+    }
+}
+
+public record UpdateDriveGuardIntervalCommand(int Minutes) : ICommand<int>;
+
+public class UpdateDriveGuardIntervalCommandHandler : ICommandHandler<UpdateDriveGuardIntervalCommand, int>
+{
+    private readonly IRepository<AppConfiguration> _configRepo;
+    private readonly Hangfire.IRecurringJobManager _recurringJobManager;
+
+    public UpdateDriveGuardIntervalCommandHandler(
+        IRepository<AppConfiguration> configRepo,
+        Hangfire.IRecurringJobManager recurringJobManager)
+    {
+        _configRepo = configRepo;
+        _recurringJobManager = recurringJobManager;
+    }
+
+    public async Task<int> HandleAsync(UpdateDriveGuardIntervalCommand command, CancellationToken ct = default)
+    {
+        var config = await _configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", ct);
+        if (config == null)
+        {
+            config = new AppConfiguration { Key = "DriveGuardInterval", Value = command.Minutes.ToString() };
+            await _configRepo.CreateAsync(config, ct);
+        }
+        else
+        {
+            config.Value = command.Minutes.ToString();
+            await _configRepo.UpdateAsync(config, ct);
+        }
+
+        _recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(
+            "drive-guard-audit",
+            job => job.RunAuditAsync(CancellationToken.None),
+            $"*/{command.Minutes} * * * *");
+
+        return command.Minutes;
+    }
+}

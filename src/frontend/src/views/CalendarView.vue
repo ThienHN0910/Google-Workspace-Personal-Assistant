@@ -11,15 +11,42 @@
     </header>
 
     <div class="tabs">
-      <button :class="{ active: activeTab === 'extracted' }" @click="activeTab = 'extracted'">
-        ✨ Trích xuất từ Email ({{ extractedSchedules.length }})
-      </button>
       <button :class="{ active: activeTab === 'upcoming' }" @click="activeTab = 'upcoming'">
         🗓️ Sắp tới trên Calendar
       </button>
+      <button :class="{ active: activeTab === 'extracted' }" @click="activeTab = 'extracted'">
+        ✨ Trích xuất từ Email ({{ extractedSchedules.length }})
+      </button>
     </div>
 
-    <!-- Tab 1: Extracted Schedules -->
+    <!-- Tab 1: Upcoming Events from Real Google Calendar -->
+    <div v-if="activeTab === 'upcoming'" class="tab-content">
+      <div v-if="loading.upcoming" class="loading">Đang tải sự kiện từ Google Calendar...</div>
+      <div v-else-if="upcomingEvents.length === 0" class="empty-state">
+        <i class="pi pi-calendar"></i>
+        <p>Không có sự kiện nào sắp tới trong 7 ngày.</p>
+      </div>
+      <div v-else class="schedule-list">
+        <div v-for="event in upcomingEvents" :key="event.id" class="schedule-card">
+          <div class="card-header">
+            <a v-if="event.htmlLink" :href="event.htmlLink" target="_blank" class="event-title link-title">
+              {{ event.title }} <i class="pi pi-external-link" style="font-size: 0.8rem; margin-left: 0.25rem;"></i>
+            </a>
+            <span v-else class="event-title">{{ event.title }}</span>
+            <span class="badge google-badge">
+              <i class="pi pi-google"></i> Google Calendar
+            </span>
+          </div>
+          <div class="event-details">
+            <div><i class="pi pi-clock"></i> Bắt đầu: {{ formatDateTime(event.start) }}</div>
+            <div v-if="event.end"><i class="pi pi-clock"></i> Kết thúc: {{ formatDateTime(event.end) }}</div>
+            <div v-if="event.location"><i class="pi pi-map-marker"></i> {{ event.location }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Extracted Schedules -->
     <div v-if="activeTab === 'extracted'" class="tab-content">
       <div v-if="loading.extracted" class="loading">Đang tải lịch hẹn trích xuất...</div>
       <div v-else-if="extractedSchedules.length === 0" class="empty-state">
@@ -43,33 +70,6 @@
             <button class="confirm-btn" @click="handleConfirmExtracted(item.id)">
               <i class="pi pi-check"></i> Xác nhận & Đồng bộ
             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab 2: Upcoming Events from Real Google Calendar -->
-    <div v-if="activeTab === 'upcoming'" class="tab-content">
-      <div v-if="loading.upcoming" class="loading">Đang tải sự kiện từ Google Calendar...</div>
-      <div v-else-if="upcomingEvents.length === 0" class="empty-state">
-        <i class="pi pi-calendar"></i>
-        <p>Không có sự kiện nào sắp tới trong 7 ngày.</p>
-      </div>
-      <div v-else class="schedule-list">
-        <div v-for="event in upcomingEvents" :key="event.id" class="schedule-card">
-          <div class="card-header">
-            <a v-if="event.htmlLink" :href="event.htmlLink" target="_blank" class="event-title link-title">
-              {{ event.title }} <i class="pi pi-external-link" style="font-size: 0.8rem; margin-left: 0.25rem;"></i>
-            </a>
-            <span v-else class="event-title">{{ event.title }}</span>
-            <span class="badge google-badge">
-              <i class="pi pi-google"></i> Google Calendar
-            </span>
-          </div>
-          <div class="event-details">
-            <div><i class="pi pi-clock"></i> Bắt đầu: {{ formatDateTime(event.start) }}</div>
-            <div v-if="event.end"><i class="pi pi-clock"></i> Kết thúc: {{ formatDateTime(event.end) }}</div>
-            <div v-if="event.location"><i class="pi pi-map-marker"></i> {{ event.location }}</div>
           </div>
         </div>
       </div>
@@ -118,7 +118,7 @@
 import { ref, onMounted, watch } from 'vue';
 import api from '@/services/api.service';
 
-const activeTab = ref('extracted');
+const activeTab = ref('upcoming');
 const extractedSchedules = ref<any[]>([]);
 const upcomingEvents = ref<any[]>([]);
 
@@ -226,7 +226,7 @@ watch(activeTab, (newTab) => {
 });
 
 onMounted(() => {
-  fetchExtractedSchedules();
+  fetchUpcomingEvents();
 });
 </script>
 

@@ -7,6 +7,9 @@
       <button :class="{ active: activeTab === 'rules' }" @click="activeTab = 'rules'">
         🧹 Quy tắc dọn Inbox
       </button>
+      <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
+        📋 Nhật ký dọn dẹp
+      </button>
     </div>
 
     <!-- Tab 1: Inbox -->
@@ -86,8 +89,30 @@
     </div>
 
     <!-- Tab 2: Cleanup Rules -->
-    <div v-else class="tab-content">
+    <div v-else-if="activeTab === 'rules'" class="tab-content">
       <CleanupRuleList />
+    </div>
+
+    <!-- Tab 3: Logs -->
+    <div v-else-if="activeTab === 'logs'" class="tab-content">
+      <div v-if="cleanupLogs.length === 0" class="empty-state">
+        <i class="pi pi-history"></i>
+        <p>Chưa có nhật ký dọn dẹp nào.</p>
+      </div>
+      <div v-else class="logs-list">
+        <div v-for="log in cleanupLogs" :key="log.id" class="log-card">
+          <div class="log-header">
+            <span class="log-rule">Quy tắc: {{ log.ruleName }}</span>
+            <span class="log-time">{{ formatDate(log.executedAt) }}</span>
+          </div>
+          <div class="log-body">
+            <span class="badge" :class="log.actionTaken === 0 ? 'badge-danger' : 'badge-warning'">
+              {{ log.actionTaken === 0 ? 'Xóa (Trash)' : 'Lưu trữ (Archive)' }}
+            </span>
+            <span>Đã xử lý <strong>{{ log.emailsAffected }}</strong> email.</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -100,6 +125,7 @@ import Editor from 'primevue/editor';
 
 const activeTab = ref('inbox');
 const emails = ref<any[]>([]);
+const cleanupLogs = ref<any[]>([]);
 const loading = ref(true);
 const selectedEmail = ref<any>(null);
 const replyText = ref('');
@@ -232,17 +258,32 @@ const sendReply = async (id: string) => {
 };
 
 const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
   return new Date(dateStr).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
 };
 
+const fetchLogs = async () => {
+  try {
+    const res: any = await api.get('/emailops/logs');
+    if (res.success && res.data) {
+      cleanupLogs.value = res.data.items;
+    }
+  } catch (e) {
+    console.error('Failed to load logs:', e);
+  }
+};
+
 watch(activeTab, (newTab) => {
   if (newTab === 'inbox' && emails.value.length === 0) fetchInbox();
+  if (newTab === 'logs' && cleanupLogs.value.length === 0) fetchLogs();
 });
 
-onMounted(fetchInbox);
+onMounted(() => {
+  fetchInbox();
+});
 </script>
 
 <style scoped lang="scss">
@@ -459,5 +500,43 @@ button {
   color: #333;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+}
+
+.logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.log-card {
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    .log-rule { font-weight: 700; color: #f8fafc; }
+    .log-time { font-size: 0.85rem; color: #94a3b8; }
+  }
+
+  .log-body {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: #cbd5e1;
+    font-size: 0.95rem;
+
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.8rem;
+      font-weight: 800;
+      &.badge-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+      &.badge-warning { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    }
+  }
 }
 </style>

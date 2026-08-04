@@ -10,17 +10,20 @@ public class DriveGuardBackgroundJob
 {
     private readonly IRepository<MonitoredFolder> _folderRepo;
     private readonly IRepository<DriveAuditLog> _logRepo;
+    private readonly IRepository<SecurityAlert> _alertRepo;
     private readonly IDriveService _driveService;
     private readonly ILogger<DriveGuardBackgroundJob> _logger;
 
     public DriveGuardBackgroundJob(
         IRepository<MonitoredFolder> folderRepo,
         IRepository<DriveAuditLog> logRepo,
+        IRepository<SecurityAlert> alertRepo,
         IDriveService driveService,
         ILogger<DriveGuardBackgroundJob> logger)
     {
         _folderRepo = folderRepo;
         _logRepo = logRepo;
+        _alertRepo = alertRepo;
         _driveService = driveService;
         _logger = logger;
     }
@@ -35,30 +38,65 @@ public class DriveGuardBackgroundJob
             try
             {
                 var files = await _driveService.ListFilesInFolderAsync(folder.GoogleFolderId, ct);
-                
-                if (folder.LastCheckedAt.HasValue)
+                var currentFileIds = files.Select(f => f.Id).ToHashSet();
+                var knownFileIds = folder.KnownFileIds.ToHashSet();
+
+                // 1. Tìm các file mới thêm (Có trong files, nhưng KHÔNG có trong knownFileIds)
+                var newFiles = files.Where(f => !knownFileIds.Contains(f.Id)).ToList();
+                foreach (var file in newFiles)
                 {
-                    var newOrModifiedFiles = files.Where(f => f.ModifiedTime > folder.LastCheckedAt.Value).ToList();
-                    
-                    foreach (var file in newOrModifiedFiles)
+                    var log = new DriveAuditLog
                     {
-                        var log = new DriveAuditLog
+                        MonitoredFolderId = folder.Id,
+                        GoogleFileId = file.Id,
+                        FileName = file.Name,
+                        FileType = file.MimeType,
+                        Action = DriveAction.Created,
+                        ActorEmail = file.LastModifyingUser,
+                        ActionTimestamp = file.ModifiedTime ?? DateTime.UtcNow,
+                        Details = $"File được thêm mới: {file.Name}"
+                    };
+                    await _logRepo.CreateAsync(log, ct);
+                    _logger.LogInformation("Logged Drive activity for new file: {FileName}", file.Name);
+
+                    // Kiểm tra file nguy hiểm
+                    var ext = Path.GetExtension(file.Name)?.ToLower();
+                    if (ext == ".exe" || ext == ".bat" || ext == ".vbs" || ext == ".sh")
+                    {
+                        var alert = new SecurityAlert
                         {
-                            MonitoredFolderId = folder.Id,
-                            GoogleFileId = file.Id,
+                            Severity = AlertSeverity.High,
+                            AlertType = AlertType.SuspiciousFile,
+                            FileId = file.Id,
                             FileName = file.Name,
-                            FileType = file.MimeType,
-                            Action = DriveAction.Created, // Simplification: we log modified/created as Create for now or you can map it.
-                            ActorEmail = file.LastModifyingUser,
-                            ActionTimestamp = file.ModifiedTime ?? DateTime.UtcNow,
-                            Details = $"File modified/created: {file.Name}"
+                            FilePath = folder.FolderName,
+                            Description = $"Phát hiện file thực thi nguy hiểm ({ext}) vừa được upload lên thư mục {folder.FolderName}.",
+                            IsResolved = false
                         };
-                        
-                        await _logRepo.CreateAsync(log, ct);
-                        _logger.LogInformation("Logged Drive activity for file: {FileName}", file.Name);
+                        await _alertRepo.CreateAsync(alert, ct);
+                        _logger.LogWarning("Security Alert: Suspicious file detected: {FileName}", file.Name);
                     }
                 }
 
+                // 2. Tìm các file bị xóa (Có trong knownFileIds, nhưng KHÔNG có trong files)
+                var deletedIds = knownFileIds.Except(currentFileIds).ToList();
+                foreach (var delId in deletedIds)
+                {
+                    var log = new DriveAuditLog
+                    {
+                        MonitoredFolderId = folder.Id,
+                        GoogleFileId = delId,
+                        FileName = "Unknown (Deleted)",
+                        Action = DriveAction.Deleted,
+                        ActionTimestamp = DateTime.UtcNow,
+                        Details = $"File ID {delId} đã bị xóa khỏi thư mục."
+                    };
+                    await _logRepo.CreateAsync(log, ct);
+                    _logger.LogInformation("Logged Drive activity for deleted file: {FileId}", delId);
+                }
+
+                // Cập nhật lại bộ nhớ
+                folder.KnownFileIds = currentFileIds.ToList();
                 folder.LastCheckedAt = DateTime.UtcNow;
                 await _folderRepo.UpdateAsync(folder, ct);
             }
