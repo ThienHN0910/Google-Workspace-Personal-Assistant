@@ -2,6 +2,7 @@ using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 
 namespace GOpsHub.Application.Features.Auth.Commands;
 
@@ -10,16 +11,18 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IRepository<AdminUser> _userRepository;
     private readonly IJwtService _jwtService;
-    private const string AllowedAdminEmail = "hnt.vn.vn@gmail.com";
+    private readonly string _allowedAdminEmail;
 
     public GoogleLoginCommandHandler(
         IGoogleAuthService googleAuthService,
         IRepository<AdminUser> userRepository,
-        IJwtService jwtService)
+        IJwtService jwtService,
+        IConfiguration configuration)
     {
         _googleAuthService = googleAuthService;
         _userRepository = userRepository;
         _jwtService = jwtService;
+        _allowedAdminEmail = configuration["ADMIN_EMAIL"] ?? configuration["Security:AdminEmail"] ?? "hnt.vn.vn@gmail.com";
     }
 
     public async Task<GoogleLoginResult> HandleAsync(GoogleLoginCommand command, CancellationToken ct = default)
@@ -30,12 +33,12 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
             throw new UnauthorizedAccessException("Xác thực Google ID Token không thành công.");
         }
 
-        if (!string.Equals(payload.Email, AllowedAdminEmail, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(payload.Email, _allowedAdminEmail, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException($"Tài khoản {payload.Email} không có quyền truy cập hệ thống này.");
         }
 
-        var user = await _userRepository.FindOneAsync(u => u.Email == AllowedAdminEmail, ct);
+        var user = await _userRepository.FindOneAsync(u => u.Email == _allowedAdminEmail, ct);
         if (user == null)
         {
             user = new AdminUser

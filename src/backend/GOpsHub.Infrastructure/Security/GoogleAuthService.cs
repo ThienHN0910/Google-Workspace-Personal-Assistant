@@ -10,7 +10,7 @@ public class GoogleAuthService : IGoogleAuthService
 
     public GoogleAuthService(IConfiguration configuration)
     {
-        _clientId = configuration["Google:ClientId"];
+        _clientId = configuration["GOOGLE_CLIENT_ID"] ?? configuration["Google:ClientId"];
     }
 
     public async Task<GooglePayloadInfo?> VerifyIdTokenAsync(string idToken, CancellationToken ct = default)
@@ -18,7 +18,7 @@ public class GoogleAuthService : IGoogleAuthService
         try
         {
             var settings = new GoogleJsonWebSignature.ValidationSettings();
-            if (!string.IsNullOrEmpty(_clientId))
+            if (!string.IsNullOrEmpty(_clientId) && !_clientId.Contains("YOUR_GOOGLE_CLIENT_ID"))
             {
                 settings.Audience = new[] { _clientId };
             }

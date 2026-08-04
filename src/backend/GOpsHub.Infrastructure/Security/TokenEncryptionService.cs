@@ -11,7 +11,9 @@ public class TokenEncryptionService : ITokenEncryptionService
 
     public TokenEncryptionService(IConfiguration configuration)
     {
-        var keyStr = configuration["Security:TokenEncryptionKey"] ?? "GOpsHubDefaultEncryptionKey32Chars!";
+        var keyStr = configuration["TOKEN_ENCRYPTION_KEY"] 
+            ?? configuration["Security:TokenEncryptionKey"] 
+            ?? "GOpsHubDefaultEncryptionKey32Chars!";
         _key = Encoding.UTF8.GetBytes(keyStr.PadRight(32).Substring(0, 32));
     }
 

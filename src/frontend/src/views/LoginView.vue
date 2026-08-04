@@ -49,14 +49,15 @@ const handleGoogleSignIn = () => {
     google.accounts.id.prompt();
   } else {
     // Fallback for dev testing
-    alert("Vui lòng cấu hình GOOGLE_CLIENT_ID trong index.html hoặc appsettings.json để sử dụng Google OAuth thật.");
+    alert("Vui lòng cấu hình VITE_GOOGLE_CLIENT_ID trong file src/frontend/.env để sử dụng Google OAuth thật.");
   }
 };
 
 onMounted(() => {
   if (typeof google !== 'undefined' && google.accounts) {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id.apps.googleusercontent.com';
     google.accounts.id.initialize({
-      client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+      client_id: clientId,
       callback: async (response: any) => {
         const success = await authStore.googleLogin(response.credential);
         if (success) {

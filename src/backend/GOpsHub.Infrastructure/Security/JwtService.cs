@@ -19,9 +19,9 @@ public class JwtService : IJwtService
 
     public string GenerateToken(AdminUser user)
     {
-        var secret = _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
-        var issuer = _configuration["Jwt:Issuer"] ?? "gopshub";
-        var audience = _configuration["Jwt:Audience"] ?? "gopshub-client";
+        var secret = _configuration["JWT_SECRET"] ?? _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
+        var issuer = _configuration["JWT_ISSUER"] ?? _configuration["Jwt:Issuer"] ?? "gopshub";
+        var audience = _configuration["JWT_AUDIENCE"] ?? _configuration["Jwt:Audience"] ?? "gopshub-client";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -46,7 +46,7 @@ public class JwtService : IJwtService
 
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
-        var secret = _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
+        var secret = _configuration["JWT_SECRET"] ?? _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false,

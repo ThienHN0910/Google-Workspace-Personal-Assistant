@@ -3,6 +3,7 @@ using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Features.Auth.Commands;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using Xunit;
 
@@ -13,11 +14,12 @@ public class GoogleLoginCommandHandlerTests
     private readonly IGoogleAuthService _googleAuthService = Substitute.For<IGoogleAuthService>();
     private readonly IRepository<AdminUser> _userRepository = Substitute.For<IRepository<AdminUser>>();
     private readonly IJwtService _jwtService = Substitute.For<IJwtService>();
+    private readonly IConfiguration _configuration = Substitute.For<IConfiguration>();
     private readonly GoogleLoginCommandHandler _handler;
 
     public GoogleLoginCommandHandlerTests()
     {
-        _handler = new GoogleLoginCommandHandler(_googleAuthService, _userRepository, _jwtService);
+        _handler = new GoogleLoginCommandHandler(_googleAuthService, _userRepository, _jwtService, _configuration);
     }
 
     [Fact]
