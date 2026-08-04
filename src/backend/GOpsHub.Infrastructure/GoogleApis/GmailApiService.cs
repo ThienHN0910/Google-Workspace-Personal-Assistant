@@ -17,7 +17,7 @@ public class GmailApiService : IGmailService
     private readonly IGoogleTokenService _googleTokenService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GmailApiService> _logger;
-    private const string AdminEmail = "hnt.vn.vn@gmail.com";
+    private readonly string _adminEmail;
 
     public GmailApiService(
         IRepository<AdminUser> userRepo,
@@ -31,11 +31,12 @@ public class GmailApiService : IGmailService
         _googleTokenService = googleTokenService;
         _configuration = configuration;
         _logger = logger;
+        _adminEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
     }
 
     private async Task<GmailService?> GetGmailClientAsync(CancellationToken ct = default)
     {
-        var user = await _userRepo.FindOneAsync(u => u.Email == AdminEmail, ct);
+        var user = await _userRepo.FindOneAsync(u => u.Email == _adminEmail, ct);
         if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
         {
             _logger.LogWarning("Admin user token not found for Gmail API calls. Please complete Google OAuth login first.");

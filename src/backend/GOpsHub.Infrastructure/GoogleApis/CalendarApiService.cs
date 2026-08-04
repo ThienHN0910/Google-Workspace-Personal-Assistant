@@ -5,6 +5,7 @@ using Google.Apis.Services;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace GOpsHub.Infrastructure.GoogleApis;
@@ -14,24 +15,28 @@ public class CalendarApiService : ICalendarService
     private readonly IRepository<AdminUser> _userRepo;
     private readonly ITokenEncryptionService _encryptionService;
     private readonly IGoogleTokenService _googleTokenService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<CalendarApiService> _logger;
-    private const string AdminEmail = "hnt.vn.vn@gmail.com";
+    private readonly string _adminEmail;
 
     public CalendarApiService(
         IRepository<AdminUser> userRepo,
         ITokenEncryptionService encryptionService,
         IGoogleTokenService googleTokenService,
+        IConfiguration configuration,
         ILogger<CalendarApiService> logger)
     {
         _userRepo = userRepo;
         _encryptionService = encryptionService;
         _googleTokenService = googleTokenService;
+        _configuration = configuration;
         _logger = logger;
+        _adminEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
     }
 
     private async Task<CalendarService?> GetCalendarClientAsync(CancellationToken ct = default)
     {
-        var user = await _userRepo.FindOneAsync(u => u.Email == AdminEmail, ct);
+        var user = await _userRepo.FindOneAsync(u => u.Email == _adminEmail, ct);
         if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
         {
             _logger.LogWarning("Admin user token not found for Calendar API calls.");

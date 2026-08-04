@@ -5,6 +5,7 @@ using Google.Apis.Sheets.v4.Data;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace GOpsHub.Infrastructure.GoogleApis;
@@ -13,22 +14,26 @@ public class SheetsApiService : ISheetsService
 {
     private readonly IRepository<AdminUser> _userRepo;
     private readonly ITokenEncryptionService _encryptionService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<SheetsApiService> _logger;
-    private const string AdminEmail = "hnt.vn.vn@gmail.com";
+    private readonly string _adminEmail;
 
     public SheetsApiService(
         IRepository<AdminUser> userRepo,
         ITokenEncryptionService encryptionService,
+        IConfiguration configuration,
         ILogger<SheetsApiService> logger)
     {
         _userRepo = userRepo;
         _encryptionService = encryptionService;
+        _configuration = configuration;
         _logger = logger;
+        _adminEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
     }
 
     private async Task<SheetsService?> GetSheetsClientAsync(CancellationToken ct = default)
     {
-        var user = await _userRepo.FindOneAsync(u => u.Email == AdminEmail, ct);
+        var user = await _userRepo.FindOneAsync(u => u.Email == _adminEmail, ct);
         if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
         {
             _logger.LogWarning("Admin user token not found for Sheets API calls.");
