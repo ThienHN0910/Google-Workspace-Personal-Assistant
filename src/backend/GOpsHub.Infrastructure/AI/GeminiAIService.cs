@@ -34,14 +34,27 @@ Nội dung email nhận được:
 
 Hãy trả về nội dung email phản hồi duy nhất (không giải thích thêm).";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
-
-        return new AIReplyResult
+        try
         {
-            DraftContent = responseText.Trim(),
-            ConfidenceScore = 0.90,
-            DetectedLanguage = language
-        };
+            var responseText = await CallGeminiApiAsync(prompt, ct);
+
+            return new AIReplyResult
+            {
+                DraftContent = responseText.Trim(),
+                ConfidenceScore = 0.90,
+                DetectedLanguage = language
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate AI reply.");
+            return new AIReplyResult
+            {
+                DraftContent = "Lỗi khi gọi API AI: Model cấu hình không tồn tại hoặc vượt quá giới hạn request.",
+                ConfidenceScore = 0,
+                DetectedLanguage = language
+            };
+        }
     }
 
     public async Task<AIScheduleResult?> ExtractScheduleFromEmailAsync(string emailContent, CancellationToken ct = default)

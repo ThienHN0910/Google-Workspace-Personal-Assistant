@@ -121,6 +121,59 @@ public class GmailApiService : IGmailService
         }
     }
 
+    public async Task<(IReadOnlyList<EmailMessage> Emails, string? NextPageToken)> GetPagedEmailsAsync(string query, int maxResults = 10, string? pageToken = null, CancellationToken ct = default)
+    {
+        var service = await GetGmailClientAsync(ct);
+        if (service == null) return (Array.Empty<EmailMessage>(), null);
+
+        try
+        {
+            var request = service.Users.Messages.List("me");
+            request.Q = query;
+            request.MaxResults = maxResults;
+            request.PageToken = pageToken;
+
+            var response = await request.ExecuteAsync(ct);
+            if (response.Messages == null || !response.Messages.Any())
+                return (Array.Empty<EmailMessage>(), response.NextPageToken);
+
+            var emailMessages = new List<EmailMessage>();
+            foreach (var msgSummary in response.Messages)
+            {
+                var msgRequest = service.Users.Messages.Get("me", msgSummary.Id);
+                msgRequest.Format = UsersResource.MessagesResource.GetRequest.FormatEnum.Full;
+                var msg = await msgRequest.ExecuteAsync(ct);
+
+                if (msg != null)
+                {
+                    var email = new EmailMessage
+                    {
+                        Id = msg.Id,
+                        ThreadId = msg.ThreadId,
+                        Labels = msg.LabelIds?.ToList() ?? new List<string>()
+                    };
+
+                    ParseMessagePayload(msg.Payload, email);
+
+                    // Re-check read status manually from labels just in case
+                    email.IsRead = !email.Labels.Contains("UNREAD");
+
+                    if (msg.InternalDate.HasValue)
+                        email.ReceivedAt = DateTimeOffset.FromUnixTimeMilliseconds(msg.InternalDate.Value).UtcDateTime;
+
+                    emailMessages.Add(email);
+                }
+            }
+
+            return (emailMessages, response.NextPageToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get paged emails from Gmail.");
+            return (Array.Empty<EmailMessage>(), null);
+        }
+    }
+
     public async Task TrashEmailAsync(string messageId, CancellationToken ct = default)
     {
         var service = await GetGmailClientAsync(ct);
@@ -151,6 +204,26 @@ public class GmailApiService : IGmailService
             RemoveLabelIds = new List<string> { "UNREAD" }
         };
         await service.Users.Messages.Modify(mods, "me", messageId).ExecuteAsync(ct);
+    }
+
+    public async Task MarkAsUnreadAsync(string messageId, CancellationToken ct = default)
+    {
+        var service = await GetGmailClientAsync(ct);
+        if (service == null) return;
+
+        try
+        {
+            var request = service.Users.Messages.Modify(new ModifyMessageRequest
+            {
+                AddLabelIds = new List<string> { "UNREAD" }
+            }, "me", messageId);
+            
+            await request.ExecuteAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to mark email {Id} as unread.", messageId);
+        }
     }
 
     public async Task<string> CreateDraftAsync(string to, string subject, string body, string? threadId = null, CancellationToken ct = default)

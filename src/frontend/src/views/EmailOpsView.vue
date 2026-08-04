@@ -11,7 +11,14 @@
 
     <!-- Tab 1: Inbox -->
     <div v-if="activeTab === 'inbox'" class="tab-content">
-      <div v-if="loading" class="loading">Đang tải email...</div>
+      <div class="inbox-filters">
+        <label class="switch-label">
+          <input type="checkbox" v-model="showUnreadOnly" @change="resetAndFetch" />
+          Chỉ hiển thị thư chưa đọc
+        </label>
+      </div>
+      
+      <div v-if="loading && emails.length === 0" class="loading">Đang tải email...</div>
       
       <!-- Email Detail View -->
       <div v-else-if="selectedEmail" class="email-detail">
@@ -51,15 +58,27 @@
           :key="email.id" 
           class="email-card"
           :class="{ 'unread': !email.isRead }"
-          @click="selectEmail(email)"
         >
-          <div class="email-header">
-            <span class="email-from">{{ email.from }}</span>
-            <span class="email-date">{{ formatDate(email.receivedAt) }}</span>
+          <div class="email-card-content" @click="selectEmail(email)">
+            <div class="email-header">
+              <span class="email-from">{{ email.from }}</span>
+              <span class="email-date">{{ formatDate(email.receivedAt) }}</span>
+            </div>
+            <div class="email-subject">{{ email.subject }}</div>
+            <div class="email-snippet">{{ email.snippet }}</div>
           </div>
-          <div class="email-subject">{{ email.subject }}</div>
-          <div class="email-snippet">{{ email.snippet }}</div>
+          <div class="quick-actions">
+            <button v-if="email.isRead" class="action-btn text-blue" @click.stop="markAsUnread(email.id)" title="Đánh dấu chưa đọc"><i class="pi pi-envelope"></i></button>
+            <button v-if="!email.isRead" class="action-btn text-green" @click.stop="markAsRead(email.id)" title="Đánh dấu đã đọc"><i class="pi pi-check"></i></button>
+            <button class="action-btn text-red" @click.stop="trashEmail(email.id)" title="Xóa tạm"><i class="pi pi-trash"></i></button>
+          </div>
         </div>
+      </div>
+      
+      <div class="load-more" v-if="nextPageToken && !selectedEmail">
+        <button class="btn-secondary" @click="loadMore" :disabled="loading">
+          {{ loading ? 'Đang tải...' : 'Tải thêm' }}
+        </button>
       </div>
     </div>
 
@@ -83,18 +102,40 @@ const replyText = ref('');
 const draftingAi = ref(false);
 const sendingReply = ref(false);
 
-const fetchInbox = async () => {
+const showUnreadOnly = ref(true);
+const nextPageToken = ref<string | null>(null);
+
+const resetAndFetch = () => {
+  emails.value = [];
+  nextPageToken.value = null;
+  fetchInbox();
+};
+
+const fetchInbox = async (token: string | null = null) => {
   loading.value = true;
   try {
-    const res: any = await api.get('/emailops/inbox');
+    const isReadParam = showUnreadOnly.value ? 'false' : 'true';
+    let url = `/emailops/inbox?isRead=${isReadParam}&maxResults=10`;
+    if (token) url += `&pageToken=${token}`;
+    
+    const res: any = await api.get(url);
     if (res.success && res.data) {
-      emails.value = res.data;
+      if (token) {
+        emails.value.push(...res.data.items);
+      } else {
+        emails.value = res.data.items;
+      }
+      nextPageToken.value = res.data.nextPageToken;
     }
   } catch (e) {
     console.error('Failed to fetch inbox:', e);
   } finally {
     loading.value = false;
   }
+};
+
+const loadMore = () => {
+  if (nextPageToken.value) fetchInbox(nextPageToken.value);
 };
 
 const selectEmail = (email: any) => {
@@ -108,6 +149,17 @@ const markAsRead = async (id: string) => {
     if (selectedEmail.value && selectedEmail.value.id === id) selectedEmail.value.isRead = true;
     const item = emails.value.find(e => e.id === id);
     if (item) item.isRead = true;
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+const markAsUnread = async (id: string) => {
+  try {
+    await api.post(`/emailops/${id}/unread`, {});
+    if (selectedEmail.value && selectedEmail.value.id === id) selectedEmail.value.isRead = false;
+    const item = emails.value.find(e => e.id === id);
+    if (item) item.isRead = false;
   } catch (e) {
     console.error(e);
   }
@@ -206,10 +258,12 @@ button {
 .email-card {
   background: #1e293b;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 1.25rem;
   border-radius: 0.75rem;
-  cursor: pointer;
   transition: all 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
   
   &:hover { border-color: rgba(99, 102, 241, 0.5); }
   
@@ -217,6 +271,66 @@ button {
     border-left: 4px solid #6366f1;
     .email-subject { font-weight: 800; color: #fff; }
   }
+}
+
+.email-card-content {
+  padding: 1.25rem;
+  flex: 1;
+  cursor: pointer;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 1.25rem;
+  
+  .action-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background 0.2s;
+    &:hover { background: rgba(255,255,255,0.1); }
+    &.text-blue { color: #60a5fa; }
+    &.text-green { color: #34d399; }
+    &.text-red { color: #f87171; }
+  }
+}
+
+.inbox-filters {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  cursor: pointer;
+  input { width: 1.2rem; height: 1.2rem; cursor: pointer; }
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #e2e8f0;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.15); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .email-header {

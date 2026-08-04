@@ -30,10 +30,11 @@ public class EmailOpsController : ControllerBase
     /// Get recent emails from Inbox
     /// </summary>
     [HttpGet("inbox")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<EmailMessage>>>> GetInbox(CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<object>>> GetInbox([FromQuery] bool isRead = false, [FromQuery] int maxResults = 10, [FromQuery] string? pageToken = null, CancellationToken ct = default)
     {
-        var emails = await _gmailService.GetEmailsAsync("in:inbox", 20, ct);
-        return Ok(ApiResponse<IReadOnlyList<EmailMessage>>.Ok(emails));
+        var query = isRead ? "in:inbox is:read" : "in:inbox is:unread";
+        var (emails, nextToken) = await _gmailService.GetPagedEmailsAsync(query, maxResults, pageToken, ct);
+        return Ok(ApiResponse<object>.Ok(new { Items = emails, NextPageToken = nextToken }));
     }
 
     [HttpPost("{id}/read")]
@@ -41,6 +42,13 @@ public class EmailOpsController : ControllerBase
     {
         await _gmailService.MarkAsReadAsync(id, ct);
         return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu đã đọc."));
+    }
+
+    [HttpPost("{id}/unread")]
+    public async Task<ActionResult<ApiResponse<bool>>> MarkAsUnread(string id, CancellationToken ct)
+    {
+        await _gmailService.MarkAsUnreadAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu chưa đọc."));
     }
 
     [HttpDelete("{id}")]
