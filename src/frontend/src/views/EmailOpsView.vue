@@ -40,7 +40,7 @@
 
         <div class="reply-box">
           <h4>Trả lời</h4>
-          <Editor v-model="replyText" editorStyle="height: 250px" placeholder="Nhập nội dung phản hồi..." />
+          <Editor :key="editorKey" v-model="replyText" editorStyle="height: 250px" placeholder="Nhập nội dung phản hồi..." />
           <button class="btn-submit mt-2" @click="sendReply(selectedEmail.id)" :disabled="sendingReply || !replyText">
             <i class="pi pi-send"></i> {{ sendingReply ? 'Đang gửi...' : 'Gửi phản hồi' }}
           </button>
@@ -100,6 +100,7 @@ const emails = ref<any[]>([]);
 const loading = ref(true);
 const selectedEmail = ref<any>(null);
 const replyText = ref('');
+const editorKey = ref(0);
 const draftingAi = ref(false);
 const sendingReply = ref(false);
 
@@ -142,6 +143,7 @@ const loadMore = () => {
 const selectEmail = (email: any) => {
   selectedEmail.value = email;
   replyText.value = '';
+  editorKey.value++;
 };
 
 const markAsRead = async (id: string) => {
@@ -181,7 +183,15 @@ const draftAi = async (id: string) => {
   try {
     const res: any = await api.post(`/emailops/${id}/draft-ai`, {});
     if (res.success) {
-      replyText.value = res.data.draftContent || res.data;
+      let content = '';
+      if (typeof res.data === 'string') {
+        content = res.data;
+      } else if (res.data && res.data.draftContent) {
+        content = res.data.draftContent;
+      }
+      
+      replyText.value = content;
+      editorKey.value++; // Ép PrimeVue Editor render lại khi có dữ liệu
     }
   } catch (e) {
     alert('Lỗi tạo nháp AI');

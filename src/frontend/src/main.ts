@@ -7,6 +7,7 @@ import App from './App.vue';
 import router from './router';
 
 import 'primeicons/primeicons.css';
+import 'quill/dist/quill.snow.css'; // Required for PrimeVue Editor
 import '@/assets/styles/main.scss';
 
 const app = createApp(App);
