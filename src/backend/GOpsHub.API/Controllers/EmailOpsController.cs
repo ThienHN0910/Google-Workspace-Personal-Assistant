@@ -170,8 +170,6 @@ public class EmailOpsController : ControllerBase
         var command = new UpdateCleanupRuleCommand(
             id,
             request.RuleName,
-            request.Category,
-            request.OlderThanDays,
             request.Action,
             request.WhitelistDomains,
             request.CustomQuery);
@@ -213,8 +211,6 @@ public class RejectDraftRequest
 public class UpdateCleanupRuleRequest
 {
     public string RuleName { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
-    public int OlderThanDays { get; set; }
     public CleanupAction Action { get; set; }
     public List<string> WhitelistDomains { get; set; } = new();
     public string? CustomQuery { get; set; }

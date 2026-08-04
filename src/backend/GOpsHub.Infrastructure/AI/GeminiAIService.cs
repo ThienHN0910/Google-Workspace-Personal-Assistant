@@ -32,7 +32,9 @@ Yêu cầu:
 Nội dung email nhận được:
 {emailContent}
 
-Hãy trả về nội dung email phản hồi duy nhất (không giải thích thêm).";
+- Bạn phải trả về định dạng HTML thuần túy (sử dụng các thẻ <div>, <p>, <br>, <strong>,...). 
+- KHÔNG thêm block code ```html, chỉ trả về nội dung HTML trực tiếp.
+- Hãy trả về nội dung email phản hồi duy nhất (không giải thích thêm).";
 
         try
         {
@@ -40,7 +42,7 @@ Hãy trả về nội dung email phản hồi duy nhất (không giải thích t
 
             return new AIReplyResult
             {
-                DraftContent = responseText.Trim(),
+                DraftContent = responseText.Replace("```html", "").Replace("```", "").Trim(),
                 ConfidenceScore = 0.90,
                 DetectedLanguage = language
             };

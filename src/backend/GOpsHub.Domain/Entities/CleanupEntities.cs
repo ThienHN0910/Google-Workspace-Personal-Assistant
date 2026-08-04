@@ -12,12 +12,6 @@ public class CleanupRule : BaseEntity
     [BsonElement("ruleName")]
     public string RuleName { get; set; } = string.Empty;
 
-    [BsonElement("category")]
-    public string Category { get; set; } = string.Empty; // promotions, social, updates, forums, custom
-
-    [BsonElement("olderThanDays")]
-    public int OlderThanDays { get; set; } = 7;
-
     [BsonElement("action")]
     public CleanupAction Action { get; set; } = CleanupAction.Trash;
 

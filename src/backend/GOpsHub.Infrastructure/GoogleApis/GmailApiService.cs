@@ -216,7 +216,7 @@ public class GmailApiService : IGmailService
         var service = await GetGmailClientAsync(ct);
         if (service == null) return string.Empty;
 
-        var rawMessage = $"To: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{body}";
+        var rawMessage = $"To: {to}\r\nSubject: {subject}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n{body}";
         var encodedMessage = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(rawMessage))
             .Replace('+', '-').Replace('/', '_').Replace("=", "");
 

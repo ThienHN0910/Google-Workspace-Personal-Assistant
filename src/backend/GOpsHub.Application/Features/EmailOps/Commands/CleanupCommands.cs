@@ -9,8 +9,6 @@ namespace GOpsHub.Application.Features.EmailOps.Commands;
 
 public record CreateCleanupRuleCommand(
     string RuleName,
-    string Category,
-    int OlderThanDays,
     CleanupAction Action,
     List<string> WhitelistDomains,
     string? CustomQuery,
@@ -34,8 +32,6 @@ public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRule
         var rule = new CleanupRule
         {
             RuleName = command.RuleName,
-            Category = command.Category,
-            OlderThanDays = command.OlderThanDays,
             Action = command.Action,
             WhitelistDomains = command.WhitelistDomains ?? new List<string>(),
             CustomQuery = command.CustomQuery,

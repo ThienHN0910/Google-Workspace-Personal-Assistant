@@ -7,6 +7,7 @@ namespace GOpsHub.Domain.Common;
 /// Base entity with MongoDB ObjectId and audit timestamps.
 /// All domain entities inherit from this class.
 /// </summary>
+[BsonIgnoreExtraElements]
 public abstract class BaseEntity
 {
     [BsonId]

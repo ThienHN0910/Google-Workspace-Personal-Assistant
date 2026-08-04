@@ -39,8 +39,6 @@ public class UpdateCleanupRuleCommandHandler : ICommandHandler<UpdateCleanupRule
             throw new KeyNotFoundException($"Cleanup rule {command.RuleId} not found.");
 
         rule.RuleName = command.RuleName;
-        rule.Category = command.Category;
-        rule.OlderThanDays = command.OlderThanDays;
         rule.Action = command.Action;
         rule.WhitelistDomains = command.WhitelistDomains ?? new List<string>();
         rule.CustomQuery = command.CustomQuery;

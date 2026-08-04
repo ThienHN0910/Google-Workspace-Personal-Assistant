@@ -181,7 +181,7 @@ const draftAi = async (id: string) => {
   try {
     const res: any = await api.post(`/emailops/${id}/draft-ai`, {});
     if (res.success) {
-      replyText.value = res.data;
+      replyText.value = res.data.draftContent || res.data;
     }
   } catch (e) {
     alert('Lỗi tạo nháp AI');

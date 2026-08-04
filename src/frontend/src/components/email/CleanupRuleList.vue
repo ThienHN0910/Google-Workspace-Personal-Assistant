@@ -23,8 +23,12 @@
           </span>
         </div>
         <div class="rule-details">
-          <div><i class="pi pi-folder"></i> Danh mục: <strong>{{ rule.category }}</strong></div>
-          <div><i class="pi pi-clock"></i> Cũ hơn: <strong>{{ rule.olderThanDays }} ngày</strong></div>
+          <div v-if="rule.useAI"><i class="pi pi-sparkles"></i> AI: <strong>{{ rule.aiPrompt }}</strong></div>
+          <div v-else-if="rule.customQuery"><i class="pi pi-search"></i> Truy vấn: <strong>{{ rule.customQuery }}</strong></div>
+          <div v-else>
+            <span v-if="rule.subjectRegex"><i class="pi pi-align-left"></i> Tiêu đề: <strong>{{ rule.subjectRegex }}</strong><br></span>
+            <span v-if="rule.bodyRegex"><i class="pi pi-file"></i> Nội dung: <strong>{{ rule.bodyRegex }}</strong></span>
+          </div>
         </div>
         <div class="rule-actions">
           <button class="action-btn" :class="rule.isActive ? 'text-green' : 'text-gray'" @click="handleToggle(rule.id)" :title="rule.isActive ? 'Tắt quy tắc' : 'Bật quy tắc'">
@@ -45,24 +49,7 @@
       <div class="modal-content">
         <h3>{{ isEditing ? 'Sửa quy tắc' : 'Tạo quy tắc mới' }}</h3>
         <form @submit.prevent="handleSubmit">
-          <div class="form-group">
-            <label>Tên quy tắc</label>
-            <input v-model="formData.ruleName" required placeholder="Ví dụ: Dọn rác Shopee" />
-          </div>
-          <div class="form-group">
-            <label>Danh mục</label>
-            <select v-model="formData.category" required>
-              <option value="promotions">Promotions</option>
-              <option value="social">Social</option>
-              <option value="updates">Updates</option>
-              <option value="forums">Forums</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Cũ hơn (ngày)</label>
-            <input type="number" v-model.number="formData.olderThanDays" required min="1" />
-          </div>
+
           <div class="form-group">
             <label>Hành động</label>
             <select v-model.number="formData.action" required>
@@ -116,8 +103,6 @@ const isEditing = ref(false);
 const currentEditId = ref('');
 const formData = ref({
   ruleName: '',
-  category: 'promotions',
-  olderThanDays: 7,
   action: 0,
   whitelistDomains: [],
   customQuery: '',
