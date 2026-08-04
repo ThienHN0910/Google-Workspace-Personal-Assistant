@@ -2,6 +2,7 @@ using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Models;
 using GOpsHub.Application.Features.Finance;
 using GOpsHub.Domain.Entities;
+using GOpsHub.Application.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

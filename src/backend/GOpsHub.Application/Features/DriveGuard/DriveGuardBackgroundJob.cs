@@ -48,7 +48,7 @@ public class DriveGuardBackgroundJob
                             GoogleFileId = file.Id,
                             FileName = file.Name,
                             FileType = file.MimeType,
-                            Action = DriveAction.Create, // Simplification: we log modified/created as Create for now or you can map it.
+                            Action = DriveAction.Created, // Simplification: we log modified/created as Create for now or you can map it.
                             ActorEmail = file.LastModifyingUser,
                             ActionTimestamp = file.ModifiedTime ?? DateTime.UtcNow,
                             Details = $"File modified/created: {file.Name}"
@@ -60,7 +60,7 @@ public class DriveGuardBackgroundJob
                 }
 
                 folder.LastCheckedAt = DateTime.UtcNow;
-                await _folderRepo.UpdateAsync(folder.Id, folder, ct);
+                await _folderRepo.UpdateAsync(folder, ct);
             }
             catch (Exception ex)
             {
