@@ -18,10 +18,12 @@ public static class DependencyInjection
         // MongoDB Options
         services.Configure<MongoDbSettings>(options =>
         {
-            options.ConnectionString = configuration.GetConnectionString("DefaultConnection") 
-                ?? configuration["MongoDB:ConnectionString"] 
-                ?? "mongodb://localhost:27017";
-            options.DatabaseName = configuration["MongoDB:DatabaseName"] ?? "gopshub";
+            options.ConnectionString = configuration["MONGODB_CONNECTION_STRING"]
+                ?? configuration.GetConnectionString("DefaultConnection")
+                ?? configuration["MongoDB:ConnectionString"];
+
+            options.DatabaseName = configuration["MONGODB_DATABASE_NAME"]
+                ?? configuration["MongoDB:DatabaseName"];
         });
 
         // MongoDbContext

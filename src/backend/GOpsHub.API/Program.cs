@@ -24,17 +24,11 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
 // 3. JWT Authentication
-var jwtSecret = builder.Configuration["JWT_SECRET"]
-    ?? builder.Configuration["Jwt:Secret"] 
-    ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough32Chars";
+var jwtSecret = builder.Configuration["JWT_SECRET"] ?? builder.Configuration["Jwt:Secret"];
 
-var jwtIssuer = builder.Configuration["JWT_ISSUER"]
-    ?? builder.Configuration["Jwt:Issuer"]
-    ?? "gopshub";
+var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt:Issuer"];
 
-var jwtAudience = builder.Configuration["JWT_AUDIENCE"]
-    ?? builder.Configuration["Jwt:Audience"]
-    ?? "gopshub-client";
+var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt:Audience"];
 
 builder.Services.AddAuthentication(options =>
 {
@@ -60,14 +54,13 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // 4. CORS
-var frontendUrl = builder.Configuration["FRONTEND_URL"] ?? "http://localhost:5173";
+var frontendUrl = builder.Configuration["FRONTEND_URL"];
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(frontendUrl, "http://localhost:5173", "https://*.vercel.app")
-            .SetIsOriginAllowedToAllowWildcardSubdomains()
+        policy.WithOrigins(frontendUrl)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();

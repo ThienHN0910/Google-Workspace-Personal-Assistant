@@ -31,7 +31,7 @@ public class ExceptionHandlingMiddleware
     private static Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         var code = HttpStatusCode.InternalServerError;
-        var message = "Đã xảy ra lỗi máy chủ nội bộ.";
+        var message = $"Đã xảy ra lỗi máy chủ nội bộ: {exception.Message}";
 
         if (exception is UnauthorizedAccessException)
         {
