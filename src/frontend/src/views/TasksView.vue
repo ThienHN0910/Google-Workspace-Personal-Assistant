@@ -48,7 +48,7 @@
           :key="task.googleTaskId" 
           class="task-item completed"
         >
-          <div class="task-checkbox">
+          <div class="task-checkbox" @click="handleUncomplete(task.googleTaskId)">
             <i class="pi pi-check-circle text-green"></i>
           </div>
           <div class="task-content">
@@ -80,6 +80,25 @@
             <label>Hạn chót</label>
             <input type="datetime-local" v-model="newTask.due" />
           </div>
+          
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="newTask.syncToCalendar" />
+              Đồng bộ tạo sự kiện trên Google Calendar
+            </label>
+          </div>
+
+          <div v-if="newTask.syncToCalendar" class="calendar-times">
+            <div class="form-group">
+              <label>Thời gian bắt đầu</label>
+              <input type="datetime-local" v-model="newTask.calendarStartTime" @change="onStartTimeChange" required />
+            </div>
+            <div class="form-group">
+              <label>Thời gian kết thúc</label>
+              <input type="datetime-local" v-model="newTask.calendarEndTime" required />
+            </div>
+          </div>
+
           <div class="modal-actions">
             <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
             <button type="submit" class="btn-submit" :disabled="creating">
@@ -104,7 +123,10 @@ const creating = ref(false);
 const newTask = ref({
   title: '',
   notes: '',
-  due: ''
+  due: '',
+  syncToCalendar: false,
+  calendarStartTime: '',
+  calendarEndTime: ''
 });
 
 const activeTasks = computed(() => tasks.value.filter(t => t.status !== 'completed'));
@@ -125,12 +147,26 @@ const fetchTasks = async () => {
 };
 
 const openCreateModal = () => {
-  newTask.value = { title: '', notes: '', due: '' };
+  newTask.value = { 
+    title: '', notes: '', due: '', 
+    syncToCalendar: false, calendarStartTime: '', calendarEndTime: '' 
+  };
   showModal.value = true;
 };
 
 const closeModal = () => {
   showModal.value = false;
+};
+
+const onStartTimeChange = () => {
+  if (newTask.value.calendarStartTime) {
+    const start = new Date(newTask.value.calendarStartTime);
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // Default 60 mins
+    // Format to yyyy-MM-ddThh:mm for datetime-local
+    const offset = end.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(end.getTime() - offset)).toISOString().slice(0, 16);
+    newTask.value.calendarEndTime = localISOTime;
+  }
 };
 
 const handleCreate = async () => {
@@ -139,7 +175,12 @@ const handleCreate = async () => {
     const payload = {
       title: newTask.value.title,
       notes: newTask.value.notes,
-      due: newTask.value.due ? new Date(newTask.value.due).toISOString() : null
+      due: newTask.value.due ? new Date(newTask.value.due).toISOString() : null,
+      syncToCalendar: newTask.value.syncToCalendar,
+      calendarStartTime: newTask.value.syncToCalendar && newTask.value.calendarStartTime 
+                         ? new Date(newTask.value.calendarStartTime).toISOString() : null,
+      calendarEndTime: newTask.value.syncToCalendar && newTask.value.calendarEndTime 
+                         ? new Date(newTask.value.calendarEndTime).toISOString() : null,
     };
     await api.post('/tasks', payload);
     closeModal();
@@ -160,6 +201,19 @@ const handleComplete = async (id: string) => {
     await api.patch(`/tasks/${id}/complete`, {});
   } catch (e) {
     alert('Lỗi hoàn thành task');
+    fetchTasks(); // Revert on error
+  }
+};
+
+const handleUncomplete = async (id: string) => {
+  try {
+    // Optimistic update
+    const task = tasks.value.find(t => t.googleTaskId === id);
+    if (task) task.status = 'needsAction';
+    
+    await api.patch(`/tasks/${id}/uncomplete`, {});
+  } catch (e) {
+    alert('Lỗi phục hồi task');
     fetchTasks(); // Revert on error
   }
 };
@@ -346,7 +400,7 @@ onMounted(fetchTasks);
   
   label { font-size: 0.9rem; color: #cbd5e1; font-weight: 500; }
   
-  input, textarea {
+  input[type="datetime-local"], input[type="text"], textarea {
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: #f8fafc;
@@ -355,6 +409,35 @@ onMounted(fetchTasks);
     font-family: inherit;
     &:focus { border-color: #6366f1; outline: none; }
   }
+}
+
+.form-group-checkbox {
+  margin-bottom: 1.25rem;
+  
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    
+    input {
+      width: 1.25rem;
+      height: 1.25rem;
+      cursor: pointer;
+    }
+  }
+}
+
+.calendar-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  background: rgba(99, 102, 241, 0.1);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
 .modal-actions {

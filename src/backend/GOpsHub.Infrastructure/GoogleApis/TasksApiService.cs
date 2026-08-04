@@ -148,6 +148,16 @@ public class TasksApiService : ITasksService
         await service.Tasks.Update(task, taskListId, taskId).ExecuteAsync(ct);
     }
 
+    public async System.Threading.Tasks.Task UncompleteTaskAsync(string taskListId, string taskId, CancellationToken ct = default)
+    {
+        var service = await GetTasksClientAsync(ct);
+        if (service == null) return;
+
+        var task = await service.Tasks.Get(taskListId, taskId).ExecuteAsync(ct);
+        task.Status = "needsAction";
+        await service.Tasks.Update(task, taskListId, taskId).ExecuteAsync(ct);
+    }
+
     public async System.Threading.Tasks.Task DeleteTaskAsync(string taskListId, string taskId, CancellationToken ct = default)
     {
         var service = await GetTasksClientAsync(ct);

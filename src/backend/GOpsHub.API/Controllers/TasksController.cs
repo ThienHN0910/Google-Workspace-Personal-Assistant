@@ -12,10 +12,12 @@ namespace GOpsHub.API.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ITasksService _tasksService;
+    private readonly ICalendarService _calendarService;
 
-    public TasksController(ITasksService tasksService)
+    public TasksController(ITasksService tasksService, ICalendarService calendarService)
     {
         _tasksService = tasksService;
+        _calendarService = calendarService;
     }
 
     [HttpGet]
@@ -37,6 +39,13 @@ public class TasksController : ControllerBase
             return BadRequest(ApiResponse<string>.Fail("Không tìm thấy Task List."));
 
         var taskId = await _tasksService.CreateTaskAsync(listId, request.Title, request.Notes, request.Due, ct);
+
+        if (request.SyncToCalendar && request.CalendarStartTime.HasValue)
+        {
+            var endTime = request.CalendarEndTime ?? request.CalendarStartTime.Value.AddMinutes(60);
+            await _calendarService.CreateEventAsync(request.Title, request.CalendarStartTime.Value, endTime, null, request.Notes, ct);
+        }
+
         return Ok(ApiResponse<string>.Ok(taskId, "Đã tạo Task thành công."));
     }
 
@@ -46,6 +55,14 @@ public class TasksController : ControllerBase
         var listId = await _tasksService.GetDefaultTaskListAsync(ct);
         await _tasksService.CompleteTaskAsync(listId, id, ct);
         return Ok(ApiResponse<bool>.Ok(true, "Đã hoàn thành Task."));
+    }
+
+    [HttpPatch("{id}/uncomplete")]
+    public async Task<ActionResult<ApiResponse<bool>>> UncompleteTask(string id, CancellationToken ct)
+    {
+        var listId = await _tasksService.GetDefaultTaskListAsync(ct);
+        await _tasksService.UncompleteTaskAsync(listId, id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu Task chưa hoàn thành."));
     }
 
     [HttpDelete("{id}")]
@@ -62,4 +79,9 @@ public class CreateTaskRequest
     public string Title { get; set; } = string.Empty;
     public string? Notes { get; set; }
     public DateTime? Due { get; set; }
+    
+    // Calendar Sync properties
+    public bool SyncToCalendar { get; set; }
+    public DateTime? CalendarStartTime { get; set; }
+    public DateTime? CalendarEndTime { get; set; }
 }

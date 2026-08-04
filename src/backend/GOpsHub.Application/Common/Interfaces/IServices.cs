@@ -12,6 +12,7 @@ public interface IAIService
     Task<int> ScoreEmailPriorityAsync(string from, string subject, string snippet, CancellationToken ct = default);
     Task<List<string>> ExtractTasksFromEmailAsync(string emailContent, CancellationToken ct = default);
     Task<string> GenerateExecutiveReportAsync(string periodStats, CancellationToken ct = default);
+    Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default);
 }
 
 public class AIReplyResult
@@ -60,6 +61,7 @@ public class CalendarEvent
     public DateTime Start { get; set; }
     public DateTime? End { get; set; }
     public string? Location { get; set; }
+    public string HtmlLink { get; set; } = string.Empty;
 }
 
 public class CalendarBusySlot

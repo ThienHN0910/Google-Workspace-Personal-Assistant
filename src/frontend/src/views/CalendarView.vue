@@ -58,7 +58,10 @@
       <div v-else class="schedule-list">
         <div v-for="event in upcomingEvents" :key="event.id" class="schedule-card">
           <div class="card-header">
-            <span class="event-title">{{ event.title }}</span>
+            <a v-if="event.htmlLink" :href="event.htmlLink" target="_blank" class="event-title link-title">
+              {{ event.title }} <i class="pi pi-external-link" style="font-size: 0.8rem; margin-left: 0.25rem;"></i>
+            </a>
+            <span v-else class="event-title">{{ event.title }}</span>
             <span class="badge google-badge">
               <i class="pi pi-google"></i> Google Calendar
             </span>
@@ -300,6 +303,8 @@ onMounted(() => {
 }
 
 .event-title { font-weight: 800; font-size: 1.1rem; color: #f8fafc; }
+.link-title { text-decoration: none; transition: color 0.2s; }
+.link-title:hover { color: #818cf8; text-decoration: underline; }
 
 .status-badge {
   font-size: 0.75rem;

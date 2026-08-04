@@ -27,6 +27,18 @@ public class CleanupRule : BaseEntity
     [BsonElement("customQuery")]
     public string? CustomQuery { get; set; }
 
+    [BsonElement("useAI")]
+    public bool UseAI { get; set; }
+
+    [BsonElement("aiPrompt")]
+    public string? AIPrompt { get; set; }
+
+    [BsonElement("subjectRegex")]
+    public string? SubjectRegex { get; set; }
+
+    [BsonElement("bodyRegex")]
+    public string? BodyRegex { get; set; }
+
     [BsonElement("isActive")]
     public bool IsActive { get; set; } = true;
 }

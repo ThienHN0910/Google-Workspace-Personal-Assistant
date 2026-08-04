@@ -13,7 +13,11 @@ public record CreateCleanupRuleCommand(
     int OlderThanDays,
     CleanupAction Action,
     List<string> WhitelistDomains,
-    string? CustomQuery
+    string? CustomQuery,
+    bool UseAI = false,
+    string? AIPrompt = null,
+    string? SubjectRegex = null,
+    string? BodyRegex = null
 ) : ICommand<CleanupRule>;
 
 public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRuleCommand, CleanupRule>
@@ -35,6 +39,10 @@ public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRule
             Action = command.Action,
             WhitelistDomains = command.WhitelistDomains ?? new List<string>(),
             CustomQuery = command.CustomQuery,
+            UseAI = command.UseAI,
+            AIPrompt = command.AIPrompt,
+            SubjectRegex = command.SubjectRegex,
+            BodyRegex = command.BodyRegex,
             IsActive = true
         };
 
@@ -59,17 +67,20 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
     private readonly IRepository<CleanupRule> _ruleRepo;
     private readonly IRepository<CleanupLog> _logRepo;
     private readonly IGmailService _gmailService;
+    private readonly IAIService _aiService;
     private readonly ILogger<RunCleanupCommandHandler> _logger;
 
     public RunCleanupCommandHandler(
         IRepository<CleanupRule> ruleRepo,
         IRepository<CleanupLog> logRepo,
         IGmailService gmailService,
+        IAIService aiService,
         ILogger<RunCleanupCommandHandler> logger)
     {
         _ruleRepo = ruleRepo;
         _logRepo = logRepo;
         _gmailService = gmailService;
+        _aiService = aiService;
         _logger = logger;
     }
 
@@ -96,6 +107,34 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                 {
                     skipped++;
                     continue;
+                }
+
+                // Regex matching
+                if (!string.IsNullOrEmpty(rule.SubjectRegex) && !System.Text.RegularExpressions.Regex.IsMatch(email.Subject, rule.SubjectRegex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    skipped++;
+                    continue;
+                }
+                
+                if (!string.IsNullOrEmpty(rule.BodyRegex) && !string.IsNullOrEmpty(email.Body) && !System.Text.RegularExpressions.Regex.IsMatch(email.Body, rule.BodyRegex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                // AI matching (Rate limited to 10 calls / min => 6s delay)
+                if (rule.UseAI && !string.IsNullOrEmpty(rule.AIPrompt))
+                {
+                    var isMatch = await _aiService.CheckCleanupConditionAsync(email.Snippet ?? email.Body ?? "", rule.AIPrompt, ct);
+                    
+                    // Delay 6 seconds to avoid exceeding Gemini API rate limit
+                    await Task.Delay(6000, ct);
+                    
+                    if (!isMatch)
+                    {
+                        skipped++;
+                        continue;
+                    }
                 }
 
                 if (rule.Action == CleanupAction.Trash)

@@ -70,6 +70,30 @@
               <option :value="1">Lưu trữ (Archive)</option>
             </select>
           </div>
+
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="formData.useAI" />
+              Sử dụng AI để quyết định (Giới hạn 10 calls/phút)
+            </label>
+          </div>
+
+          <div v-if="formData.useAI" class="form-group">
+            <label>Prompt AI (Điều kiện xóa)</label>
+            <textarea v-model="formData.aiPrompt" rows="3" placeholder="Ví dụ: Email này là quảng cáo khóa học hoặc giảm giá"></textarea>
+          </div>
+
+          <div v-if="!formData.useAI">
+            <div class="form-group">
+              <label>Regex Tiêu đề (Tùy chọn)</label>
+              <input v-model="formData.subjectRegex" placeholder="Ví dụ: ^\[Quảng cáo\]" />
+            </div>
+            <div class="form-group">
+              <label>Regex Nội dung (Tùy chọn)</label>
+              <input v-model="formData.bodyRegex" placeholder="Ví dụ: unsubscribe|hủy đăng ký" />
+            </div>
+          </div>
+
           <div class="modal-actions">
             <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
             <button type="submit" class="btn-submit">Lưu</button>
@@ -96,7 +120,11 @@ const formData = ref({
   olderThanDays: 7,
   action: 0,
   whitelistDomains: [],
-  customQuery: ''
+  customQuery: '',
+  useAI: false,
+  aiPrompt: '',
+  subjectRegex: '',
+  bodyRegex: ''
 });
 
 const fetchRules = async () => {
@@ -126,7 +154,11 @@ const handleRunAll = async () => {
 
 const openCreateModal = () => {
   isEditing.value = false;
-  formData.value = { ruleName: '', category: 'promotions', olderThanDays: 7, action: 0, whitelistDomains: [], customQuery: '' };
+  formData.value = { 
+    ruleName: '', category: 'promotions', olderThanDays: 7, action: 0, 
+    whitelistDomains: [], customQuery: '', useAI: false, aiPrompt: '', 
+    subjectRegex: '', bodyRegex: '' 
+  };
   showModal.value = true;
 };
 
@@ -322,12 +354,26 @@ onMounted(fetchRules);
     color: #cbd5e1;
   }
   
-  input, select {
+    input, select, textarea {
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: #f8fafc;
     padding: 0.5rem;
     border-radius: 0.35rem;
+    font-family: inherit;
+  }
+}
+
+.form-group-checkbox {
+  margin-bottom: 1rem;
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    input { width: 1.1rem; height: 1.1rem; cursor: pointer; }
   }
 }
 

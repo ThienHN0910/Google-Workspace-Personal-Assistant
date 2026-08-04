@@ -227,4 +227,20 @@ Chỉ trả về JSON array hợp lệ.";
         if (trimmed.EndsWith("```")) trimmed = trimmed[..^3];
         return trimmed.Trim();
     }
+
+    public async Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default)
+    {
+        var aiPrompt = $"Analyze the following email content and decide if it matches this condition: '{prompt}'. Reply only with 'YES' or 'NO'.\n\nEmail:\n{emailContent}";
+        
+        try
+        {
+            var result = await GenerateContentAsync(aiPrompt, ct);
+            return result.Trim().ToUpper().Contains("YES");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Gemini API Error in CheckCleanupCondition");
+            return false;
+        }
+    }
 }

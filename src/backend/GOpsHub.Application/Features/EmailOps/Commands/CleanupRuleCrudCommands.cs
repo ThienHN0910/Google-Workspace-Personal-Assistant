@@ -16,7 +16,11 @@ public record UpdateCleanupRuleCommand(
     int OlderThanDays,
     CleanupAction Action,
     List<string> WhitelistDomains,
-    string? CustomQuery
+    string? CustomQuery,
+    bool UseAI = false,
+    string? AIPrompt = null,
+    string? SubjectRegex = null,
+    string? BodyRegex = null
 ) : ICommand<CleanupRule>;
 
 public class UpdateCleanupRuleCommandHandler : ICommandHandler<UpdateCleanupRuleCommand, CleanupRule>
@@ -40,6 +44,10 @@ public class UpdateCleanupRuleCommandHandler : ICommandHandler<UpdateCleanupRule
         rule.Action = command.Action;
         rule.WhitelistDomains = command.WhitelistDomains ?? new List<string>();
         rule.CustomQuery = command.CustomQuery;
+        rule.UseAI = command.UseAI;
+        rule.AIPrompt = command.AIPrompt;
+        rule.SubjectRegex = command.SubjectRegex;
+        rule.BodyRegex = command.BodyRegex;
 
         await _ruleRepo.UpdateAsync(rule, ct);
         return rule;

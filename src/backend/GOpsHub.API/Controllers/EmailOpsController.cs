@@ -15,10 +15,61 @@ namespace GOpsHub.API.Controllers;
 public class EmailOpsController : ControllerBase
 {
     private readonly IDispatcher _dispatcher;
+    private readonly IGmailService _gmailService;
+    private readonly IAIService _aiService;
 
-    public EmailOpsController(IDispatcher dispatcher)
+    public EmailOpsController(IDispatcher dispatcher, IGmailService gmailService, IAIService aiService)
     {
         _dispatcher = dispatcher;
+        _gmailService = gmailService;
+        _aiService = aiService;
+    }
+
+    /// <summary>
+    /// Get recent emails from Inbox
+    /// </summary>
+    [HttpGet("inbox")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<EmailMessage>>>> GetInbox(CancellationToken ct)
+    {
+        var emails = await _gmailService.GetEmailsAsync("in:inbox", 20, ct);
+        return Ok(ApiResponse<IReadOnlyList<EmailMessage>>.Ok(emails));
+    }
+
+    [HttpPost("{id}/read")]
+    public async Task<ActionResult<ApiResponse<bool>>> MarkAsRead(string id, CancellationToken ct)
+    {
+        await _gmailService.MarkAsReadAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu đã đọc."));
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> TrashEmail(string id, CancellationToken ct)
+    {
+        await _gmailService.TrashEmailAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã chuyển email vào thùng rác."));
+    }
+
+    [HttpPost("{id}/reply")]
+    public async Task<ActionResult<ApiResponse<bool>>> ReplyToEmail(string id, [FromBody] ReplyEmailRequest request, CancellationToken ct)
+    {
+        var email = await _gmailService.GetEmailByIdAsync(id, ct);
+        if (email == null) return NotFound(ApiResponse<bool>.Fail("Không tìm thấy email."));
+
+        var draftId = await _gmailService.CreateDraftAsync(email.From, $"Re: {email.Subject}", request.Body, email.ThreadId, ct);
+        await _gmailService.SendDraftAsync(draftId, ct);
+        
+        return Ok(ApiResponse<bool>.Ok(true, "Đã gửi phản hồi."));
+    }
+
+    [HttpPost("{id}/draft-ai")]
+    public async Task<ActionResult<ApiResponse<string>>> DraftAiReply(string id, CancellationToken ct)
+    {
+        var email = await _gmailService.GetEmailByIdAsync(id, ct);
+        if (email == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy email."));
+
+        var aiResult = await _aiService.GenerateEmailReplyAsync(email.Snippet ?? email.Body ?? "", "vi", null, ct);
+        
+        return Ok(ApiResponse<string>.Ok(aiResult.DraftContent, "Đã tạo nháp AI."));
     }
 
     /// <summary>
@@ -158,4 +209,13 @@ public class UpdateCleanupRuleRequest
     public CleanupAction Action { get; set; }
     public List<string> WhitelistDomains { get; set; } = new();
     public string? CustomQuery { get; set; }
+    public bool UseAI { get; set; }
+    public string? AIPrompt { get; set; }
+    public string? SubjectRegex { get; set; }
+    public string? BodyRegex { get; set; }
+}
+
+public class ReplyEmailRequest
+{
+    public string Body { get; set; } = string.Empty;
 }
