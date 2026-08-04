@@ -6,7 +6,29 @@
     </header>
 
     <div class="sections">
-      <!-- Section 1: Security Alerts (UC06) -->
+      <!-- Section 1: Monitored Folders (UC05) -->
+      <div class="card-section">
+        <h2>📂 Cấu hình Thư mục Theo dõi</h2>
+        <form @submit.prevent="addFolder" class="add-folder-form">
+          <input v-model="newFolder.folderName" placeholder="Tên gợi nhớ (VD: Tài liệu mật)" required />
+          <input v-model="newFolder.googleFolderId" placeholder="Google Folder ID" required />
+          <button type="submit" class="btn-submit" :disabled="addingFolder">
+            <i class="pi pi-plus"></i> {{ addingFolder ? 'Đang thêm...' : 'Thêm thư mục' }}
+          </button>
+        </form>
+        <div v-if="folders.length === 0" class="empty mt-2">Chưa có thư mục nào đang được theo dõi.</div>
+        <div v-else class="folders-list mt-2">
+          <div v-for="f in folders" :key="f.id" class="folder-card">
+            <div>
+              <span class="folder-name">{{ f.folderName }}</span>
+              <span class="folder-id">ID: {{ f.googleFolderId }}</span>
+            </div>
+            <span class="status-badge active"><i class="pi pi-eye"></i> Đang theo dõi</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Security Alerts (UC06) -->
       <div class="card-section">
         <h2>⚠️ Cảnh báo an ninh file nguy hiểm (UC06)</h2>
         <div v-if="alerts.length === 0" class="empty">Không có cảnh báo an ninh nào!</div>
@@ -49,9 +71,17 @@ import api from '@/services/api.service';
 
 const alerts = ref<any[]>([]);
 const logs = ref<any[]>([]);
+const folders = ref<any[]>([]);
+const addingFolder = ref(false);
+const newFolder = ref({ folderName: '', googleFolderId: '' });
 
 const fetchData = async () => {
   try {
+    const resFolders: any = await api.get('/driveguard/folders');
+    if (resFolders.success && resFolders.data) {
+      folders.value = resFolders.data;
+    }
+
     const resAlerts: any = await api.get('/driveguard/alerts');
     if (resAlerts.success && resAlerts.data) {
       alerts.value = resAlerts.data.items;
@@ -63,6 +93,22 @@ const fetchData = async () => {
     }
   } catch (e) {
     console.error('Failed to load drive guard data:', e);
+  }
+};
+
+const addFolder = async () => {
+  addingFolder.value = true;
+  try {
+    const res: any = await api.post('/driveguard/folders', newFolder.value);
+    if (res.success) {
+      newFolder.value = { folderName: '', googleFolderId: '' };
+      fetchData();
+      alert('Đã thêm thư mục theo dõi!');
+    }
+  } catch (e) {
+    alert('Lỗi thêm thư mục. Vui lòng kiểm tra lại.');
+  } finally {
+    addingFolder.value = false;
   }
 };
 
@@ -110,6 +156,59 @@ onMounted(fetchData);
   padding: 1rem;
   margin-bottom: 0.75rem;
 }
+
+.add-folder-form {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  
+  input {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    &:focus { outline: none; border-color: #6366f1; }
+  }
+}
+
+.btn-submit {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover:not(:disabled) { background: #4f46e5; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.folder-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+
+  .folder-name { font-weight: 700; color: #f8fafc; margin-right: 1rem; }
+  .folder-id { font-size: 0.85rem; color: #94a3b8; font-family: monospace; }
+}
+
+.status-badge.active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-weight: 600;
+}
+
+.mt-2 { margin-top: 1.5rem; }
 
 .alert-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
 .file-name { font-weight: 700; color: #fbbf24; }

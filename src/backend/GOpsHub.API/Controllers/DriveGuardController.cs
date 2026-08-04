@@ -40,6 +40,16 @@ public class DriveGuardController : ControllerBase
     }
 
     /// <summary>
+    /// List folders being monitored (UC05)
+    /// </summary>
+    [HttpGet("folders")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<MonitoredFolder>>>> GetMonitoredFolders()
+    {
+        var folders = await _dispatcher.QueryAsync(new GetMonitoredFoldersQuery());
+        return Ok(ApiResponse<IReadOnlyList<MonitoredFolder>>.Ok(folders));
+    }
+
+    /// <summary>
     /// Add folder to monitor (UC05)
     /// </summary>
     [HttpPost("folders")]

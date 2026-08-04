@@ -36,6 +36,9 @@
           <button class="btn-submit" @click="draftAi(selectedEmail.id)" :disabled="draftingAi">
             <i class="pi pi-sparkles"></i> {{ draftingAi ? 'Đang tạo...' : 'Tạo nháp AI' }}
           </button>
+          <button class="btn-submit btn-extract" @click="extractSchedule(selectedEmail.id)" :disabled="extractingSchedule">
+            <i class="pi pi-calendar-plus"></i> {{ extractingSchedule ? 'Đang trích xuất...' : 'Trích xuất lịch AI' }}
+          </button>
         </div>
 
         <div class="reply-box">
@@ -102,6 +105,7 @@ const selectedEmail = ref<any>(null);
 const replyText = ref('');
 const editorKey = ref(0);
 const draftingAi = ref(false);
+const extractingSchedule = ref(false);
 const sendingReply = ref(false);
 
 const showUnreadOnly = ref(true);
@@ -197,6 +201,20 @@ const draftAi = async (id: string) => {
     alert('Lỗi tạo nháp AI');
   } finally {
     draftingAi.value = false;
+  }
+};
+
+const extractSchedule = async (id: string) => {
+  extractingSchedule.value = true;
+  try {
+    const res: any = await api.post('/scheduling/extract', { gmailMessageId: id });
+    if (res.success) {
+      alert('Đã trích xuất lịch thành công! Bạn hãy mở tab Lịch (Scheduling) để xem và xác nhận.');
+    }
+  } catch (e) {
+    alert('Lỗi trích xuất lịch AI. Email này có thể không chứa thông tin sự kiện.');
+  } finally {
+    extractingSchedule.value = false;
   }
 };
 

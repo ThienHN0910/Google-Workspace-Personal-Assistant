@@ -64,6 +64,23 @@ public class QuarantineFileCommandHandler : ICommandHandler<QuarantineFileComman
     }
 }
 
+public record GetMonitoredFoldersQuery() : IQuery<IReadOnlyList<MonitoredFolder>>;
+
+public class GetMonitoredFoldersQueryHandler : IQueryHandler<GetMonitoredFoldersQuery, IReadOnlyList<MonitoredFolder>>
+{
+    private readonly IRepository<MonitoredFolder> _folderRepo;
+
+    public GetMonitoredFoldersQueryHandler(IRepository<MonitoredFolder> folderRepo)
+    {
+        _folderRepo = folderRepo;
+    }
+
+    public async Task<IReadOnlyList<MonitoredFolder>> HandleAsync(GetMonitoredFoldersQuery query, CancellationToken ct = default)
+    {
+        return await _folderRepo.FindAsync(x => x.IsActive, ct);
+    }
+}
+
 public record GetAuditLogsQuery(int Page = 1, int PageSize = 20) : IQuery<PagedResult<DriveAuditLog>>;
 
 public class GetAuditLogsQueryHandler : IQueryHandler<GetAuditLogsQuery, PagedResult<DriveAuditLog>>
