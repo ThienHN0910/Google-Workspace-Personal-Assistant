@@ -234,7 +234,7 @@ Chỉ trả về JSON array hợp lệ.";
         
         try
         {
-            var result = await GenerateContentAsync(aiPrompt, ct);
+            var result = await CallGeminiApiAsync(aiPrompt, ct);
             return result.Trim().ToUpper().Contains("YES");
         }
         catch (Exception ex)

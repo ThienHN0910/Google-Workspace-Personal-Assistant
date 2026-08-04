@@ -195,6 +195,8 @@ button {
   color: #94a3b8;
 
   i { font-size: 2.5rem; margin-bottom: 1rem; color: #34d399; }
+}
+
 .email-list {
   display: flex;
   flex-direction: column;
@@ -306,3 +308,4 @@ button {
     &:focus { outline: none; border-color: #6366f1; }
   }
 }
+</style>

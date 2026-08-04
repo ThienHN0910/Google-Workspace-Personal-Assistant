@@ -1,5 +1,6 @@
 using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Models;
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Application.Features.EmailOps.Queries;
 using GOpsHub.Domain.Entities;
