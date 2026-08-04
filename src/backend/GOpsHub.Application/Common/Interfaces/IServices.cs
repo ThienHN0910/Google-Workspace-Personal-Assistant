@@ -13,6 +13,7 @@ public interface IAIService
     Task<List<string>> ExtractTasksFromEmailAsync(string emailContent, CancellationToken ct = default);
     Task<string> GenerateExecutiveReportAsync(string periodStats, CancellationToken ct = default);
     Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default);
+    Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default);
 }
 
 public class AIReplyResult
@@ -41,6 +42,11 @@ public class AITransactionResult
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = "other";
     public decimal? BalanceAfter { get; set; }
+}
+
+public class AIBatchTransactionResult : AITransactionResult
+{
+    public string EmailId { get; set; } = string.Empty;
 }
 
 /// <summary>

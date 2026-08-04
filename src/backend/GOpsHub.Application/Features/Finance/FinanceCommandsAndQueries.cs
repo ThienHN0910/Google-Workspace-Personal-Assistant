@@ -24,6 +24,91 @@ public class GetPendingBankEmailsQueryHandler : IQueryHandler<GetPendingBankEmai
     }
 }
 
+public record SyncBankTransactionsCommand(string Domain, string BankName, string SpreadsheetId) : ICommand<int>;
+
+public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransactionsCommand, int>
+{
+    private readonly IRepository<Transaction> _transactionRepo;
+    private readonly IGmailService _gmailService;
+    private readonly IAIService _aiService;
+    private readonly ISheetsService _sheetsService;
+
+    public SyncBankTransactionsCommandHandler(
+        IRepository<Transaction> transactionRepo,
+        IGmailService gmailService,
+        IAIService aiService,
+        ISheetsService sheetsService)
+    {
+        _transactionRepo = transactionRepo;
+        _gmailService = gmailService;
+        _aiService = aiService;
+        _sheetsService = sheetsService;
+    }
+
+    public async Task<int> HandleAsync(SyncBankTransactionsCommand command, CancellationToken ct = default)
+    {
+        var emails = await _gmailService.GetEmailsAsync($"from:{command.Domain} is:unread", 20, ct);
+        if (emails == null || !emails.Any()) return 0;
+
+        var batchContentBuilder = new System.Text.StringBuilder();
+        foreach (var email in emails)
+        {
+            batchContentBuilder.AppendLine($"--- EMAIL ID: {email.Id} ---");
+            batchContentBuilder.AppendLine(email.Body ?? email.Snippet);
+        }
+
+        var batchResult = await _aiService.ParseBatchTransactionEmailsAsync(batchContentBuilder.ToString(), command.BankName, ct);
+        if (batchResult == null || !batchResult.Any()) return 0;
+
+        int processed = 0;
+        foreach (var aiResult in batchResult)
+        {
+            if (string.IsNullOrEmpty(aiResult.EmailId)) continue;
+
+            var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
+                ? TransactionType.Credit
+                : TransactionType.Debit;
+
+            var transaction = new Transaction
+            {
+                SourceEmailId = aiResult.EmailId,
+                TransactionDate = aiResult.TransactionDate,
+                BankName = command.BankName,
+                TransactionType = transactionType,
+                Amount = aiResult.Amount,
+                Currency = "VND",
+                Description = aiResult.Description,
+                Category = aiResult.Category,
+                BalanceAfter = aiResult.BalanceAfter,
+                IsAutoRead = true
+            };
+
+            var saved = await _transactionRepo.CreateAsync(transaction, ct);
+
+            if (!string.IsNullOrEmpty(command.SpreadsheetId))
+            {
+                var sheetName = $"Transactions_{saved.TransactionDate:yyyy_MM}";
+                var rowValues = new List<object>
+                {
+                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                    saved.BankName,
+                    saved.TransactionType.ToString(),
+                    saved.Amount,
+                    saved.Category,
+                    saved.Description,
+                    saved.BalanceAfter ?? 0
+                };
+                await _sheetsService.AppendRowAsync(command.SpreadsheetId, sheetName, rowValues, ct);
+            }
+
+            await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
+            processed++;
+        }
+
+        return processed;
+    }
+}
+
 public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransactionEmailCommand, Transaction?>
 {
     private readonly IRepository<Transaction> _transactionRepo;
@@ -51,7 +136,8 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
         // Rate Limit (10 req/min = 6 seconds delay)
         await Task.Delay(6000, ct);
 
-        var aiResult = await _aiService.ParseTransactionEmailAsync(email.Snippet, command.BankName, ct);
+        var contentToParse = !string.IsNullOrWhiteSpace(email.Body) ? email.Body : email.Snippet;
+        var aiResult = await _aiService.ParseTransactionEmailAsync(contentToParse, command.BankName, ct);
         if (aiResult == null) return null;
 
         var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)

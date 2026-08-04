@@ -52,4 +52,14 @@ public class FinanceController : ControllerBase
 
         return Ok(ApiResponse<Transaction>.Ok(transaction, "Đã ghi nhận giao dịch tài chính và đồng bộ Google Sheets."));
     }
+
+    /// <summary>
+    /// Bulk parse financial transactions from bank emails (UC04)
+    /// </summary>
+    [HttpPost("transactions/sync-batch")]
+    public async Task<ActionResult<ApiResponse<int>>> SyncBatchTransactions([FromBody] SyncBankTransactionsCommand command)
+    {
+        var processedCount = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<int>.Ok(processedCount, $"Đã đồng bộ thành công {processedCount} giao dịch."));
+    }
 }

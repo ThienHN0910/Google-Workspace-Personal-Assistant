@@ -127,6 +127,49 @@ Chỉ trả về JSON thuần hợp lệ.";
         }
     }
 
+    public async Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default)
+    {
+        var prompt = $@"Phân tích hàng loạt các email biến động số dư ngân hàng/ví điện tử ({bankName}) sau đây.
+Mỗi email được phân tách bởi chuỗi bắt đầu bằng --- EMAIL ID: <id> ---
+
+Nhiệm vụ: Trích xuất giao dịch từ MỖI email và trả về 1 mảng (Array) JSON.
+LƯU Ý RẤT QUAN TRỌNG: Nếu email không có thông tin 'Số dư hiện tại' (balanceAfter), BẮT BUỘC gán giá trị của nó là null.
+
+Cấu trúc JSON yêu cầu trả về:
+[
+  {{
+    ""emailId"": ""<id của email>"",
+    ""transactionDate"": ""YYYY-MM-DDTHH:mm:ss"",
+    ""transactionType"": ""credit | debit"",
+    ""amount"": 500000,
+    ""description"": ""Nội dung chuyển khoản / giao dịch"",
+    ""category"": ""food | transport | bills | shopping | salary | transfer | other"",
+    ""balanceAfter"": null
+  }}
+]
+
+Dữ liệu Email:
+{batchContent}
+
+Chỉ trả về JSON Array thuần hợp lệ.";
+
+        var responseText = await CallGeminiApiAsync(prompt, ct);
+        try
+        {
+            var cleanedJson = CleanJsonResponse(responseText);
+            var result = JsonSerializer.Deserialize<List<AIBatchTransactionResult>>(cleanedJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            return result ?? new List<AIBatchTransactionResult>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse batch transactions JSON from Gemini response: {Response}", responseText);
+            return new List<AIBatchTransactionResult>();
+        }
+    }
+
     public async Task<string> SummarizeEmailThreadAsync(string threadContent, CancellationToken ct = default)
     {
         var prompt = $"Tóm tắt luồng email sau trong 3 câu ngắn gọn bằng tiếng Việt:\n\n{threadContent}";

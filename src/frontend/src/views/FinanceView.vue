@@ -7,12 +7,12 @@
       </div>
       <button class="btn-sync" @click="syncVPBank" :disabled="syncState.isSyncing">
         <span v-if="!syncState.isSyncing">🔄 Đồng bộ VPBank</span>
-        <span v-else>⏳ Đang xử lý ({{ syncState.current }}/{{ syncState.total }})...</span>
+        <span v-else>⏳ Đang nhờ AI phân tích...</span>
       </button>
     </header>
 
     <div v-if="syncState.isSyncing" class="sync-banner">
-      Hệ thống đang gọi AI để phân tích từng email... (Mỗi email chờ 6s để tránh lỗi giới hạn)
+      Hệ thống đang nén tất cả email chưa đọc và gửi cho AI xử lý trong 1 lần. Vui lòng đợi vài giây...
     </div>
 
     <div v-if="loading" class="loading">Đang tải giao dịch...</div>
@@ -58,41 +58,29 @@ const transactions = ref<any[]>([]);
 const loading = ref(true);
 
 const syncState = ref({
-  isSyncing: false,
-  total: 0,
-  current: 0
+  isSyncing: false
 });
 
 const syncVPBank = async () => {
   if (syncState.value.isSyncing) return;
   
   syncState.value.isSyncing = true;
-  syncState.value.total = 0;
-  syncState.value.current = 0;
   
   try {
-    const res: any = await api.get('/finance/transactions/pending?domain=vpb.com.vn');
-    if (!res.success || !res.data || res.data.length === 0) {
-      alert("Không có email biến động số dư VPBank nào mới!");
-      return;
+    const res: any = await api.post('/finance/transactions/sync-batch', {
+      Domain: 'vpb.com.vn',
+      BankName: 'VPBank',
+      SpreadsheetId: ''
+    });
+    
+    if (res.success) {
+      alert(`Đồng bộ hoàn tất! (Xử lý ${res.data} giao dịch mới)`);
+      await fetchTransactions();
+    } else {
+      alert(res.message || "Lỗi khi đồng bộ.");
     }
-    
-    const pendingEmails = res.data;
-    syncState.value.total = pendingEmails.length;
-    
-    for (const email of pendingEmails) {
-      syncState.value.current++;
-      await api.post('/finance/transactions/parse', {
-        GmailMessageId: email.id,
-        BankName: 'VPBank',
-        SpreadsheetId: '' // No auto sheet sync by default unless set
-      });
-    }
-    
-    alert("Đồng bộ hoàn tất!");
-    await fetchTransactions();
   } catch (e) {
-    console.error("Lỗi khi đồng bộ:", e);
+    console.error("Lỗi khi đồng bộ batch:", e);
     alert("Có lỗi xảy ra trong quá trình đồng bộ (Có thể do lỗi mạng hoặc quota).");
   } finally {
     syncState.value.isSyncing = false;
