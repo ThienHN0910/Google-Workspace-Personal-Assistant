@@ -3,6 +3,7 @@ using GOpsHub.API.Hubs;
 using GOpsHub.API.Middleware;
 using GOpsHub.Application;
 using GOpsHub.Infrastructure;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -112,6 +113,17 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseHangfireDashboard("/hangfire");
+
+using (var scope = app.Services.CreateScope())
+{
+    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
+        "drive-guard-audit", 
+        job => job.RunAuditAsync(CancellationToken.None), 
+        "*/5 * * * *");
+}
 
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");

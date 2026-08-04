@@ -1,9 +1,19 @@
 <template>
   <div class="finance-page">
     <header class="page-header">
-      <h1>💳 Telemetry Tài chính (UC04)</h1>
-      <p>Báo cáo biến động số dư & Tự động đồng bộ Google Sheets</p>
+      <div class="header-left">
+        <h1>💳 Telemetry Tài chính (UC04)</h1>
+        <p>Báo cáo biến động số dư & Tự động đồng bộ Google Sheets</p>
+      </div>
+      <button class="btn-sync" @click="syncVPBank" :disabled="syncState.isSyncing">
+        <span v-if="!syncState.isSyncing">🔄 Đồng bộ VPBank</span>
+        <span v-else>⏳ Đang xử lý ({{ syncState.current }}/{{ syncState.total }})...</span>
+      </button>
     </header>
+
+    <div v-if="syncState.isSyncing" class="sync-banner">
+      Hệ thống đang gọi AI để phân tích từng email... (Mỗi email chờ 6s để tránh lỗi giới hạn)
+    </div>
 
     <div v-if="loading" class="loading">Đang tải giao dịch...</div>
 
@@ -47,6 +57,48 @@ import api from '@/services/api.service';
 const transactions = ref<any[]>([]);
 const loading = ref(true);
 
+const syncState = ref({
+  isSyncing: false,
+  total: 0,
+  current: 0
+});
+
+const syncVPBank = async () => {
+  if (syncState.value.isSyncing) return;
+  
+  syncState.value.isSyncing = true;
+  syncState.value.total = 0;
+  syncState.value.current = 0;
+  
+  try {
+    const res: any = await api.get('/finance/transactions/pending?domain=vpb.com.vn');
+    if (!res.success || !res.data || res.data.length === 0) {
+      alert("Không có email biến động số dư VPBank nào mới!");
+      return;
+    }
+    
+    const pendingEmails = res.data;
+    syncState.value.total = pendingEmails.length;
+    
+    for (const email of pendingEmails) {
+      syncState.value.current++;
+      await api.post('/finance/transactions/parse', {
+        GmailMessageId: email.id,
+        BankName: 'VPBank',
+        SpreadsheetId: '' // No auto sheet sync by default unless set
+      });
+    }
+    
+    alert("Đồng bộ hoàn tất!");
+    await fetchTransactions();
+  } catch (e) {
+    console.error("Lỗi khi đồng bộ:", e);
+    alert("Có lỗi xảy ra trong quá trình đồng bộ (Có thể do lỗi mạng hoặc quota).");
+  } finally {
+    syncState.value.isSyncing = false;
+  }
+};
+
 const fetchTransactions = async () => {
   loading.value = true;
   try {
@@ -73,7 +125,37 @@ onMounted(fetchTransactions);
 </script>
 
 <style scoped lang="scss">
-.page-header { margin-bottom: 2rem; }
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.btn-sync {
+  background: #6366f1;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover:not(:disabled) { background: #4f46e5; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+.sync-banner {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+  text-align: center;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
 
 .transaction-table {
   background: #1e293b;

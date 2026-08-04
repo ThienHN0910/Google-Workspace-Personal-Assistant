@@ -32,6 +32,9 @@ public class MonitoredFolder : BaseEntity
 
     [BsonElement("watchExpiration")]
     public DateTime? WatchExpiration { get; set; }
+
+    [BsonElement("lastCheckedAt")]
+    public DateTime? LastCheckedAt { get; set; }
 }
 
 /// <summary>

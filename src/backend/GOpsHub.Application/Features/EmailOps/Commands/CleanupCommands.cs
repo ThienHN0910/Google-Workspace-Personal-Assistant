@@ -181,17 +181,6 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
         if (!string.IsNullOrEmpty(rule.CustomQuery))
             return rule.CustomQuery;
 
-        var categoryFilter = rule.Category.ToLower() switch
-        {
-            "promotions" => "category:promotions",
-            "social" => "category:social",
-            "updates" => "category:updates",
-            "forums" => "category:forums",
-            _ => ""
-        };
-
-        var dateFilter = $"older_than:{rule.OlderThanDays}d";
-
-        return string.Join(" ", new[] { categoryFilter, dateFilter }.Where(s => !string.IsNullOrEmpty(s)));
+        return "in:inbox is:unread";
     }
 }

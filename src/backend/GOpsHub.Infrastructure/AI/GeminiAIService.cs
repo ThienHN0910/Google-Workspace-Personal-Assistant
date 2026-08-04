@@ -50,7 +50,7 @@ Hãy trả về nội dung email phản hồi duy nhất (không giải thích t
             _logger.LogError(ex, "Failed to generate AI reply.");
             return new AIReplyResult
             {
-                DraftContent = "Lỗi khi gọi API AI: Model cấu hình không tồn tại hoặc vượt quá giới hạn request.",
+                DraftContent = $"Lỗi khi gọi API AI: {ex.Message}",
                 ConfidenceScore = 0,
                 DetectedLanguage = language
             };
@@ -217,19 +217,32 @@ Chỉ trả về JSON array hợp lệ.";
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(url, content, ct);
-        response.EnsureSuccessStatusCode();
-
         var body = await response.Content.ReadAsStringAsync(ct);
-        using var doc = JsonDocument.Parse(body);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Gemini API Error: {StatusCode} - {Body}", response.StatusCode, body);
+            throw new Exception($"Gemini API Error: {response.StatusCode} - {body}");
+        }
 
-        var text = doc.RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString();
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
 
-        return text ?? string.Empty;
+            var text = doc.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+
+            return text ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse Gemini API response. Body: {Body}", body);
+            return $"Lỗi JSON Parser. Raw Body: {body}";
+        }
     }
 
     private static string CleanJsonResponse(string responseText)

@@ -30,6 +30,16 @@ public class FinanceController : ControllerBase
     }
 
     /// <summary>
+    /// Get pending unread bank emails to be parsed
+    /// </summary>
+    [HttpGet("transactions/pending")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<EmailMessage>>>> GetPendingBankEmails([FromQuery] string domain = "vpb.com.vn")
+    {
+        var result = await _dispatcher.QueryAsync(new GetPendingBankEmailsQuery(domain));
+        return Ok(ApiResponse<IReadOnlyList<EmailMessage>>.Ok(result));
+    }
+
+    /// <summary>
     /// Parse financial transaction from bank email and sync to Google Sheets (UC04)
     /// </summary>
     [HttpPost("transactions/parse")]

@@ -9,6 +9,21 @@ namespace GOpsHub.Application.Features.Finance;
 
 public record ParseTransactionEmailCommand(string GmailMessageId, string BankName, string SpreadsheetId) : ICommand<Transaction?>;
 
+public record GetPendingBankEmailsQuery(string Domain) : IQuery<IReadOnlyList<EmailMessage>>;
+
+public class GetPendingBankEmailsQueryHandler : IQueryHandler<GetPendingBankEmailsQuery, IReadOnlyList<EmailMessage>>
+{
+    private readonly IGmailService _gmailService;
+    public GetPendingBankEmailsQueryHandler(IGmailService gmailService)
+    {
+        _gmailService = gmailService;
+    }
+    public async Task<IReadOnlyList<EmailMessage>> HandleAsync(GetPendingBankEmailsQuery query, CancellationToken ct = default)
+    {
+        return await _gmailService.GetEmailsAsync($"from:{query.Domain} is:unread", 50, ct);
+    }
+}
+
 public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransactionEmailCommand, Transaction?>
 {
     private readonly IRepository<Transaction> _transactionRepo;
@@ -32,6 +47,9 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
     {
         var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
         if (email == null) return null;
+
+        // Rate Limit (10 req/min = 6 seconds delay)
+        await Task.Delay(6000, ct);
 
         var aiResult = await _aiService.ParseTransactionEmailAsync(email.Snippet, command.BankName, ct);
         if (aiResult == null) return null;
@@ -73,6 +91,9 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
 
             await _sheetsService.AppendRowAsync(command.SpreadsheetId, sheetName, rowValues, ct);
         }
+
+        // Mark email as read so it won't be processed again
+        await _gmailService.MarkAsReadAsync(email.Id, ct);
 
         return saved;
     }

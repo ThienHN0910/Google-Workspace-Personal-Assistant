@@ -8,6 +8,10 @@ using GOpsHub.Infrastructure.Persistence.Repositories;
 using GOpsHub.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Hangfire;
+using Hangfire.Mongo;
+using Hangfire.Mongo.Migration.Strategies;
+using Hangfire.Mongo.Migration.Strategies.Backup;
 
 namespace GOpsHub.Infrastructure;
 
@@ -46,6 +50,34 @@ public static class DependencyInjection
         services.AddScoped<ITasksService, TasksApiService>();
         services.AddScoped<IAIService, GeminiAIService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>();
+
+        // Hangfire Setup
+        var mongoConnString = configuration["MONGODB_CONNECTION_STRING"]
+            ?? configuration.GetConnectionString("DefaultConnection")
+            ?? configuration["MongoDB:ConnectionString"];
+
+        services.AddHangfire(config =>
+        {
+            config.SetDataCompatibilityLevel(CompatibilityLevel.Version_18);
+            config.UseSimpleAssemblyNameTypeSerializer();
+            config.UseRecommendedSerializerSettings();
+            
+            var migrationOptions = new MongoMigrationOptions
+            {
+                MigrationStrategy = new MigrateMongoMigrationStrategy(),
+                BackupStrategy = new CollectionMongoBackupStrategy()
+            };
+
+            config.UseMongoStorage(mongoConnString, "gopshub_hangfire", new MongoStorageOptions
+            {
+                MigrationOptions = migrationOptions,
+                Prefix = "hangfire",
+                CheckConnection = false
+            });
+        });
+        
+        services.AddHangfireServer();
 
         return services;
     }
