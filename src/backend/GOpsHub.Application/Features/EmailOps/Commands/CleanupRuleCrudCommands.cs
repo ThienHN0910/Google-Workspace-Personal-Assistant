@@ -12,8 +12,6 @@ namespace GOpsHub.Application.Features.EmailOps.Commands;
 public record UpdateCleanupRuleCommand(
     string RuleId,
     string RuleName,
-    string Category,
-    int OlderThanDays,
     CleanupAction Action,
     List<string> WhitelistDomains,
     string? CustomQuery,

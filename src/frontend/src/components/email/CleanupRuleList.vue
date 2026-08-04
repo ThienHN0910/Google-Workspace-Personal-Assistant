@@ -140,7 +140,7 @@ const handleRunAll = async () => {
 const openCreateModal = () => {
   isEditing.value = false;
   formData.value = { 
-    ruleName: '', category: 'promotions', olderThanDays: 7, action: 0, 
+    ruleName: '', action: 0, 
     whitelistDomains: [], customQuery: '', useAI: false, aiPrompt: '', 
     subjectRegex: '', bodyRegex: '' 
   };

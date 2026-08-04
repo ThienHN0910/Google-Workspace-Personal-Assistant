@@ -172,7 +172,11 @@ public class EmailOpsController : ControllerBase
             request.RuleName,
             request.Action,
             request.WhitelistDomains,
-            request.CustomQuery);
+            request.CustomQuery,
+            request.UseAI,
+            request.AIPrompt,
+            request.SubjectRegex,
+            request.BodyRegex);
         var rule = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<CleanupRule>.Ok(rule, "Đã cập nhật quy tắc."));
     }

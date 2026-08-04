@@ -29,8 +29,8 @@ public class ExtractScheduleFromEmailCommandHandler : ICommandHandler<ExtractSch
     {
         var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
         if (email == null) return null;
-
-        var aiResult = await _aiService.ExtractScheduleFromEmailAsync(email.Snippet, ct);
+        // Dùng Body thay vì Snippet để AI đọc được toàn bộ chi tiết lịch hẹn
+        var aiResult = await _aiService.ExtractScheduleFromEmailAsync(email.Body ?? email.Snippet, ct);
         if (aiResult == null) return null;
 
         var schedule = new ExtractedSchedule
