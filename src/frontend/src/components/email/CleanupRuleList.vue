@@ -2,16 +2,20 @@
   <div class="cleanup-rules">
     <div class="header-actions">
       <h2>Quy tắc dọn dẹp Email (UC01)</h2>
-      <button class="primary-btn" @click="handleRunAll">
-        <i class="pi pi-play"></i>
-        <span>Chạy dọn dẹp ngay</span>
-      </button>
+      <div class="header-btns">
+        <button class="secondary-btn" @click="openCreateModal">
+          <i class="pi pi-plus"></i> Tạo quy tắc
+        </button>
+        <button class="primary-btn" @click="handleRunAll">
+          <i class="pi pi-play"></i> Chạy dọn dẹp
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">Đang tải quy tắc...</div>
 
     <div v-else class="rules-grid">
-      <div v-for="rule in rules" :key="rule.id" class="rule-card">
+      <div v-for="rule in rules" :key="rule.id" class="rule-card" :class="{ 'inactive': !rule.isActive }">
         <div class="rule-header">
           <span class="rule-name">{{ rule.ruleName }}</span>
           <span class="badge" :class="rule.action === 0 ? 'trash' : 'archive'">
@@ -22,6 +26,55 @@
           <div><i class="pi pi-folder"></i> Danh mục: <strong>{{ rule.category }}</strong></div>
           <div><i class="pi pi-clock"></i> Cũ hơn: <strong>{{ rule.olderThanDays }} ngày</strong></div>
         </div>
+        <div class="rule-actions">
+          <button class="action-btn" :class="rule.isActive ? 'text-green' : 'text-gray'" @click="handleToggle(rule.id)" :title="rule.isActive ? 'Tắt quy tắc' : 'Bật quy tắc'">
+            <i class="pi" :class="rule.isActive ? 'pi-check-circle' : 'pi-minus-circle'"></i>
+          </button>
+          <button class="action-btn text-blue" @click="openEditModal(rule)" title="Sửa">
+            <i class="pi pi-pencil"></i>
+          </button>
+          <button class="action-btn text-red" @click="handleDelete(rule.id)" title="Xóa">
+            <i class="pi pi-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+      <div class="modal-content">
+        <h3>{{ isEditing ? 'Sửa quy tắc' : 'Tạo quy tắc mới' }}</h3>
+        <form @submit.prevent="handleSubmit">
+          <div class="form-group">
+            <label>Tên quy tắc</label>
+            <input v-model="formData.ruleName" required placeholder="Ví dụ: Dọn rác Shopee" />
+          </div>
+          <div class="form-group">
+            <label>Danh mục</label>
+            <select v-model="formData.category" required>
+              <option value="promotions">Promotions</option>
+              <option value="social">Social</option>
+              <option value="updates">Updates</option>
+              <option value="forums">Forums</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cũ hơn (ngày)</label>
+            <input type="number" v-model.number="formData.olderThanDays" required min="1" />
+          </div>
+          <div class="form-group">
+            <label>Hành động</label>
+            <select v-model.number="formData.action" required>
+              <option :value="0">Xóa vào thùng rác (Trash)</option>
+              <option :value="1">Lưu trữ (Archive)</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
+            <button type="submit" class="btn-submit">Lưu</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
@@ -33,6 +86,18 @@ import api from '@/services/api.service';
 
 const rules = ref<any[]>([]);
 const loading = ref(true);
+
+const showModal = ref(false);
+const isEditing = ref(false);
+const currentEditId = ref('');
+const formData = ref({
+  ruleName: '',
+  category: 'promotions',
+  olderThanDays: 7,
+  action: 0,
+  whitelistDomains: [],
+  customQuery: ''
+});
 
 const fetchRules = async () => {
   loading.value = true;
@@ -59,6 +124,57 @@ const handleRunAll = async () => {
   }
 };
 
+const openCreateModal = () => {
+  isEditing.value = false;
+  formData.value = { ruleName: '', category: 'promotions', olderThanDays: 7, action: 0, whitelistDomains: [], customQuery: '' };
+  showModal.value = true;
+};
+
+const openEditModal = (rule: any) => {
+  isEditing.value = true;
+  currentEditId.value = rule.id;
+  formData.value = { ...rule };
+  showModal.value = true;
+};
+
+const closeModal = () => {
+  showModal.value = false;
+};
+
+const handleSubmit = async () => {
+  try {
+    if (isEditing.value) {
+      await api.put(`/emailops/rules/${currentEditId.value}`, formData.value);
+    } else {
+      await api.post('/emailops/rules', formData.value);
+    }
+    closeModal();
+    fetchRules();
+  } catch (e) {
+    alert('Lỗi khi lưu quy tắc');
+  }
+};
+
+const handleDelete = async (id: string) => {
+  if (confirm('Bạn có chắc chắn muốn xóa quy tắc này?')) {
+    try {
+      await api.delete(`/emailops/rules/${id}`);
+      fetchRules();
+    } catch (e) {
+      alert('Lỗi khi xóa quy tắc');
+    }
+  }
+};
+
+const handleToggle = async (id: string) => {
+  try {
+    await api.patch(`/emailops/rules/${id}/toggle`, {});
+    fetchRules();
+  } catch (e) {
+    alert('Lỗi khi chuyển trạng thái quy tắc');
+  }
+};
+
 onMounted(fetchRules);
 </script>
 
@@ -68,6 +184,11 @@ onMounted(fetchRules);
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+}
+
+.header-btns {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .primary-btn {
@@ -81,8 +202,21 @@ onMounted(fetchRules);
   display: flex;
   align-items: center;
   gap: 0.5rem;
-
   &:hover { background: #4f46e5; }
+}
+
+.secondary-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  &:hover { background: rgba(255, 255, 255, 0.15); }
 }
 
 .rules-grid {
@@ -96,6 +230,10 @@ onMounted(fetchRules);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.75rem;
   padding: 1.25rem;
+  transition: opacity 0.3s;
+  &.inactive {
+    opacity: 0.6;
+  }
 }
 
 .rule-header {
@@ -112,7 +250,6 @@ onMounted(fetchRules);
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
   font-weight: 600;
-
   &.trash { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
   &.archive { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
 }
@@ -123,5 +260,101 @@ onMounted(fetchRules);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.rule-actions {
+  display: flex;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 0.75rem;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 1.1rem;
+  transition: background 0.2s;
+  &:hover { background: rgba(255, 255, 255, 0.1); }
+  &.text-green { color: #34d399; }
+  &.text-blue { color: #60a5fa; }
+  &.text-red { color: #f87171; }
+  &.text-gray { color: #94a3b8; }
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  
+  label {
+    font-size: 0.85rem;
+    color: #cbd5e1;
+  }
+  
+  input, select {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f8fafc;
+    padding: 0.5rem;
+    border-radius: 0.35rem;
+  }
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  &:hover { color: #f8fafc; }
+}
+
+.btn-submit {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover { background: #4f46e5; }
 }
 </style>

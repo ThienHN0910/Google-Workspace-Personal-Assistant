@@ -56,6 +56,11 @@ const routes = [
         component: () => import('@/views/FinanceView.vue'),
       },
       {
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/views/TasksView.vue'),
+      },
+      {
         path: 'drive-guard',
         name: 'DriveGuard',
         component: () => import('@/views/DriveGuardView.vue'),

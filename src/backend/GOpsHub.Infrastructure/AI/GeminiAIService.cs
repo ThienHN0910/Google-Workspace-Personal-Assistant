@@ -10,12 +10,14 @@ public class GeminiAIService : IAIService
 {
     private readonly HttpClient _httpClient;
     private readonly string? _apiKey;
+    private readonly string _model;
     private readonly ILogger<GeminiAIService> _logger;
 
     public GeminiAIService(IConfiguration configuration, ILogger<GeminiAIService> logger)
     {
         _httpClient = new HttpClient();
         _apiKey = configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"];
+        _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.6-flash-lite";
         _logger = logger;
     }
 
@@ -182,7 +184,7 @@ Chỉ trả về JSON array hợp lệ.";
             return "Cảm ơn bạn đã gửi email. Tôi đã nhận được thông tin và sẽ phản hồi sớm nhất.";
         }
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
 
         var requestBody = new
         {

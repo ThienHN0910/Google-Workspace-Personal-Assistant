@@ -24,11 +24,13 @@ builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
 // 3. JWT Authentication
-var jwtSecret = builder.Configuration["JWT_SECRET"] ?? builder.Configuration["Jwt:Secret"];
+var jwtSecret = builder.Configuration["JWT_SECRET"] ?? builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException(
+        "JWT_SECRET is not configured. Ensure the .env file exists in the publish output or set the environment variable on the server.");
 
-var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt:Issuer"];
+var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt:Issuer"] ?? "gopshub";
 
-var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt:Audience"];
+var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt:Audience"] ?? "gopshub-client";
 
 builder.Services.AddAuthentication(options =>
 {
@@ -54,7 +56,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // 4. CORS
-var frontendUrl = builder.Configuration["FRONTEND_URL"];
+var frontendUrl = builder.Configuration["FRONTEND_URL"] ?? "*";
 
 builder.Services.AddCors(options =>
 {
@@ -131,6 +133,7 @@ static void LoadDotEnvFile()
     {
         if (File.Exists(path))
         {
+            Console.WriteLine($"[LoadDotEnvFile] Loaded .env from: {Path.GetFullPath(path)}");
             foreach (var line in File.ReadAllLines(path))
             {
                 var trimmed = line.Trim();
@@ -144,7 +147,9 @@ static void LoadDotEnvFile()
                     Environment.SetEnvironmentVariable(key, value);
                 }
             }
-            break;
+            return;
         }
     }
+
+    Console.WriteLine($"[LoadDotEnvFile] WARNING: No .env file found. Searched: {string.Join(", ", possibleEnvPaths.Select(Path.GetFullPath))}");
 }

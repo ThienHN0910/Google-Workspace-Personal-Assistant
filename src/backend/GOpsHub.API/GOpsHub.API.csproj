@@ -18,4 +18,8 @@
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include=".env" Condition="Exists('.env')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

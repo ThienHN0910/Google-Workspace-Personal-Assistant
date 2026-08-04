@@ -13,16 +13,19 @@ public class CalendarApiService : ICalendarService
 {
     private readonly IRepository<AdminUser> _userRepo;
     private readonly ITokenEncryptionService _encryptionService;
+    private readonly IGoogleTokenService _googleTokenService;
     private readonly ILogger<CalendarApiService> _logger;
     private const string AdminEmail = "hnt.vn.vn@gmail.com";
 
     public CalendarApiService(
         IRepository<AdminUser> userRepo,
         ITokenEncryptionService encryptionService,
+        IGoogleTokenService googleTokenService,
         ILogger<CalendarApiService> logger)
     {
         _userRepo = userRepo;
         _encryptionService = encryptionService;
+        _googleTokenService = googleTokenService;
         _logger = logger;
     }
 
@@ -36,6 +39,37 @@ public class CalendarApiService : ICalendarService
         }
 
         var accessToken = _encryptionService.Decrypt(user.GoogleAccessToken);
+
+        // Auto-refresh token if expired or about to expire
+        if (user.GoogleTokenExpiresAt.HasValue && user.GoogleTokenExpiresAt.Value <= DateTime.UtcNow.AddMinutes(5))
+        {
+            if (!string.IsNullOrEmpty(user.GoogleRefreshToken))
+            {
+                try
+                {
+                    var refreshToken = _encryptionService.Decrypt(user.GoogleRefreshToken);
+                    var newTokens = await _googleTokenService.RefreshAccessTokenAsync(refreshToken, ct);
+
+                    accessToken = newTokens.AccessToken;
+                    user.GoogleAccessToken = _encryptionService.Encrypt(newTokens.AccessToken);
+                    user.GoogleTokenExpiresAt = DateTime.UtcNow.AddSeconds(newTokens.ExpiresInSeconds);
+                    await _userRepo.UpdateAsync(user, ct);
+
+                    _logger.LogInformation("Successfully refreshed Google access token for Calendar API.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to refresh Google access token for Calendar.");
+                    return null;
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Google access token expired and no refresh token available for Calendar.");
+                return null;
+            }
+        }
+
         var credential = GoogleCredential.FromAccessToken(accessToken);
 
         return new CalendarService(new BaseClientService.Initializer

@@ -1,6 +1,7 @@
 using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Models;
 using GOpsHub.Application.Features.Scheduling;
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,10 +14,12 @@ namespace GOpsHub.API.Controllers;
 public class SchedulingController : ControllerBase
 {
     private readonly IDispatcher _dispatcher;
+    private readonly ICalendarService _calendarService;
 
-    public SchedulingController(IDispatcher dispatcher)
+    public SchedulingController(IDispatcher dispatcher, ICalendarService calendarService)
     {
         _dispatcher = dispatcher;
+        _calendarService = calendarService;
     }
 
     /// <summary>
@@ -51,4 +54,36 @@ public class SchedulingController : ControllerBase
         var schedule = await _dispatcher.SendAsync(new ConfirmScheduleCommand(id));
         return Ok(ApiResponse<ExtractedSchedule>.Ok(schedule, "Đã tạo sự kiện trên Google Calendar."));
     }
+
+    /// <summary>
+    /// Get upcoming events from Google Calendar
+    /// </summary>
+    [HttpGet("upcoming")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CalendarEvent>>>> GetUpcomingEvents([FromQuery] int days = 7, CancellationToken ct = default)
+    {
+        var events = await _calendarService.GetUpcomingEventsAsync(days, ct);
+        return Ok(ApiResponse<IReadOnlyList<CalendarEvent>>.Ok(events));
+    }
+
+    /// <summary>
+    /// Manually create a calendar event
+    /// </summary>
+    [HttpPost("manual")]
+    public async Task<ActionResult<ApiResponse<string>>> CreateManualEvent([FromBody] CreateEventRequest request, CancellationToken ct)
+    {
+        var eventId = await _calendarService.CreateEventAsync(request.Title, request.Start, request.End, request.Location, request.Description, ct);
+        if (string.IsNullOrEmpty(eventId))
+            return BadRequest(ApiResponse<string>.Fail("Không thể tạo sự kiện. Hãy kiểm tra kết nối Google."));
+
+        return Ok(ApiResponse<string>.Ok(eventId, "Đã tạo sự kiện thành công."));
+    }
+}
+
+public class CreateEventRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public DateTime Start { get; set; }
+    public DateTime? End { get; set; }
+    public string? Location { get; set; }
+    public string? Description { get; set; }
 }

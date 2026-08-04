@@ -10,6 +10,10 @@ public class MongoDbContext
 
     public MongoDbContext(IOptions<MongoDbSettings> settings)
     {
+        if (string.IsNullOrEmpty(settings.Value.ConnectionString))
+            throw new InvalidOperationException(
+                "MongoDB ConnectionString is not configured. Ensure MONGODB_CONNECTION_STRING is set in .env or environment variables.");
+
         var client = new MongoClient(settings.Value.ConnectionString);
         _database = client.GetDatabase(settings.Value.DatabaseName);
     }

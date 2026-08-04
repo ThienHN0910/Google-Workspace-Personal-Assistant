@@ -36,12 +36,14 @@ public static class DependencyInjection
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<ITokenEncryptionService, TokenEncryptionService>();
+        services.AddScoped<IGoogleTokenService, GoogleTokenService>();
 
         // Google, AI & Alerting Services
         services.AddScoped<IGmailService, GmailApiService>();
         services.AddScoped<ICalendarService, CalendarApiService>();
         services.AddScoped<ISheetsService, SheetsApiService>();
         services.AddScoped<IDriveService, DriveApiService>();
+        services.AddScoped<ITasksService, TasksApiService>();
         services.AddScoped<IAIService, GeminiAIService>();
         services.AddScoped<INotificationService, NotificationService>();
 

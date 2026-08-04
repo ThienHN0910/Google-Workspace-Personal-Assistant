@@ -37,34 +37,46 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth.store';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const handleGoogleSignIn = () => {
-  // Demo / Dev OAuth token trigger (in production, GIS popup calls callback)
-  if (typeof google !== 'undefined' && google.accounts) {
-    google.accounts.id.prompt();
-  } else {
-    // Fallback for dev testing
-    alert("Vui lòng cấu hình VITE_GOOGLE_CLIENT_ID trong file src/frontend/.env để sử dụng Google OAuth thật.");
-  }
+  authStore.loading = true;
+  // Redirect to backend OAuth consent endpoint
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+  window.location.href = `${baseUrl}/auth/google-redirect`;
 };
 
-onMounted(() => {
-  if (typeof google !== 'undefined' && google.accounts) {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '454801425475-d3ta6arq9ftm0ddalbe5fqlddemc53o1.apps.googleusercontent.com';
-    google.accounts.id.initialize({
-      client_id: clientId,
-      callback: async (response: any) => {
-        const success = await authStore.googleLogin(response.credential);
-        if (success) {
-          router.push('/dashboard');
-        }
-      },
-    });
+onMounted(async () => {
+  // Check if we just returned from Google OAuth callback
+  const token = route.query.token as string;
+  const error = route.query.error as string;
+
+  if (token) {
+    authStore.token = token;
+    localStorage.setItem('gopshub_token', token);
+    
+    // Clear URL query params
+    router.replace({ path: '/login', query: {} });
+    
+    // Fetch user and redirect to dashboard
+    await authStore.fetchCurrentUser();
+    if (authStore.user) {
+      router.push('/dashboard');
+    } else {
+      authStore.error = "Không thể tải thông tin người dùng.";
+      authStore.logout();
+    }
+  } else if (error) {
+    authStore.error = decodeURIComponent(error);
+    router.replace({ path: '/login', query: {} });
+  } else if (authStore.isAuthenticated) {
+    // Already logged in
+    router.push('/dashboard');
   }
 });
 </script>

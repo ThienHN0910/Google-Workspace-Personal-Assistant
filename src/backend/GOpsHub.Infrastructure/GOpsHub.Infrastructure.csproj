@@ -18,6 +18,7 @@
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.68.0.3480" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
     <PackageReference Include="Google.Apis.Sheets.v4" Version="1.68.0.3502" />
+    <PackageReference Include="Google.Apis.Tasks.v1" Version="1.68.0.3470" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
     <PackageReference Include="Hangfire.Core" Version="1.8.14" />

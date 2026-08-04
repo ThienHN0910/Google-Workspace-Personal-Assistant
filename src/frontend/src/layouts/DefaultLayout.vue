@@ -20,6 +20,10 @@
           <i class="pi pi-calendar"></i>
           <span>Scheduling</span>
         </router-link>
+        <router-link to="/tasks" class="nav-item">
+          <i class="pi pi-check-square"></i>
+          <span>Google Tasks</span>
+        </router-link>
         <router-link to="/finance" class="nav-item">
           <i class="pi pi-wallet"></i>
           <span>Finance Telemetry</span>

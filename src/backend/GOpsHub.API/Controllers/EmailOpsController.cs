@@ -3,6 +3,7 @@ using GOpsHub.Application.Common.Models;
 using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Application.Features.EmailOps.Queries;
 using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -99,6 +100,44 @@ public class EmailOpsController : ControllerBase
         var draft = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<AIDraft>.Ok(draft, "Đã tạo AI draft thành công."));
     }
+
+    /// <summary>
+    /// Update an existing cleanup rule
+    /// </summary>
+    [HttpPut("rules/{id}")]
+    public async Task<ActionResult<ApiResponse<CleanupRule>>> UpdateCleanupRule(string id, [FromBody] UpdateCleanupRuleRequest request)
+    {
+        var command = new UpdateCleanupRuleCommand(
+            id,
+            request.RuleName,
+            request.Category,
+            request.OlderThanDays,
+            request.Action,
+            request.WhitelistDomains,
+            request.CustomQuery);
+        var rule = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<CleanupRule>.Ok(rule, "Đã cập nhật quy tắc."));
+    }
+
+    /// <summary>
+    /// Delete a cleanup rule
+    /// </summary>
+    [HttpDelete("rules/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteCleanupRule(string id)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteCleanupRuleCommand(id));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã xóa quy tắc."));
+    }
+
+    /// <summary>
+    /// Toggle a cleanup rule active/inactive
+    /// </summary>
+    [HttpPatch("rules/{id}/toggle")]
+    public async Task<ActionResult<ApiResponse<CleanupRule>>> ToggleCleanupRule(string id)
+    {
+        var rule = await _dispatcher.SendAsync(new ToggleCleanupRuleCommand(id));
+        return Ok(ApiResponse<CleanupRule>.Ok(rule, rule.IsActive ? "Đã kích hoạt quy tắc." : "Đã vô hiệu hóa quy tắc."));
+    }
 }
 
 public class ApproveDraftRequest
@@ -109,4 +148,14 @@ public class ApproveDraftRequest
 public class RejectDraftRequest
 {
     public string Reason { get; set; } = string.Empty;
+}
+
+public class UpdateCleanupRuleRequest
+{
+    public string RuleName { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public int OlderThanDays { get; set; }
+    public CleanupAction Action { get; set; }
+    public List<string> WhitelistDomains { get; set; } = new();
+    public string? CustomQuery { get; set; }
 }
