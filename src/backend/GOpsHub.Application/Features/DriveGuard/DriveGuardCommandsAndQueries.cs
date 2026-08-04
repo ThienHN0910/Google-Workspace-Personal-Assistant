@@ -4,6 +4,7 @@ using GOpsHub.Application.Common.Models;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Enums;
 using GOpsHub.Domain.Interfaces;
+using Hangfire;
 
 namespace GOpsHub.Application.Features.DriveGuard;
 
