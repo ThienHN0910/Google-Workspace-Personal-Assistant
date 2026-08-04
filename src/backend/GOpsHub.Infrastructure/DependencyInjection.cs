@@ -59,7 +59,7 @@ public static class DependencyInjection
 
         services.AddHangfire(config =>
         {
-            config.SetDataCompatibilityLevel(CompatibilityLevel.Version_18);
+            config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180);
             config.UseSimpleAssemblyNameTypeSerializer();
             config.UseRecommendedSerializerSettings();
             
