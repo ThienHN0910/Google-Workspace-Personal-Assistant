@@ -39,7 +39,7 @@
       </div>
     </div>
 
-    <LoadingSpinner v-if="loading" text="Đang tải giao dịch..." />
+    <LoadingSpinner v-if="loading && transactions.length === 0" text="Đang tải giao dịch..." />
 
     <div v-else class="transaction-table">
       <table>

@@ -48,7 +48,7 @@
 
     <!-- Tab 2: Extracted Schedules -->
     <div v-if="activeTab === 'extracted'" class="tab-content">
-      <LoadingSpinner v-if="loading.extracted" text="Đang tải lịch hẹn trích xuất..." />
+      <LoadingSpinner v-if="loading.extracted && extractedSchedules.length === 0" text="Đang tải lịch hẹn trích xuất..." />
       <div v-else-if="extractedSchedules.length === 0" class="empty-state">
         <i class="pi pi-calendar-plus"></i>
         <p>Không có lịch hẹn AI nào cần xác nhận!</p>
