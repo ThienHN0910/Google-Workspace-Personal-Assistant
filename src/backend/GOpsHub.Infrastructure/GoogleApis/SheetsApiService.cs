@@ -55,19 +55,31 @@ public class SheetsApiService : ISheetsService
         var service = await GetSheetsClientAsync(ct);
         if (service == null) return;
 
-        var valueRange = new ValueRange
+        try
         {
-            Values = new List<IList<object>> { values }
-        };
+            string actualSheetTitle = sheetName;
+            if (string.IsNullOrWhiteSpace(actualSheetTitle) || actualSheetTitle.Equals("A1", StringComparison.OrdinalIgnoreCase) || actualSheetTitle.Equals("Sheet1", StringComparison.OrdinalIgnoreCase))
+            {
+                var meta = await service.Spreadsheets.Get(spreadsheetId).ExecuteAsync(ct);
+                actualSheetTitle = meta.Sheets?.FirstOrDefault()?.Properties?.Title ?? "Sheet1";
+            }
 
-        string targetRange = (string.IsNullOrWhiteSpace(sheetName) || sheetName.Equals("Sheet1", StringComparison.OrdinalIgnoreCase))
-            ? "A1"
-            : $"{sheetName}!A1";
+            var valueRange = new ValueRange
+            {
+                Values = new List<IList<object>> { values }
+            };
 
-        var request = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, targetRange);
-        request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            var request = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, $"'{actualSheetTitle}'!A1");
+            request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            request.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
 
-        await request.ExecuteAsync(ct);
+            await request.ExecuteAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error appending row to Google Spreadsheet {SpreadsheetId} in sheet '{SheetName}'", spreadsheetId, sheetName);
+            throw;
+        }
     }
 
     public async Task<IList<IList<object>>> GetRangeAsync(string spreadsheetId, string range, CancellationToken ct = default)
@@ -103,37 +115,47 @@ public class SheetsApiService : ISheetsService
         var service = await GetSheetsClientAsync(ct);
         if (service == null) return string.Empty;
 
-        var spreadsheet = new Spreadsheet
+        try
         {
-            Properties = new SpreadsheetProperties
+            var spreadsheet = new Spreadsheet
             {
-                Title = title
-            }
-        };
+                Properties = new SpreadsheetProperties
+                {
+                    Title = title
+                }
+            };
 
-        var created = await service.Spreadsheets.Create(spreadsheet).ExecuteAsync(ct);
+            var created = await service.Spreadsheets.Create(spreadsheet).ExecuteAsync(ct);
+            var firstSheetTitle = created.Sheets?.FirstOrDefault()?.Properties?.Title ?? "Sheet1";
 
-        var headers = new List<object>
+            var headers = new List<object>
+            {
+                "Mã GD",
+                "Thời gian",
+                "Ngân hàng",
+                "Loại",
+                "Số tiền",
+                "Số tiền phí",
+                "Tài khoản trích",
+                "Tài khoản ghi",
+                "Tên người hưởng",
+                "Danh mục",
+                "Nội dung",
+                "Số dư sau GD"
+            };
+
+            var valueRange = new ValueRange { Values = new List<IList<object>> { headers } };
+            var appendReq = service.Spreadsheets.Values.Append(valueRange, created.SpreadsheetId, $"'{firstSheetTitle}'!A1");
+            appendReq.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            appendReq.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await appendReq.ExecuteAsync(ct);
+
+            return created.SpreadsheetId;
+        }
+        catch (Exception ex)
         {
-            "Mã GD",
-            "Thời gian",
-            "Ngân hàng",
-            "Loại",
-            "Số tiền",
-            "Số tiền phí",
-            "Tài khoản trích",
-            "Tài khoản ghi",
-            "Tên người hưởng",
-            "Danh mục",
-            "Nội dung",
-            "Số dư sau GD"
-        };
-
-        var valueRange = new ValueRange { Values = new List<IList<object>> { headers } };
-        var appendReq = service.Spreadsheets.Values.Append(valueRange, created.SpreadsheetId, "A1");
-        appendReq.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
-        await appendReq.ExecuteAsync(ct);
-
-        return created.SpreadsheetId;
+            _logger.LogError(ex, "Failed to create Google Spreadsheet with title '{Title}'", title);
+            throw;
+        }
     }
 }
