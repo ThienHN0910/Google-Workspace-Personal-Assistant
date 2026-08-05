@@ -73,6 +73,22 @@ public class Transaction : BaseEntity
     [BsonElement("category")]
     public string Category { get; set; } = "other";
 
+    [BsonElement("transactionCode")]
+    public string? TransactionCode { get; set; }
+
+    [BsonElement("sourceAccount")]
+    public string? SourceAccount { get; set; }
+
+    [BsonElement("targetAccount")]
+    public string? TargetAccount { get; set; }
+
+    [BsonElement("beneficiaryName")]
+    public string? BeneficiaryName { get; set; }
+
+    [BsonElement("feeAmount")]
+    [BsonRepresentation(MongoDB.Bson.BsonType.Decimal128)]
+    public decimal FeeAmount { get; set; }
+
     [BsonElement("balanceAfter")]
     [BsonRepresentation(MongoDB.Bson.BsonType.Decimal128)]
     public decimal? BalanceAfter { get; set; }

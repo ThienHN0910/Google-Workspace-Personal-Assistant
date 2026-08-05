@@ -91,6 +91,19 @@ public class DriveApiService : IDriveService
         };
     }
 
+    public async Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", CancellationToken ct = default)
+    {
+        var service = await GetDriveClientAsync(ct);
+        if (service == null) return null;
+
+        var request = service.Files.List();
+        request.Q = $"name = '{fileName}' and mimeType = '{mimeType}' and trashed = false";
+        request.Fields = "files(id, name)";
+
+        var result = await request.ExecuteAsync(ct);
+        return result.Files?.FirstOrDefault()?.Id;
+    }
+
     public async Task<string> UploadFileAsync(string folderId, string fileName, Stream content, string mimeType, CancellationToken ct = default)
     {
         var service = await GetDriveClientAsync(ct);

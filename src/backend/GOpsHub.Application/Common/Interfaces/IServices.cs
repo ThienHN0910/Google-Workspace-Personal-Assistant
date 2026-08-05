@@ -42,6 +42,11 @@ public class AITransactionResult
     public string Description { get; set; } = string.Empty;
     public string Category { get; set; } = "other";
     public decimal? BalanceAfter { get; set; }
+    public string? TransactionCode { get; set; }
+    public string? SourceAccount { get; set; }
+    public string? TargetAccount { get; set; }
+    public string? BeneficiaryName { get; set; }
+    public decimal FeeAmount { get; set; }
 }
 
 public class AIBatchTransactionResult : AITransactionResult
@@ -85,6 +90,7 @@ public interface IDriveService
 {
     Task<IReadOnlyList<DriveFileInfo>> ListFilesInFolderAsync(string folderId, CancellationToken ct = default);
     Task<DriveFileInfo?> GetFileInfoAsync(string fileId, CancellationToken ct = default);
+    Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", CancellationToken ct = default);
     Task<string> UploadFileAsync(string folderId, string fileName, Stream content, string mimeType, CancellationToken ct = default);
     Task MoveFileAsync(string fileId, string targetFolderId, CancellationToken ct = default);
     Task<string> CreateFolderAsync(string parentFolderId, string folderName, CancellationToken ct = default);
@@ -119,6 +125,7 @@ public interface ISheetsService
     Task AppendRowAsync(string spreadsheetId, string sheetName, IList<object> values, CancellationToken ct = default);
     Task<IList<IList<object>>> GetRangeAsync(string spreadsheetId, string range, CancellationToken ct = default);
     Task<string> CreateSheetTabAsync(string spreadsheetId, string sheetName, CancellationToken ct = default);
+    Task<string> CreateSpreadsheetAsync(string title, CancellationToken ct = default);
 }
 
 /// <summary>

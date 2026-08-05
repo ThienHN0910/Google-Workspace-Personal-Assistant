@@ -106,6 +106,11 @@ Cấu trúc JSON yêu cầu:
   ""transactionDate"": ""YYYY-MM-DDTHH:mm:ss"",
   ""transactionType"": ""credit | debit"",
   ""amount"": 500000,
+  ""feeAmount"": 0,
+  ""transactionCode"": ""Mã giao dịch / mã tham chiếu"",
+  ""sourceAccount"": ""Số tài khoản trích / chuyển"",
+  ""targetAccount"": ""Số tài khoản ghi / nhận"",
+  ""beneficiaryName"": ""Tên người hưởng / người chuyển"",
   ""description"": ""Nội dung chuyển khoản / giao dịch"",
   ""category"": ""food | transport | bills | shopping | salary | transfer | other"",
   ""balanceAfter"": 10000000
@@ -144,6 +149,11 @@ Cấu trúc JSON yêu cầu trả về:
     ""transactionDate"": ""YYYY-MM-DDTHH:mm:ss"",
     ""transactionType"": ""credit | debit"",
     ""amount"": 500000,
+    ""feeAmount"": 0,
+    ""transactionCode"": ""Mã giao dịch / mã tham chiếu"",
+    ""sourceAccount"": ""Số tài khoản trích / chuyển"",
+    ""targetAccount"": ""Số tài khoản ghi / nhận"",
+    ""beneficiaryName"": ""Tên người hưởng / người chuyển"",
     ""description"": ""Nội dung chuyển khoản / giao dịch"",
     ""category"": ""food | transport | bills | shopping | salary | transfer | other"",
     ""balanceAfter"": null

@@ -42,34 +42,46 @@
     <LoadingSpinner v-if="loading && transactions.length === 0" text="Đang tải giao dịch..." />
 
     <div v-else class="transaction-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Thời gian</th>
-            <th>Ngân hàng</th>
-            <th>Loại</th>
-            <th>Số tiền</th>
-            <th>Danh mục</th>
-            <th>Nội dung</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="t in transactions" :key="t.id">
-            <td>{{ formatDate(t.transactionDate) }}</td>
-            <td><strong>{{ t.bankName }}</strong></td>
-            <td>
-              <span class="type-tag" :class="t.transactionType === 0 ? 'credit' : 'debit'">
-                {{ t.transactionType === 0 ? '+ Nhận' : '- Chi' }}
-              </span>
-            </td>
-            <td class="amount" :class="t.transactionType === 0 ? 'credit' : 'debit'">
-              {{ formatCurrency(t.amount) }}
-            </td>
-            <td><span class="category-chip">{{ t.category }}</span></td>
-            <td class="desc">{{ t.description }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Mã GD</th>
+              <th>Thời gian</th>
+              <th>Ngân hàng</th>
+              <th>Loại</th>
+              <th>Số tiền</th>
+              <th>Phí</th>
+              <th>TK Trích</th>
+              <th>TK Ghi</th>
+              <th>Người hưởng / Đối tác</th>
+              <th>Danh mục</th>
+              <th>Nội dung</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in transactions" :key="t.id">
+              <td class="code-col"><code>{{ t.transactionCode || '—' }}</code></td>
+              <td class="time-col">{{ formatDate(t.transactionDate) }}</td>
+              <td><strong>{{ t.bankName }}</strong></td>
+              <td>
+                <span class="type-tag" :class="t.transactionType === 0 ? 'credit' : 'debit'">
+                  {{ t.transactionType === 0 ? '+ Nhận' : '- Chi' }}
+                </span>
+              </td>
+              <td class="amount" :class="t.transactionType === 0 ? 'credit' : 'debit'">
+                {{ formatCurrency(t.amount) }}
+              </td>
+              <td class="fee-col">{{ t.feeAmount ? formatCurrency(t.feeAmount) : '0 ₫' }}</td>
+              <td class="account-col">{{ t.sourceAccount || '—' }}</td>
+              <td class="account-col">{{ t.targetAccount || '—' }}</td>
+              <td class="beneficiary-col"><strong>{{ t.beneficiaryName || '—' }}</strong></td>
+              <td><span class="category-chip">{{ t.category }}</span></td>
+              <td class="desc">{{ t.description }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <InfiniteScrollObserver :loading="loading" :has-more="hasMore" @load-more="loadMore" />
     </div>
   </div>
@@ -232,16 +244,23 @@ onMounted(() => fetchTransactions(1));
   border-radius: 1rem;
   overflow: hidden;
 
+  .table-responsive {
+    overflow-x: auto;
+    width: 100%;
+  }
+
   table {
     width: 100%;
+    min-width: 1100px;
     border-collapse: collapse;
     text-align: left;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
   }
 
   th, td {
-    padding: 1rem 1.25rem;
+    padding: 0.85rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
   }
 
   th {
@@ -249,6 +268,30 @@ onMounted(() => fetchTransactions(1));
     color: #94a3b8;
     font-weight: 700;
   }
+}
+
+.code-col code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  color: #60a5fa;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.fee-col {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.account-col {
+  color: #cbd5e1;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.beneficiary-col {
+  color: #f8fafc;
 }
 
 .type-tag {
@@ -275,5 +318,11 @@ onMounted(() => fetchTransactions(1));
   font-size: 0.75rem;
 }
 
-.desc { color: #94a3b8; max-width: 300px; }
+.desc {
+  color: #94a3b8;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

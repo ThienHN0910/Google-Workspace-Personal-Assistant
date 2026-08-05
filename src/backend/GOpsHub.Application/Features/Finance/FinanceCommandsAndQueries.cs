@@ -32,17 +32,20 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
     private readonly IGmailService _gmailService;
     private readonly IAIService _aiService;
     private readonly ISheetsService _sheetsService;
+    private readonly IDriveService _driveService;
 
     public SyncBankTransactionsCommandHandler(
         IRepository<Transaction> transactionRepo,
         IGmailService gmailService,
         IAIService aiService,
-        ISheetsService sheetsService)
+        ISheetsService sheetsService,
+        IDriveService driveService)
     {
         _transactionRepo = transactionRepo;
         _gmailService = gmailService;
         _aiService = aiService;
         _sheetsService = sheetsService;
+        _driveService = driveService;
     }
 
     public async Task<int> HandleAsync(SyncBankTransactionsCommand command, CancellationToken ct = default)
@@ -76,6 +79,11 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
                 BankName = command.BankName,
                 TransactionType = transactionType,
                 Amount = aiResult.Amount,
+                FeeAmount = aiResult.FeeAmount,
+                TransactionCode = aiResult.TransactionCode,
+                SourceAccount = aiResult.SourceAccount,
+                TargetAccount = aiResult.TargetAccount,
+                BeneficiaryName = aiResult.BeneficiaryName,
                 Currency = "VND",
                 Description = aiResult.Description,
                 Category = aiResult.Category,
@@ -85,27 +93,60 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
 
             var saved = await _transactionRepo.CreateAsync(transaction, ct);
 
-            if (!string.IsNullOrEmpty(command.SpreadsheetId))
-            {
-                var sheetName = $"Transactions_{saved.TransactionDate:yyyy_MM}";
-                var rowValues = new List<object>
-                {
-                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                    saved.BankName,
-                    saved.TransactionType.ToString(),
-                    saved.Amount,
-                    saved.Category,
-                    saved.Description,
-                    saved.BalanceAfter ?? 0
-                };
-                await _sheetsService.AppendRowAsync(command.SpreadsheetId, sheetName, rowValues, ct);
-            }
+            await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
 
             await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
             processed++;
         }
 
         return processed;
+    }
+
+    private async Task SyncToMonthlyGoogleSheetAsync(Transaction saved, string? customSpreadsheetId, CancellationToken ct)
+    {
+        try
+        {
+            string spreadsheetId = customSpreadsheetId ?? string.Empty;
+
+            if (string.IsNullOrEmpty(spreadsheetId))
+            {
+                var fileName = $"BaoCaoTaiChinh_{saved.TransactionDate:yyyy_MM}";
+                var existingId = await _driveService.FindFileByNameAsync(fileName, "application/vnd.google-apps.spreadsheet", ct);
+                if (!string.IsNullOrEmpty(existingId))
+                {
+                    spreadsheetId = existingId;
+                }
+                else
+                {
+                    spreadsheetId = await _sheetsService.CreateSpreadsheetAsync(fileName, ct);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(spreadsheetId))
+            {
+                var rowValues = new List<object>
+                {
+                    saved.TransactionCode ?? "",
+                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                    saved.BankName,
+                    saved.TransactionType == TransactionType.Credit ? "+ Nhận" : "- Chi",
+                    saved.Amount,
+                    saved.FeeAmount,
+                    saved.SourceAccount ?? "",
+                    saved.TargetAccount ?? "",
+                    saved.BeneficiaryName ?? "",
+                    saved.Category,
+                    saved.Description,
+                    saved.BalanceAfter ?? 0
+                };
+
+                await _sheetsService.AppendRowAsync(spreadsheetId, "Sheet1", rowValues, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to sync transaction to Google Sheets: {ex.Message}");
+        }
     }
 }
 
@@ -115,17 +156,20 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
     private readonly IGmailService _gmailService;
     private readonly IAIService _aiService;
     private readonly ISheetsService _sheetsService;
+    private readonly IDriveService _driveService;
 
     public ParseTransactionEmailCommandHandler(
         IRepository<Transaction> transactionRepo,
         IGmailService gmailService,
         IAIService aiService,
-        ISheetsService sheetsService)
+        ISheetsService sheetsService,
+        IDriveService driveService)
     {
         _transactionRepo = transactionRepo;
         _gmailService = gmailService;
         _aiService = aiService;
         _sheetsService = sheetsService;
+        _driveService = driveService;
     }
 
     public async Task<Transaction?> HandleAsync(ParseTransactionEmailCommand command, CancellationToken ct = default)
@@ -151,6 +195,11 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
             BankName = command.BankName,
             TransactionType = transactionType,
             Amount = aiResult.Amount,
+            FeeAmount = aiResult.FeeAmount,
+            TransactionCode = aiResult.TransactionCode,
+            SourceAccount = aiResult.SourceAccount,
+            TargetAccount = aiResult.TargetAccount,
+            BeneficiaryName = aiResult.BeneficiaryName,
             Currency = "VND",
             Description = aiResult.Description,
             Category = aiResult.Category,
@@ -160,28 +209,59 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
 
         var saved = await _transactionRepo.CreateAsync(transaction, ct);
 
-        // Sync to Google Sheets if spreadsheet ID provided
-        if (!string.IsNullOrEmpty(command.SpreadsheetId))
-        {
-            var sheetName = $"Transactions_{saved.TransactionDate:yyyy_MM}";
-            var rowValues = new List<object>
-            {
-                saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                saved.BankName,
-                saved.TransactionType.ToString(),
-                saved.Amount,
-                saved.Category,
-                saved.Description,
-                saved.BalanceAfter ?? 0
-            };
-
-            await _sheetsService.AppendRowAsync(command.SpreadsheetId, sheetName, rowValues, ct);
-        }
+        await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
 
         // Mark email as read so it won't be processed again
         await _gmailService.MarkAsReadAsync(email.Id, ct);
 
         return saved;
+    }
+
+    private async Task SyncToMonthlyGoogleSheetAsync(Transaction saved, string? customSpreadsheetId, CancellationToken ct)
+    {
+        try
+        {
+            string spreadsheetId = customSpreadsheetId ?? string.Empty;
+
+            if (string.IsNullOrEmpty(spreadsheetId))
+            {
+                var fileName = $"BaoCaoTaiChinh_{saved.TransactionDate:yyyy_MM}";
+                var existingId = await _driveService.FindFileByNameAsync(fileName, "application/vnd.google-apps.spreadsheet", ct);
+                if (!string.IsNullOrEmpty(existingId))
+                {
+                    spreadsheetId = existingId;
+                }
+                else
+                {
+                    spreadsheetId = await _sheetsService.CreateSpreadsheetAsync(fileName, ct);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(spreadsheetId))
+            {
+                var rowValues = new List<object>
+                {
+                    saved.TransactionCode ?? "",
+                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                    saved.BankName,
+                    saved.TransactionType == TransactionType.Credit ? "+ Nhận" : "- Chi",
+                    saved.Amount,
+                    saved.FeeAmount,
+                    saved.SourceAccount ?? "",
+                    saved.TargetAccount ?? "",
+                    saved.BeneficiaryName ?? "",
+                    saved.Category,
+                    saved.Description,
+                    saved.BalanceAfter ?? 0
+                };
+
+                await _sheetsService.AppendRowAsync(spreadsheetId, "Sheet1", rowValues, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to sync transaction to Google Sheets: {ex.Message}");
+        }
     }
 }
 

@@ -93,4 +93,43 @@ public class SheetsApiService : ISheetsService
         var response = await service.Spreadsheets.BatchUpdate(batchUpdate, spreadsheetId).ExecuteAsync(ct);
         return response.Replies.FirstOrDefault()?.AddSheet?.Properties?.SheetId?.ToString() ?? string.Empty;
     }
+
+    public async Task<string> CreateSpreadsheetAsync(string title, CancellationToken ct = default)
+    {
+        var service = await GetSheetsClientAsync(ct);
+        if (service == null) return string.Empty;
+
+        var spreadsheet = new Spreadsheet
+        {
+            Properties = new SpreadsheetProperties
+            {
+                Title = title
+            }
+        };
+
+        var created = await service.Spreadsheets.Create(spreadsheet).ExecuteAsync(ct);
+
+        var headers = new List<object>
+        {
+            "Mã GD",
+            "Thời gian",
+            "Ngân hàng",
+            "Loại",
+            "Số tiền",
+            "Số tiền phí",
+            "Tài khoản trích",
+            "Tài khoản ghi",
+            "Tên người hưởng",
+            "Danh mục",
+            "Nội dung",
+            "Số dư sau GD"
+        };
+
+        var valueRange = new ValueRange { Values = new List<IList<object>> { headers } };
+        var appendReq = service.Spreadsheets.Values.Append(valueRange, created.SpreadsheetId, "A1");
+        appendReq.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+        await appendReq.ExecuteAsync(ct);
+
+        return created.SpreadsheetId;
+    }
 }
