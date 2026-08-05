@@ -84,7 +84,7 @@ public class CalendarApiService : ICalendarService
         });
     }
 
-    public async Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, CancellationToken ct = default)
+    public async Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return string.Empty;
@@ -97,7 +97,8 @@ public class CalendarApiService : ICalendarService
             Location = location,
             Description = description,
             Start = new EventDateTime { DateTimeDateTimeOffset = start },
-            End = new EventDateTime { DateTimeDateTimeOffset = eventEndTime }
+            End = new EventDateTime { DateTimeDateTimeOffset = eventEndTime },
+            Visibility = isPublic ? "public" : "private"
         };
 
         var created = await service.Events.Insert(calendarEvent, "primary").ExecuteAsync(ct);
@@ -114,12 +115,17 @@ public class CalendarApiService : ICalendarService
 
     public async Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, CancellationToken ct = default)
     {
+        return await GetEventsAsync(DateTime.UtcNow, DateTime.UtcNow.AddDays(days), ct);
+    }
+
+    public async Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, CancellationToken ct = default)
+    {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return Array.Empty<CalendarEvent>();
 
         var request = service.Events.List("primary");
-        request.TimeMinDateTimeOffset = DateTime.UtcNow;
-        request.TimeMaxDateTimeOffset = DateTime.UtcNow.AddDays(days);
+        request.TimeMinDateTimeOffset = timeMin ?? DateTime.UtcNow.AddDays(-30);
+        request.TimeMaxDateTimeOffset = timeMax ?? DateTime.UtcNow.AddDays(30);
         request.SingleEvents = true;
         request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
 
@@ -130,11 +136,11 @@ public class CalendarApiService : ICalendarService
         {
             Id = e.Id,
             Title = e.Summary,
-            Start = e.Start.DateTimeDateTimeOffset?.UtcDateTime ?? DateTime.UtcNow,
-            End = e.End.DateTimeDateTimeOffset?.UtcDateTime,
+            Start = e.Start.DateTimeDateTimeOffset?.UtcDateTime ?? (e.Start.Date != null ? DateTime.Parse(e.Start.Date) : DateTime.UtcNow),
+            End = e.End?.DateTimeDateTimeOffset?.UtcDateTime ?? (e.End?.Date != null ? DateTime.Parse(e.End.Date) : (DateTime?)null),
             Location = e.Location,
             HtmlLink = e.HtmlLink ?? string.Empty,
-            Visibility = e.Visibility ?? "default"
+            Visibility = string.Equals(e.Visibility, "private", StringComparison.OrdinalIgnoreCase) ? "private" : "public"
         }).ToList();
     }
 

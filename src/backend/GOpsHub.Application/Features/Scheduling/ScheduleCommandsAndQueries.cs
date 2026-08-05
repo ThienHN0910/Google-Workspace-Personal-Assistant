@@ -77,7 +77,7 @@ public class ConfirmScheduleCommandHandler : ICommandHandler<ConfirmScheduleComm
             schedule.EndTime,
             schedule.Location,
             schedule.Description,
-            ct);
+            ct: ct);
 
         schedule.CalendarEventId = eventId;
         schedule.Status = ScheduleStatus.Confirmed;

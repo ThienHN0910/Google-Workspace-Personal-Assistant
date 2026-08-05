@@ -43,7 +43,7 @@ public class TasksController : ControllerBase
         if (request.SyncToCalendar && request.CalendarStartTime.HasValue)
         {
             var endTime = request.CalendarEndTime ?? request.CalendarStartTime.Value.AddMinutes(60);
-            await _calendarService.CreateEventAsync(request.Title, request.CalendarStartTime.Value, endTime, null, request.Notes, ct);
+            await _calendarService.CreateEventAsync(request.Title, request.CalendarStartTime.Value, endTime, null, request.Notes, request.IsPublic, ct);
         }
 
         return Ok(ApiResponse<string>.Ok(taskId, "Đã tạo Task thành công."));
@@ -84,4 +84,5 @@ public class CreateTaskRequest
     public bool SyncToCalendar { get; set; }
     public DateTime? CalendarStartTime { get; set; }
     public DateTime? CalendarEndTime { get; set; }
+    public bool IsPublic { get; set; } = true;
 }

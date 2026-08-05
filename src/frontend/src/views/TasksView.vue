@@ -97,6 +97,12 @@
               <label>Thời gian kết thúc</label>
               <input type="datetime-local" v-model="newTask.calendarEndTime" required />
             </div>
+            <div class="form-group-checkbox mt-1">
+              <label>
+                <input type="checkbox" v-model="newTask.isPublic" />
+                Công khai sự kiện trên Public Calendar
+              </label>
+            </div>
           </div>
 
           <div class="modal-actions">
@@ -127,7 +133,8 @@ const newTask = ref({
   due: '',
   syncToCalendar: false,
   calendarStartTime: '',
-  calendarEndTime: ''
+  calendarEndTime: '',
+  isPublic: true
 });
 
 const activeTasks = computed(() => tasks.value.filter(t => t.status !== 'completed'));
@@ -150,7 +157,8 @@ const fetchTasks = async () => {
 const openCreateModal = () => {
   newTask.value = { 
     title: '', notes: '', due: '', 
-    syncToCalendar: false, calendarStartTime: '', calendarEndTime: '' 
+    syncToCalendar: false, calendarStartTime: '', calendarEndTime: '',
+    isPublic: true
   };
   showModal.value = true;
 };
@@ -182,6 +190,7 @@ const handleCreate = async () => {
                          ? new Date(newTask.value.calendarStartTime).toISOString() : null,
       calendarEndTime: newTask.value.syncToCalendar && newTask.value.calendarEndTime 
                          ? new Date(newTask.value.calendarEndTime).toISOString() : null,
+      isPublic: newTask.value.isPublic
     };
     await api.post('/tasks', payload);
     closeModal();

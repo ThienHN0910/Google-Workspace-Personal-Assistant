@@ -109,6 +109,12 @@
               Đồng thời tạo nhắc nhở trong Google Tasks
             </label>
           </div>
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="newEvent.isPublic" />
+              Công khai sự kiện (Hiển thị chi tiết trên Public Calendar)
+            </label>
+          </div>
           <div class="modal-actions">
             <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
             <button type="submit" class="btn-submit" :disabled="creating">
@@ -146,7 +152,8 @@ const newEvent = ref({
   end: '',
   location: '',
   description: '',
-  createTask: false
+  createTask: false,
+  isPublic: true
 });
 
 const pageExtracted = ref(1);
@@ -207,7 +214,7 @@ const handleConfirmExtracted = async (id: string) => {
 };
 
 const openCreateModal = () => {
-  newEvent.value = { title: '', start: '', end: '', location: '', description: '', createTask: false };
+  newEvent.value = { title: '', start: '', end: '', location: '', description: '', createTask: false, isPublic: true };
   showModal.value = true;
 };
 
@@ -224,7 +231,8 @@ const handleCreateManual = async () => {
       end: newEvent.value.end ? new Date(newEvent.value.end).toISOString() : null,
       location: newEvent.value.location,
       description: newEvent.value.description,
-      createTask: newEvent.value.createTask
+      createTask: newEvent.value.createTask,
+      isPublic: newEvent.value.isPublic
     };
     const res: any = await api.post('/scheduling/manual', payload);
     if (res.success) {

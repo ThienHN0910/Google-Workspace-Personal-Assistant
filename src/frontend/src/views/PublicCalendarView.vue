@@ -221,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '@/services/api.service';
 
 const isBusy = ref(false);
@@ -236,7 +236,28 @@ const dayNamesShort = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const fetchCalendarData = async () => {
   loading.value = true;
   try {
-    const res: any = await api.get('/public/calendar-status');
+    let startDate: string;
+    let endDate: string;
+
+    if (viewMode.value === 'month') {
+      const days = monthGridDays.value;
+      startDate = days[0].toISOString();
+      endDate = new Date(days[days.length - 1].getTime() + 86399000).toISOString();
+    } else if (viewMode.value === 'week') {
+      const days = weekDays.value;
+      startDate = days[0].toISOString();
+      endDate = new Date(days[days.length - 1].getTime() + 86399000).toISOString();
+    } else {
+      const d = new Date(currentDate.value);
+      const start = new Date(d);
+      start.setDate(d.getDate() - 7);
+      const end = new Date(d);
+      end.setDate(d.getDate() + 30);
+      startDate = start.toISOString();
+      endDate = end.toISOString();
+    }
+
+    const res: any = await api.get(`/public/calendar-status?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`);
     if (res.success && res.data) {
       isBusy.value = res.data.isBusyNow;
       events.value = res.data.events || [];
@@ -247,6 +268,10 @@ const fetchCalendarData = async () => {
     loading.value = false;
   }
 };
+
+watch([currentDate, viewMode], () => {
+  fetchCalendarData();
+});
 
 // Date math helpers
 const isSameDay = (d1: Date, d2: Date) => {

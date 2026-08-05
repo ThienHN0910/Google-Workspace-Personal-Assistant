@@ -24,13 +24,17 @@ public class PublicController : ControllerBase
         }));
     }
 
-    /// <summary>
-    /// Public Calendar busy/free slots for public viewers
-    /// </summary>
     [HttpGet("calendar-status")]
-    public async Task<IActionResult> GetPublicCalendarStatus([FromServices] ICalendarService calendarService, CancellationToken ct)
+    public async Task<IActionResult> GetPublicCalendarStatus(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromServices] ICalendarService calendarService,
+        CancellationToken ct)
     {
-        var upcomingEvents = await calendarService.GetUpcomingEventsAsync(7, ct);
+        DateTime minDate = startDate ?? DateTime.UtcNow.AddDays(-30);
+        DateTime maxDate = endDate ?? DateTime.UtcNow.AddDays(30);
+
+        var upcomingEvents = await calendarService.GetEventsAsync(minDate, maxDate, ct);
         var maskedEvents = new List<object>();
 
         foreach (var ev in upcomingEvents)

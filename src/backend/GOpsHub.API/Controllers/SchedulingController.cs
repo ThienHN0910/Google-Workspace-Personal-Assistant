@@ -59,9 +59,15 @@ public class SchedulingController : ControllerBase
     /// Get upcoming events from Google Calendar
     /// </summary>
     [HttpGet("upcoming")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<CalendarEvent>>>> GetUpcomingEvents([FromQuery] int days = 7, CancellationToken ct = default)
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CalendarEvent>>>> GetUpcomingEvents(
+        [FromQuery] int days = 30,
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        CancellationToken ct = default)
     {
-        var events = await _calendarService.GetUpcomingEventsAsync(days, ct);
+        DateTime minDate = startDate ?? DateTime.UtcNow.AddDays(-30);
+        DateTime maxDate = endDate ?? DateTime.UtcNow.AddDays(days);
+        var events = await _calendarService.GetEventsAsync(minDate, maxDate, ct);
         return Ok(ApiResponse<IReadOnlyList<CalendarEvent>>.Ok(events));
     }
 
@@ -71,7 +77,7 @@ public class SchedulingController : ControllerBase
     [HttpPost("manual")]
     public async Task<ActionResult<ApiResponse<string>>> CreateManualEvent([FromBody] CreateEventRequest request, [FromServices] ITasksService tasksService, CancellationToken ct)
     {
-        var eventId = await _calendarService.CreateEventAsync(request.Title, request.Start, request.End, request.Location, request.Description, ct);
+        var eventId = await _calendarService.CreateEventAsync(request.Title, request.Start, request.End, request.Location, request.Description, request.IsPublic, ct);
         if (string.IsNullOrEmpty(eventId))
             return BadRequest(ApiResponse<string>.Fail("Không thể tạo sự kiện. Hãy kiểm tra kết nối Google."));
 
@@ -104,4 +110,5 @@ public class CreateEventRequest
     public string? Location { get; set; }
     public string? Description { get; set; }
     public bool CreateTask { get; set; }
+    public bool IsPublic { get; set; } = true;
 }

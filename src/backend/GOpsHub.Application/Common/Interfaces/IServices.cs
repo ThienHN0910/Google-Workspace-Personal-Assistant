@@ -54,9 +54,10 @@ public class AIBatchTransactionResult : AITransactionResult
 /// </summary>
 public interface ICalendarService
 {
-    Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, CancellationToken ct = default);
+    Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default);
     Task DeleteEventAsync(string eventId, CancellationToken ct = default);
     Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, CancellationToken ct = default);
+    Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, CancellationToken ct = default);
     Task<IReadOnlyList<CalendarBusySlot>> GetBusySlotsAsync(DateTime start, DateTime end, CancellationToken ct = default);
 }
 
