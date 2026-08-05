@@ -134,6 +134,14 @@ const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 };
 
+const totalIncome = computed(() => {
+  return transactions.value.filter(t => t.transactionType === 0).reduce((sum, t) => sum + t.amount, 0);
+});
+
+const totalExpense = computed(() => {
+  return transactions.value.filter(t => t.transactionType === 1).reduce((sum, t) => sum + t.amount, 0);
+});
+
 onMounted(fetchTransactions);
 </script>
 
@@ -168,6 +176,36 @@ onMounted(fetchTransactions);
   font-weight: 500;
   text-align: center;
   border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  
+  .card {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+
+    i {
+      font-size: 2.5rem;
+      padding: 1rem;
+      border-radius: 0.75rem;
+    }
+    
+    span { color: #94a3b8; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; }
+    h3 { margin: 0.25rem 0 0 0; font-size: 1.5rem; color: #f8fafc; }
+
+    &.income i { background: rgba(16, 185, 129, 0.1); color: #34d399; }
+    &.expense i { background: rgba(239, 68, 68, 0.1); color: #fca5a5; }
+    &.balance i { background: rgba(99, 102, 241, 0.1); color: #818cf8; }
+  }
 }
 
 .transaction-table {

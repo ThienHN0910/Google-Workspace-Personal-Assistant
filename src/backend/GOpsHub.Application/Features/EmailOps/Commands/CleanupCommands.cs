@@ -145,20 +145,23 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                 }
             }
 
-            var log = new CleanupLog
+            if (trashed > 0 || archived > 0)
             {
-                RuleId = rule.Id,
-                RuleName = rule.RuleName,
-                ExecutedAt = DateTime.UtcNow,
-                TotalProcessed = emails.Count,
-                TotalTrashed = trashed,
-                TotalArchived = archived,
-                TotalSkipped = skipped,
-                DurationMs = sw.ElapsedMilliseconds,
-                Details = $"Executed rule '{rule.RuleName}' on {emails.Count} emails."
-            };
+                var log = new CleanupLog
+                {
+                    RuleId = rule.Id,
+                    RuleName = rule.RuleName,
+                    ExecutedAt = DateTime.UtcNow,
+                    TotalProcessed = emails.Count,
+                    TotalTrashed = trashed,
+                    TotalArchived = archived,
+                    TotalSkipped = skipped,
+                    DurationMs = sw.ElapsedMilliseconds,
+                    Details = $"Executed rule '{rule.RuleName}' on {emails.Count} emails."
+                };
 
-            await _logRepo.CreateAsync(log, ct);
+                await _logRepo.CreateAsync(log, ct);
+            }
 
             result.RulesExecuted++;
             result.TotalProcessed += emails.Count;

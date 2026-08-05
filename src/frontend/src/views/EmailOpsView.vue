@@ -106,10 +106,13 @@
             <span class="log-time">{{ formatDate(log.executedAt) }}</span>
           </div>
           <div class="log-body">
-            <span class="badge" :class="log.actionTaken === 0 ? 'badge-danger' : 'badge-warning'">
-              {{ log.actionTaken === 0 ? 'Xóa (Trash)' : 'Lưu trữ (Archive)' }}
-            </span>
-            <span>Đã xử lý <strong>{{ log.emailsAffected }}</strong> email.</span>
+            <div class="log-stat">Quét: <strong>{{ log.totalProcessed }}</strong></div>
+            <div class="log-stat text-red">Đã Xóa: <strong>{{ log.totalTrashed }}</strong></div>
+            <div class="log-stat text-orange">Lưu trữ: <strong>{{ log.totalArchived }}</strong></div>
+            <div class="log-stat text-gray">Bỏ qua: <strong>{{ log.totalSkipped }}</strong></div>
+          </div>
+          <div class="log-footer">
+            <span>Thời gian xử lý: {{ log.durationMs }}ms</span>
           </div>
         </div>
       </div>
@@ -528,18 +531,28 @@ button {
   .log-body {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 1.5rem;
     color: #cbd5e1;
     font-size: 0.95rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 
-    .badge {
-      padding: 0.25rem 0.75rem;
-      border-radius: 1rem;
-      font-size: 0.8rem;
-      font-weight: 800;
-      &.badge-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
-      &.badge-warning { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    .log-stat {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      strong { font-size: 1.1rem; }
     }
+    .text-red { color: #fca5a5; }
+    .text-orange { color: #fcd34d; }
+    .text-gray { color: #94a3b8; }
+  }
+
+  .log-footer {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: #64748b;
   }
 }
 </style>

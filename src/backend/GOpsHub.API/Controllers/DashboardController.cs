@@ -15,17 +15,20 @@ public class DashboardController : ControllerBase
     private readonly IRepository<AIDraft> _draftRepo;
     private readonly IRepository<Transaction> _transactionRepo;
     private readonly IRepository<SecurityAlert> _alertRepo;
+    private readonly IRepository<ExtractedSchedule> _scheduleRepo;
 
     public DashboardController(
         IRepository<CleanupLog> cleanupLogRepo,
         IRepository<AIDraft> draftRepo,
         IRepository<Transaction> transactionRepo,
-        IRepository<SecurityAlert> alertRepo)
+        IRepository<SecurityAlert> alertRepo,
+        IRepository<ExtractedSchedule> scheduleRepo)
     {
         _cleanupLogRepo = cleanupLogRepo;
         _draftRepo = draftRepo;
         _transactionRepo = transactionRepo;
         _alertRepo = alertRepo;
+        _scheduleRepo = scheduleRepo;
     }
 
     /// <summary>
@@ -41,6 +44,8 @@ public class DashboardController : ControllerBase
 
         var pendingDrafts = await _draftRepo.CountAsync(x => x.Status == Domain.Enums.DraftStatus.Pending, ct);
 
+        var pendingSchedules = await _scheduleRepo.CountAsync(x => x.Status == Domain.Enums.ExtractedScheduleStatus.Pending, ct);
+
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var monthTransactions = await _transactionRepo.FindAsync(x => x.TransactionDate >= monthStart, ct);
         var totalIncome = monthTransactions.Where(x => x.TransactionType == Domain.Enums.TransactionType.Credit).Sum(x => x.Amount);
@@ -52,6 +57,7 @@ public class DashboardController : ControllerBase
         {
             CleanedToday = cleanedToday,
             PendingDrafts = pendingDrafts,
+            PendingSchedules = pendingSchedules,
             MonthlyIncome = totalIncome,
             MonthlyExpense = totalExpense,
             MonthlyNetBalance = totalIncome - totalExpense,
