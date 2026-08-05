@@ -162,8 +162,7 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
                     saved.TargetAccount ?? "",
                     saved.BeneficiaryName ?? "",
                     saved.Category,
-                    saved.Description,
-                    saved.BalanceAfter ?? 0
+                    saved.Description
                 };
 
                 await _sheetsService.AppendRowAsync(spreadsheetId, "A1", rowValues, ct);
