@@ -21,7 +21,7 @@
         </label>
       </div>
       
-      <div v-if="loading && emails.length === 0" class="loading">Đang tải email...</div>
+      <LoadingSpinner v-if="loading && emails.length === 0" text="Đang tải email..." />
       
       <!-- Email Detail View -->
       <div v-else-if="selectedEmail" class="email-detail">
@@ -118,10 +118,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
-import CleanupRuleList from '@/components/email/CleanupRuleList.vue';
-import Editor from 'primevue/editor';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+
+// Lazy loading heavy components
+const CleanupRuleList = defineAsyncComponent(() => import('@/components/email/CleanupRuleList.vue'));
+const Editor = defineAsyncComponent(() => import('primevue/editor'));
 
 const activeTab = ref('inbox');
 const emails = ref<any[]>([]);

@@ -21,7 +21,7 @@
 
     <!-- Tab 1: Upcoming Events from Real Google Calendar -->
     <div v-if="activeTab === 'upcoming'" class="tab-content">
-      <div v-if="loading.upcoming" class="loading">Đang tải sự kiện từ Google Calendar...</div>
+      <LoadingSpinner v-if="loading.upcoming" text="Đang tải sự kiện từ Google Calendar..." />
       <div v-else-if="upcomingEvents.length === 0" class="empty-state">
         <i class="pi pi-calendar"></i>
         <p>Không có sự kiện nào sắp tới trong 7 ngày.</p>
@@ -48,7 +48,7 @@
 
     <!-- Tab 2: Extracted Schedules -->
     <div v-if="activeTab === 'extracted'" class="tab-content">
-      <div v-if="loading.extracted" class="loading">Đang tải lịch hẹn trích xuất...</div>
+      <LoadingSpinner v-if="loading.extracted" text="Đang tải lịch hẹn trích xuất..." />
       <div v-else-if="extractedSchedules.length === 0" class="empty-state">
         <i class="pi pi-calendar-plus"></i>
         <p>Không có lịch hẹn AI nào cần xác nhận!</p>
@@ -117,6 +117,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import api from '@/services/api.service';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const activeTab = ref('upcoming');
 const extractedSchedules = ref<any[]>([]);

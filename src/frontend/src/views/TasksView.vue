@@ -10,8 +10,8 @@
       </button>
     </header>
 
-    <div v-if="loading" class="loading">Đang tải Tasks...</div>
-    
+    <LoadingSpinner v-if="loading" text="Đang tải danh sách công việc..." />
+
     <div v-else-if="tasks.length === 0" class="empty-state">
       <i class="pi pi-check-circle"></i>
       <p>Tuyệt vời! Bạn không có task nào đang chờ.</p>
@@ -114,6 +114,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const tasks = ref<any[]>([]);
 const loading = ref(true);

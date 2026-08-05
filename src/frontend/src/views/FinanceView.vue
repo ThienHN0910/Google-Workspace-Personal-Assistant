@@ -15,7 +15,31 @@
       Hệ thống đang nén tất cả email chưa đọc và gửi cho AI xử lý trong 1 lần. Vui lòng đợi vài giây...
     </div>
 
-    <div v-if="loading" class="loading">Đang tải giao dịch...</div>
+    <div class="summary-cards">
+      <div class="card income">
+        <i class="pi pi-arrow-up-right"></i>
+        <div>
+          <span>Tổng Thu</span>
+          <h3>{{ formatCurrency(totalIncome) }}</h3>
+        </div>
+      </div>
+      <div class="card expense">
+        <i class="pi pi-arrow-down-right"></i>
+        <div>
+          <span>Tổng Chi</span>
+          <h3>{{ formatCurrency(totalExpense) }}</h3>
+        </div>
+      </div>
+      <div class="card balance">
+        <i class="pi pi-wallet"></i>
+        <div>
+          <span>Số dư</span>
+          <h3>{{ formatCurrency(totalIncome - totalExpense) }}</h3>
+        </div>
+      </div>
+    </div>
+
+    <LoadingSpinner v-if="loading" text="Đang tải giao dịch..." />
 
     <div v-else class="transaction-table">
       <table>
@@ -51,8 +75,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import api from '@/services/api.service';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const transactions = ref<any[]>([]);
 const loading = ref(true);

@@ -12,7 +12,7 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading">Đang tải quy tắc...</div>
+    <LoadingSpinner v-if="loading" text="Đang tải quy tắc..." />
 
     <div v-else class="rules-grid">
       <div v-for="rule in rules" :key="rule.id" class="rule-card" :class="{ 'inactive': !rule.isActive }">
@@ -49,6 +49,11 @@
       <div class="modal-content">
         <h3>{{ isEditing ? 'Sửa quy tắc' : 'Tạo quy tắc mới' }}</h3>
         <form @submit.prevent="handleSubmit">
+
+          <div class="form-group">
+            <label>Tên quy tắc</label>
+            <input v-model="formData.ruleName" required placeholder="Ví dụ: Xóa email quảng cáo" autofocus />
+          </div>
 
           <div class="form-group">
             <label>Hành động</label>
@@ -94,6 +99,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import api from '@/services/api.service';
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const rules = ref<any[]>([]);
 const loading = ref(true);
