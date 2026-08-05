@@ -5,11 +5,64 @@
         <h1>💳 Telemetry Tài chính (UC04)</h1>
         <p>Báo cáo biến động số dư & Tự động đồng bộ Google Sheets</p>
       </div>
-      <button class="btn-sync" @click="syncVPBank" :disabled="syncState.isSyncing">
-        <span v-if="!syncState.isSyncing">🔄 Đồng bộ VPBank</span>
-        <span v-else>⏳ Đang nhờ AI phân tích...</span>
-      </button>
+      <div class="header-actions">
+        <button class="btn-config" @click="showConfigPanel = !showConfigPanel">
+          ⚙️ Cấu hình Drive & Sheets
+        </button>
+        <button class="btn-sync" @click="syncVPBank" :disabled="syncState.isSyncing">
+          <span v-if="!syncState.isSyncing">🔄 Đồng bộ VPBank</span>
+          <span v-else>⏳ Đang nhờ AI phân tích...</span>
+        </button>
+      </div>
     </header>
+
+    <!-- Config Panel -->
+    <div v-if="showConfigPanel" class="config-panel card">
+      <h3>⚙️ Cấu hình Xuất File Google Drive & Sheets</h3>
+      <p class="config-desc">
+        Tùy chỉnh thư mục lưu file trên Google Drive, định dạng tên file tự động theo tháng, hoặc chỉ định mã Spreadsheet cố định.
+      </p>
+
+      <div class="config-grid">
+        <div class="form-group">
+          <label>📁 Thư mục Google Drive (Folder ID):</label>
+          <input
+            v-model="config.folderId"
+            type="text"
+            placeholder="Ví dụ: 1a2b3c4d5e6f7g8h9i... (Mã folder trên URL Drive)"
+          />
+          <span class="field-hint">Để trống nếu muốn lưu trực tiếp tại thư mục gốc Drive của bạn.</span>
+        </div>
+
+        <div class="form-group">
+          <label>📝 Mẫu tên file (FileName Pattern):</label>
+          <input
+            v-model="config.fileNamePattern"
+            type="text"
+            placeholder="BaoCaoTaiChinh_{yyyy_MM}"
+          />
+          <span class="field-hint">Hỗ trợ các thẻ: <code>{yyyy_MM}</code>, <code>{yyyy-MM}</code>, <code>{yyyy}</code>, <code>{MM}</code>. Mỗi tháng sẽ tạo 1 file riêng.</span>
+        </div>
+
+        <div class="form-group">
+          <label>📊 Mã File Google Sheet cố định (Tùy chọn):</label>
+          <input
+            v-model="config.spreadsheetId"
+            type="text"
+            placeholder="Ví dụ: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+          />
+          <span class="field-hint">Chỉ điền nếu bạn muốn dồn TẤT CẢ giao dịch vào 1 file cố định duy nhất thay vì tạo mới theo tháng.</span>
+        </div>
+      </div>
+
+      <div class="config-actions">
+        <button class="btn-save-config" @click="saveConfig" :disabled="savingConfig">
+          <span v-if="!savingConfig">💾 Lưu Cấu Hình</span>
+          <span v-else>⏳ Đang lưu...</span>
+        </button>
+        <span v-if="configStatusMsg" class="config-msg">{{ configStatusMsg }}</span>
+      </div>
+    </div>
 
     <div v-if="syncState.isSyncing" class="sync-banner">
       Hệ thống đang nén tất cả email chưa đọc và gửi cho AI xử lý trong 1 lần. Vui lòng đợi vài giây...
@@ -94,6 +147,53 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
+const showConfigPanel = ref(false);
+const savingConfig = ref(false);
+const configStatusMsg = ref('');
+const config = ref({
+  folderId: '',
+  fileNamePattern: 'BaoCaoTaiChinh_{yyyy_MM}',
+  spreadsheetId: ''
+});
+
+const fetchConfig = async () => {
+  try {
+    const res: any = await api.get('/finance/config');
+    if (res.success && res.data) {
+      config.value = {
+        folderId: res.data.folderId || '',
+        fileNamePattern: res.data.fileNamePattern || 'BaoCaoTaiChinh_{yyyy_MM}',
+        spreadsheetId: res.data.spreadsheetId || ''
+      };
+    }
+  } catch (e) {
+    console.error('Failed to fetch finance config:', e);
+  }
+};
+
+const saveConfig = async () => {
+  savingConfig.value = true;
+  configStatusMsg.value = '';
+  try {
+    const res: any = await api.post('/finance/config', {
+      FolderId: config.value.folderId,
+      FileNamePattern: config.value.fileNamePattern,
+      SpreadsheetId: config.value.spreadsheetId
+    });
+    if (res.success) {
+      configStatusMsg.value = '✅ Đã lưu cấu hình thành công!';
+      setTimeout(() => { configStatusMsg.value = ''; }, 3000);
+    } else {
+      configStatusMsg.value = '❌ ' + (res.message || 'Lỗi khi lưu cấu hình');
+    }
+  } catch (e) {
+    console.error('Failed to save finance config:', e);
+    configStatusMsg.value = '❌ Lỗi kết nối khi lưu cấu hình';
+  } finally {
+    savingConfig.value = false;
+  }
+};
+
 const transactions = ref<any[]>([]);
 const loading = ref(true);
 
@@ -110,7 +210,7 @@ const syncVPBank = async () => {
     const res: any = await api.post('/finance/transactions/sync-batch', {
       Domain: 'vpb.com.vn',
       BankName: 'VPBank',
-      SpreadsheetId: ''
+      SpreadsheetId: config.value.spreadsheetId || ''
     });
     
     if (res.success) {
@@ -172,7 +272,10 @@ const totalExpense = computed(() => {
   return transactions.value.filter(t => t.transactionType === 1).reduce((sum, t) => sum + t.amount, 0);
 });
 
-onMounted(() => fetchTransactions(1));
+onMounted(() => {
+  fetchTransactions(1);
+  fetchConfig();
+});
 </script>
 
 <style scoped lang="scss">
@@ -181,6 +284,27 @@ onMounted(() => fetchTransactions(1));
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.btn-config {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
 }
 
 .btn-sync {
@@ -195,6 +319,98 @@ onMounted(() => fetchTransactions(1));
 
   &:hover:not(:disabled) { background: #4f46e5; }
   &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+.config-panel {
+  background: #1e293b;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: #f8fafc;
+    font-size: 1.2rem;
+  }
+
+  .config-desc {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    input {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 0.5rem;
+      padding: 0.65rem 0.85rem;
+      color: white;
+      font-size: 0.9rem;
+
+      &:focus {
+        outline: none;
+        border-color: #6366f1;
+      }
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: #64748b;
+      line-height: 1.3;
+
+      code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.2rem;
+        color: #818cf8;
+      }
+    }
+  }
+
+  .config-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    .btn-save-config {
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 0.65rem 1.25rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover {
+        background: #059669;
+      }
+    }
+
+    .config-msg {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+  }
 }
 
 .sync-banner {

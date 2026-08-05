@@ -60,7 +60,11 @@ public class SheetsApiService : ISheetsService
             Values = new List<IList<object>> { values }
         };
 
-        var request = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, $"{sheetName}!A1");
+        string targetRange = (string.IsNullOrWhiteSpace(sheetName) || sheetName.Equals("Sheet1", StringComparison.OrdinalIgnoreCase))
+            ? "A1"
+            : $"{sheetName}!A1";
+
+        var request = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, targetRange);
         request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
 
         await request.ExecuteAsync(ct);

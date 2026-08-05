@@ -90,7 +90,7 @@ public interface IDriveService
 {
     Task<IReadOnlyList<DriveFileInfo>> ListFilesInFolderAsync(string folderId, CancellationToken ct = default);
     Task<DriveFileInfo?> GetFileInfoAsync(string fileId, CancellationToken ct = default);
-    Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", CancellationToken ct = default);
+    Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", string? folderId = null, CancellationToken ct = default);
     Task<string> UploadFileAsync(string folderId, string fileName, Stream content, string mimeType, CancellationToken ct = default);
     Task MoveFileAsync(string fileId, string targetFolderId, CancellationToken ct = default);
     Task<string> CreateFolderAsync(string parentFolderId, string folderName, CancellationToken ct = default);

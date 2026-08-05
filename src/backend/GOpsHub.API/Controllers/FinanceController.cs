@@ -62,4 +62,24 @@ public class FinanceController : ControllerBase
         var processedCount = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<int>.Ok(processedCount, $"Đã đồng bộ thành công {processedCount} giao dịch."));
     }
+
+    /// <summary>
+    /// Get Google Drive & Sheets export configuration
+    /// </summary>
+    [HttpGet("config")]
+    public async Task<ActionResult<ApiResponse<FinanceConfigDto>>> GetConfig()
+    {
+        var config = await _dispatcher.QueryAsync(new GetFinanceConfigQuery());
+        return Ok(ApiResponse<FinanceConfigDto>.Ok(config));
+    }
+
+    /// <summary>
+    /// Save Google Drive & Sheets export configuration
+    /// </summary>
+    [HttpPost("config")]
+    public async Task<ActionResult<ApiResponse<bool>>> SaveConfig([FromBody] UpdateFinanceConfigCommand command)
+    {
+        var success = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<bool>.Ok(success, "Đã lưu cấu hình xuất file Google Drive & Sheets thành công."));
+    }
 }

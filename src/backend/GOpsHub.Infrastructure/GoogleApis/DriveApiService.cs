@@ -91,13 +91,18 @@ public class DriveApiService : IDriveService
         };
     }
 
-    public async Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", CancellationToken ct = default)
+    public async Task<string?> FindFileByNameAsync(string fileName, string mimeType = "application/vnd.google-apps.spreadsheet", string? folderId = null, CancellationToken ct = default)
     {
         var service = await GetDriveClientAsync(ct);
         if (service == null) return null;
 
         var request = service.Files.List();
-        request.Q = $"name = '{fileName}' and mimeType = '{mimeType}' and trashed = false";
+        var query = $"name = '{fileName}' and mimeType = '{mimeType}' and trashed = false";
+        if (!string.IsNullOrEmpty(folderId))
+        {
+            query += $" and '{folderId}' in parents";
+        }
+        request.Q = query;
         request.Fields = "files(id, name)";
 
         var result = await request.ExecuteAsync(ct);
