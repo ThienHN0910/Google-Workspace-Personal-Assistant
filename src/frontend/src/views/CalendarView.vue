@@ -207,7 +207,7 @@ const handleConfirmExtracted = async (id: string) => {
 };
 
 const openCreateModal = () => {
-  newEvent.value = { title: '', start: '', end: '', location: '', description: '' };
+  newEvent.value = { title: '', start: '', end: '', location: '', description: '', createTask: false };
   showModal.value = true;
 };
 
@@ -223,7 +223,8 @@ const handleCreateManual = async () => {
       start: new Date(newEvent.value.start).toISOString(),
       end: newEvent.value.end ? new Date(newEvent.value.end).toISOString() : null,
       location: newEvent.value.location,
-      description: newEvent.value.description
+      description: newEvent.value.description,
+      createTask: newEvent.value.createTask
     };
     const res: any = await api.post('/scheduling/manual', payload);
     if (res.success) {
