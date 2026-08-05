@@ -459,6 +459,7 @@ onMounted(() => {
   cursor: pointer;
   &:hover:not(:disabled) { background: #4f46e5; }
   &:disabled { opacity: 0.7; cursor: not-allowed; }
+}
 .form-group-checkbox {
   margin-bottom: 1rem;
   label {
