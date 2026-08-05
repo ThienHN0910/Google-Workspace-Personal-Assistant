@@ -184,13 +184,30 @@
   "bankName": "VCB | TCB | MBBank | VPBank | Momo | ZaloPay",
   "transactionType": "credit | debit",
   "amount": 5000000,
+  "feeAmount": 0,
+  "transactionCode": "FT26080512345",
+  "sourceAccount": "1012345678",
+  "targetAccount": "9087654321",
+  "beneficiaryName": "NGUYEN VAN A",
   "currency": "VND",
   "description": "Luong thang 8/2026",
   "category": "salary | food | transport | bills | shopping | transfer | other",
   "balanceAfter": 12500000,
-  "sheetRowRef": "Transactions_2026_08!A15",
-  "isAutoRead": false,
+  "sheetRowRef": "BaoCaoTaiChinh_2026_08!A15",
+  "isAutoRead": true,
   "createdAt": "ISODate"
+}
+```
+
+### 3.8 app_configurations
+
+```json
+{
+  "_id": "ObjectId",
+  "key": "Finance_FolderId | Finance_FileNamePattern | Finance_SpreadsheetId | DriveGuardInterval",
+  "value": "string",
+  "createdAt": "ISODate",
+  "updatedAt": "ISODate"
 }
 ```
 

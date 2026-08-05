@@ -78,26 +78,27 @@ Lấy activity feed (mọi hoạt động gần đây).
 
 ---
 
-## 4. Scheduling
+## 4. Scheduling & Calendar
 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| `GET` | `/api/v1/schedules?status=pending&page=1` | Danh sách extracted schedules |
-| `GET` | `/api/v1/schedules/{id}` | Chi tiết schedule |
-| `POST` | `/api/v1/schedules/{id}/confirm` | Xác nhận tạo event |
-| `POST` | `/api/v1/schedules/{id}/reject` | Từ chối |
+| `GET` | `/api/v1/public/calendar-status` | (Public Anonymous) Lấy danh sách lịch bận/sự kiện theo khoảng ngày (`startDate`, `endDate`) |
+| `GET` | `/api/v1/scheduling/upcoming` | (Admin) Lấy danh sách lịch sắp tới (`startDate`, `endDate`) |
+| `POST` | `/api/v1/scheduling/event` | (Admin) Tạo mới lịch hẹn (`isPublic` true/false, sync Google Calendar) |
+| `POST` | `/api/v1/tasks/task` | (Admin) Tạo mới công việc (tùy chọn sync Google Calendar + `isPublic`) |
 
 ---
 
-## 5. Finance
+## 5. Finance (UC04)
 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| `GET` | `/api/v1/finance/transactions?month=2026-08&page=1` | Danh sách giao dịch |
-| `GET` | `/api/v1/finance/summary?month=2026-08` | Tổng hợp thu chi tháng |
-| `GET` | `/api/v1/finance/categories?month=2026-08` | Phân bổ theo danh mục |
-| `PUT` | `/api/v1/finance/transactions/{id}/categorize` | Sửa danh mục giao dịch |
-| `GET` | `/api/v1/finance/export?month=2026-08&format=csv` | Export CSV/JSON |
+| `GET` | `/api/v1/finance/transactions` | Lấy danh sách giao dịch phân trang (`page`, `pageSize`) |
+| `GET` | `/api/v1/finance/transactions/pending` | Lấy danh sách email ngân hàng chưa đọc chờ xử lý |
+| `POST` | `/api/v1/finance/transactions/parse` | Parse email giao dịch đơn lẻ qua AI & sync Google Sheets |
+| `POST` | `/api/v1/finance/transactions/sync-batch` | Nén & parse hàng loạt email ngân hàng qua AI & sync Google Sheets |
+| `GET` | `/api/v1/finance/config` | Lấy cấu hình xuất Google Drive & Sheets (Folder ID, FileName Pattern, Spreadsheet ID) |
+| `POST` | `/api/v1/finance/config` | Lưu cấu hình xuất Google Drive & Sheets |
 
 ---
 

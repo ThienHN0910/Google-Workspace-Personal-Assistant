@@ -218,14 +218,15 @@ ExtractedSchedule {
 
 **Sheets Structure**:
 ```
-| Ngày | Giờ | Ngân hàng | Loại GD | Số tiền | Nội dung | Danh mục | Số dư |
+| Mã GD | Thời gian | Ngân hàng | Loại GD | Số tiền | Phí | TK trích | TK ghi | Tên người hưởng | Danh mục | Nội dung |
 ```
 
 **Business Rules**:
-- Parser templates per bank (mỗi ngân hàng có email format riêng)
-- Duplicate detection: EmailId + Amount + Timestamp
-- Auto-categorization bằng keyword matching + AI fallback
-- Monthly auto-create new sheet tab: `Transactions_2026_08`
+- Extraction đầy đủ 11 trường thông tin giao dịch qua Gemini AI (Mã GD, Thời gian, Ngân hàng, Loại GD, Số tiền, Phí, TK trích, TK ghi, Tên người hưởng, Danh mục, Nội dung).
+- Duplicate detection qua EmailId / MessageId.
+- Auto-categorization bằng keyword matching + AI fallback.
+- Tự động tạo file Google Sheet mới theo tháng (`BaoCaoTaiChinh_{yyyy_MM}`) và di chuyển vào Thư mục Google Drive (Folder ID) được cấu hình.
+- Tự động nhận diện chính xác tên Sheet tab đầu tiên (ví dụ: `'Trang tính1'` hay `'Sheet1'`) để chèn hàng dữ liệu mới (`INSERT_ROWS`).
 
 ---
 
