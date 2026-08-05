@@ -1,3 +1,4 @@
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Common.Models;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
@@ -16,19 +17,22 @@ public class DashboardController : ControllerBase
     private readonly IRepository<Transaction> _transactionRepo;
     private readonly IRepository<SecurityAlert> _alertRepo;
     private readonly IRepository<ExtractedSchedule> _scheduleRepo;
+    private readonly IGmailService _gmailService;
 
     public DashboardController(
         IRepository<CleanupLog> cleanupLogRepo,
         IRepository<AIDraft> draftRepo,
         IRepository<Transaction> transactionRepo,
         IRepository<SecurityAlert> alertRepo,
-        IRepository<ExtractedSchedule> scheduleRepo)
+        IRepository<ExtractedSchedule> scheduleRepo,
+        IGmailService gmailService)
     {
         _cleanupLogRepo = cleanupLogRepo;
         _draftRepo = draftRepo;
         _transactionRepo = transactionRepo;
         _alertRepo = alertRepo;
         _scheduleRepo = scheduleRepo;
+        _gmailService = gmailService;
     }
 
     /// <summary>
@@ -42,9 +46,7 @@ public class DashboardController : ControllerBase
         var cleanupLogs = await _cleanupLogRepo.FindAsync(x => x.ExecutedAt >= today, ct);
         var cleanedToday = cleanupLogs.Sum(x => x.TotalTrashed + x.TotalArchived);
 
-        var pendingDrafts = await _draftRepo.CountAsync(x => x.Status == Domain.Enums.DraftStatus.Pending, ct);
-
-        var pendingSchedules = await _scheduleRepo.CountAsync(x => x.Status == Domain.Enums.ExtractedScheduleStatus.Pending, ct);
+        var unreadEmails = await _gmailService.GetUnreadEmailCountAsync(ct);
 
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var monthTransactions = await _transactionRepo.FindAsync(x => x.TransactionDate >= monthStart, ct);
@@ -56,8 +58,7 @@ public class DashboardController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new
         {
             CleanedToday = cleanedToday,
-            PendingDrafts = pendingDrafts,
-            PendingSchedules = pendingSchedules,
+            UnreadEmails = unreadEmails,
             MonthlyIncome = totalIncome,
             MonthlyExpense = totalExpense,
             MonthlyNetBalance = totalIncome - totalExpense,

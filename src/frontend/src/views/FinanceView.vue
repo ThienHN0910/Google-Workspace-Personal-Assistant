@@ -70,14 +70,17 @@
           </tr>
         </tbody>
       </table>
+      <InfiniteScrollObserver :loading="loading" :has-more="hasMore" @load-more="loadMore" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+
+const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
 const transactions = ref<any[]>([]);
 const loading = ref(true);
@@ -100,7 +103,7 @@ const syncVPBank = async () => {
     
     if (res.success) {
       alert(`Đồng bộ hoàn tất! (Xử lý ${res.data} giao dịch mới)`);
-      await fetchTransactions();
+      await fetchTransactions(1);
     } else {
       alert(res.message || "Lỗi khi đồng bộ.");
     }
@@ -112,17 +115,32 @@ const syncVPBank = async () => {
   }
 };
 
-const fetchTransactions = async () => {
+const page = ref(1);
+const hasMore = ref(true);
+
+const fetchTransactions = async (pageIndex = 1) => {
   loading.value = true;
   try {
-    const res: any = await api.get('/finance/transactions');
+    const res: any = await api.get(`/finance/transactions?page=${pageIndex}&pageSize=20`);
     if (res.success && res.data) {
-      transactions.value = res.data.items;
+      if (pageIndex === 1) {
+        transactions.value = res.data.items;
+      } else {
+        transactions.value = [...transactions.value, ...res.data.items];
+      }
+      hasMore.value = pageIndex < res.data.totalPages;
+      page.value = pageIndex;
     }
   } catch (e) {
     console.error('Failed to fetch transactions:', e);
   } finally {
     loading.value = false;
+  }
+};
+
+const loadMore = () => {
+  if (!loading.value && hasMore.value) {
+    fetchTransactions(page.value + 1);
   }
 };
 
@@ -142,7 +160,7 @@ const totalExpense = computed(() => {
   return transactions.value.filter(t => t.transactionType === 1).reduce((sum, t) => sum + t.amount, 0);
 });
 
-onMounted(fetchTransactions);
+onMounted(() => fetchTransactions(1));
 </script>
 
 <style scoped lang="scss">

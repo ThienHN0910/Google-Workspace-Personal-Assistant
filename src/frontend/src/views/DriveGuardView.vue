@@ -5,7 +5,9 @@
       <p>Giám sát biến động thư mục Google Drive & Cảnh báo an ninh</p>
     </header>
 
-    <div class="sections">
+    <LoadingSpinner v-if="loading" text="Đang tải dữ liệu cấu hình..." />
+
+    <div v-else class="sections">
       <!-- Section 1: Monitored Folders & Config (UC05) -->
       <div class="card-section">
         <div class="section-header">
@@ -70,14 +72,18 @@
             <span class="file">{{ l.fileName }}</span>
           </div>
         </div>
+        <InfiniteScrollObserver :loading="loadingLogs" :has-more="hasMoreLogs" @load-more="loadMoreLogs" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
+
+const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
+const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
 const alerts = ref<any[]>([]);
 const logs = ref<any[]>([]);
@@ -87,8 +93,10 @@ const newFolder = ref({ folderName: '', googleFolderId: '' });
 
 const intervalMinutes = ref(5);
 const updatingInterval = ref(false);
+const loading = ref(true);
 
 const fetchData = async () => {
+  loading.value = true;
   try {
     const resInterval: any = await api.get('/driveguard/interval');
     if (resInterval.success) {
@@ -105,12 +113,41 @@ const fetchData = async () => {
       alerts.value = resAlerts.data.items;
     }
 
-    const resLogs: any = await api.get('/driveguard/audit-logs');
+    await fetchLogs(1);
+  } catch (e) {
+    console.error('Failed to load drive guard data', e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const pageLogs = ref(1);
+const hasMoreLogs = ref(true);
+const loadingLogs = ref(false);
+
+const fetchLogs = async (page = 1) => {
+  loadingLogs.value = true;
+  try {
+    const resLogs: any = await api.get(`/driveguard/audit-logs?page=${page}&pageSize=20`);
     if (resLogs.success && resLogs.data) {
-      logs.value = resLogs.data.items;
+      if (page === 1) {
+        logs.value = resLogs.data.items;
+      } else {
+        logs.value = [...logs.value, ...resLogs.data.items];
+      }
+      hasMoreLogs.value = page < resLogs.data.totalPages;
+      pageLogs.value = page;
     }
   } catch (e) {
-    console.error('Failed to load drive guard data:', e);
+    console.error('Failed to load drive audit logs:', e);
+  } finally {
+    loadingLogs.value = false;
+  }
+};
+
+const loadMoreLogs = () => {
+  if (!loadingLogs.value && hasMoreLogs.value) {
+    fetchLogs(pageLogs.value + 1);
   }
 };
 

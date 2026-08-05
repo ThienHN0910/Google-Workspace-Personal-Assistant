@@ -283,6 +283,9 @@ onMounted(fetchRules);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   margin-bottom: 1rem;
 }
 

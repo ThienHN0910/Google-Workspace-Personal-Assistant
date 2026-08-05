@@ -121,6 +121,27 @@ public class GmailApiService : IGmailService
         }
     }
 
+    public async Task<int> GetUnreadEmailCountAsync(CancellationToken ct = default)
+    {
+        var service = await GetGmailClientAsync(ct);
+        if (service == null) return 0;
+
+        try
+        {
+            var request = service.Users.Messages.List("me");
+            request.Q = "is:unread";
+            request.MaxResults = 1; // Only need the resultSizeEstimate
+            
+            var response = await request.ExecuteAsync(ct);
+            return (int)(response.ResultSizeEstimate ?? 0);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get unread email count.");
+            return 0;
+        }
+    }
+
     public async Task<(IReadOnlyList<EmailMessage> Emails, string? NextPageToken)> GetPagedEmailsAsync(string query, int maxResults = 10, string? pageToken = null, CancellationToken ct = default)
     {
         var service = await GetGmailClientAsync(ct);

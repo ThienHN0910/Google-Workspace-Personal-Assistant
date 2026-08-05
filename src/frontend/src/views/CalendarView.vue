@@ -73,6 +73,7 @@
           </div>
         </div>
       </div>
+      <InfiniteScrollObserver v-if="activeTab === 'extracted'" :loading="loading.extracted" :has-more="hasMoreExtracted" @load-more="loadMoreExtracted" />
     </div>
 
     <!-- Create Manual Event Modal -->
@@ -102,6 +103,12 @@
             <label>Mô tả (Tùy chọn)</label>
             <textarea v-model="newEvent.description" rows="3" placeholder="Ghi chú thêm..."></textarea>
           </div>
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="newEvent.createTask" />
+              Đồng thời tạo nhắc nhở trong Google Tasks
+            </label>
+          </div>
           <div class="modal-actions">
             <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
             <button type="submit" class="btn-submit" :disabled="creating">
@@ -115,9 +122,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+
+const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
 const activeTab = ref('upcoming');
 const extractedSchedules = ref<any[]>([]);
@@ -136,20 +145,36 @@ const newEvent = ref({
   start: '',
   end: '',
   location: '',
-  description: ''
+  description: '',
+  createTask: false
 });
 
-const fetchExtractedSchedules = async () => {
+const pageExtracted = ref(1);
+const hasMoreExtracted = ref(true);
+
+const fetchExtractedSchedules = async (page = 1) => {
   loading.value.extracted = true;
   try {
-    const res: any = await api.get('/scheduling');
+    const res: any = await api.get(`/scheduling?page=${page}&pageSize=10`);
     if (res.success && res.data) {
-      extractedSchedules.value = res.data.items;
+      if (page === 1) {
+        extractedSchedules.value = res.data.items;
+      } else {
+        extractedSchedules.value = [...extractedSchedules.value, ...res.data.items];
+      }
+      hasMoreExtracted.value = page < res.data.totalPages;
+      pageExtracted.value = page;
     }
   } catch (e) {
     console.error('Failed to fetch extracted schedules:', e);
   } finally {
     loading.value.extracted = false;
+  }
+};
+
+const loadMoreExtracted = () => {
+  if (!loading.value.extracted && hasMoreExtracted.value) {
+    fetchExtractedSchedules(pageExtracted.value + 1);
   }
 };
 
@@ -433,5 +458,16 @@ onMounted(() => {
   cursor: pointer;
   &:hover:not(:disabled) { background: #4f46e5; }
   &:disabled { opacity: 0.7; cursor: not-allowed; }
+.form-group-checkbox {
+  margin-bottom: 1rem;
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    input { width: 1.1rem; height: 1.1rem; cursor: pointer; }
+  }
 }
 </style>

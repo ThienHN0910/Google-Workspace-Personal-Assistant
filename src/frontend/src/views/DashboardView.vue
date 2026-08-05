@@ -27,26 +27,15 @@
         <div class="card-footer">UC01 Auto-Clean Inbox</div>
       </div>
 
-      <!-- UC02 AI Drafts Pending -->
-      <div class="bento-card" :class="{ 'has-action': summary.pendingDrafts > 0 }">
+      <!-- UC01 Unread Emails -->
+      <div class="bento-card" :class="{ 'has-action': summary.unreadEmails > 0 }">
         <div class="card-icon draft-icon">
-          <i class="pi pi-sparkles"></i>
+          <i class="pi pi-envelope"></i>
         </div>
-        <div class="card-title">AI Drafts chờ duyệt</div>
-        <div class="stat-val" :class="{ warning: summary.pendingDrafts > 0 }">{{ summary.pendingDrafts }}</div>
-        <router-link v-if="summary.pendingDrafts > 0" to="/email" class="card-footer link">Duyệt ngay ➔</router-link>
-        <div v-else class="card-footer">UC02 Human-in-the-Loop</div>
-      </div>
-
-      <!-- UC03 Extracted Schedules -->
-      <div class="bento-card" :class="{ 'has-action': summary.pendingSchedules > 0 }">
-        <div class="card-icon schedule-icon">
-          <i class="pi pi-calendar-plus"></i>
-        </div>
-        <div class="card-title">Lịch hẹn chờ xác nhận</div>
-        <div class="stat-val" :class="{ warning: summary.pendingSchedules > 0 }">{{ summary.pendingSchedules }}</div>
-        <router-link v-if="summary.pendingSchedules > 0" to="/calendar" class="card-footer link">Xác nhận ngay ➔</router-link>
-        <div v-else class="card-footer">UC03 Smart Calendar</div>
+        <div class="card-title">Email chưa đọc</div>
+        <div class="stat-val" :class="{ warning: summary.unreadEmails > 0 }">{{ summary.unreadEmails }}</div>
+        <router-link v-if="summary.unreadEmails > 0" to="/email" class="card-footer link">Đọc ngay ➔</router-link>
+        <div v-else class="card-footer">Inbox Zero!</div>
       </div>
 
       <!-- UC04 Monthly Finance Net -->
@@ -79,7 +68,7 @@
       <div class="feed-section">
         <h2>🔥 Hoạt động cần chú ý</h2>
         <div class="feed-list">
-          <div v-if="summary.activeAlerts === 0 && summary.pendingDrafts === 0 && summary.pendingSchedules === 0" class="empty-feed">
+          <div v-if="summary.activeAlerts === 0 && summary.unreadEmails === 0" class="empty-feed">
             <i class="pi pi-check-circle"></i> Mọi thứ đều ổn! Không có việc gì khẩn cấp.
           </div>
           <div v-if="summary.activeAlerts > 0" class="feed-item alert">
@@ -90,21 +79,13 @@
             </div>
             <router-link to="/drive-guard" class="action-link">Xem</router-link>
           </div>
-          <div v-if="summary.pendingDrafts > 0" class="feed-item warning">
-            <i class="pi pi-pencil"></i>
+          <div v-if="summary.unreadEmails > 0" class="feed-item info">
+            <i class="pi pi-envelope"></i>
             <div>
-              <strong>Email nháp cần duyệt</strong>
-              <p>Có {{ summary.pendingDrafts }} bản nháp AI soạn đang chờ bạn xác nhận.</p>
+              <strong>Có Email mới!</strong>
+              <p>Bạn có {{ summary.unreadEmails }} email chưa đọc trong hộp thư.</p>
             </div>
-            <router-link to="/email" class="action-link">Duyệt</router-link>
-          </div>
-          <div v-if="summary.pendingSchedules > 0" class="feed-item info">
-            <i class="pi pi-calendar-plus"></i>
-            <div>
-              <strong>Lịch hẹn mới</strong>
-              <p>Có {{ summary.pendingSchedules }} lịch hẹn được AI trích xuất chờ lưu vào Google Calendar.</p>
-            </div>
-            <router-link to="/calendar" class="action-link">Lưu</router-link>
+            <router-link to="/email" class="action-link">Đọc</router-link>
           </div>
         </div>
       </div>
@@ -113,7 +94,7 @@
       <div class="feed-section">
         <h2>✅ Việc cần làm hôm nay</h2>
         <div v-if="loadingTasks" class="empty-feed">
-          <i class="pi pi-spin pi-spinner"></i> Đang tải công việc...
+          <LoadingSpinner text="Đang tải danh sách công việc..." />
         </div>
         <div v-else-if="tasks.length === 0" class="empty-feed">
           <i class="pi pi-sparkles"></i> Tuyệt vời! Bạn không có task nào đang chờ.
@@ -136,15 +117,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, defineAsyncComponent } from 'vue';
 import { useAuthStore } from '@/stores/auth.store';
 import api from '@/services/api.service';
+
+const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
 
 const authStore = useAuthStore();
 const summary = ref({
   cleanedToday: 0,
-  pendingDrafts: 0,
-  pendingSchedules: 0,
+  unreadEmails: 0,
   monthlyIncome: 0,
   monthlyExpense: 0,
   monthlyNetBalance: 0,

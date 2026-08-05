@@ -69,11 +69,28 @@ public class SchedulingController : ControllerBase
     /// Manually create a calendar event
     /// </summary>
     [HttpPost("manual")]
-    public async Task<ActionResult<ApiResponse<string>>> CreateManualEvent([FromBody] CreateEventRequest request, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<string>>> CreateManualEvent([FromBody] CreateEventRequest request, [FromServices] ITasksService tasksService, CancellationToken ct)
     {
         var eventId = await _calendarService.CreateEventAsync(request.Title, request.Start, request.End, request.Location, request.Description, ct);
         if (string.IsNullOrEmpty(eventId))
             return BadRequest(ApiResponse<string>.Fail("Không thể tạo sự kiện. Hãy kiểm tra kết nối Google."));
+
+        if (request.CreateTask)
+        {
+            try
+            {
+                var listId = await tasksService.GetDefaultTaskListAsync(ct);
+                if (!string.IsNullOrEmpty(listId))
+                {
+                    await tasksService.CreateTaskAsync(listId, request.Title, request.Description, request.Start, ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Continue if task creation fails, event is already created
+                Console.WriteLine($"Failed to create task for event: {ex.Message}");
+            }
+        }
 
         return Ok(ApiResponse<string>.Ok(eventId, "Đã tạo sự kiện thành công."));
     }
@@ -86,4 +103,5 @@ public class CreateEventRequest
     public DateTime? End { get; set; }
     public string? Location { get; set; }
     public string? Description { get; set; }
+    public bool CreateTask { get; set; }
 }

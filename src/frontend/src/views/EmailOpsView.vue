@@ -81,11 +81,9 @@
         </div>
       </div>
       
-      <div class="load-more" v-if="nextPageToken && !selectedEmail">
-        <button class="btn-secondary" @click="loadMore" :disabled="loading">
-          {{ loading ? 'Đang tải...' : 'Tải thêm' }}
-        </button>
       </div>
+      
+      <InfiniteScrollObserver v-if="!selectedEmail" :loading="loading" :has-more="!!nextPageToken" @load-more="loadMore" />
     </div>
 
     <!-- Tab 2: Cleanup Rules -->
@@ -116,6 +114,7 @@
           </div>
         </div>
       </div>
+      <InfiniteScrollObserver :loading="loadingLogs" :has-more="hasMoreLogs" @load-more="loadMoreLogs" />
     </div>
   </div>
 </template>
@@ -128,6 +127,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 // Lazy loading heavy components
 const CleanupRuleList = defineAsyncComponent(() => import('@/components/email/CleanupRuleList.vue'));
 const Editor = defineAsyncComponent(() => import('primevue/editor'));
+const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
 const activeTab = ref('inbox');
 const emails = ref<any[]>([]);
@@ -271,20 +271,39 @@ const formatDate = (dateStr: string) => {
   });
 };
 
-const fetchLogs = async () => {
+const pageLogs = ref(1);
+const hasMoreLogs = ref(true);
+const loadingLogs = ref(false);
+
+const fetchLogs = async (page = 1) => {
+  loadingLogs.value = true;
   try {
-    const res: any = await api.get('/emailops/logs');
+    const res: any = await api.get(`/emailops/logs?page=${page}&pageSize=20`);
     if (res.success && res.data) {
-      cleanupLogs.value = res.data.items;
+      if (page === 1) {
+        cleanupLogs.value = res.data.items;
+      } else {
+        cleanupLogs.value = [...cleanupLogs.value, ...res.data.items];
+      }
+      hasMoreLogs.value = page < res.data.totalPages;
+      pageLogs.value = page;
     }
   } catch (e) {
     console.error('Failed to load logs:', e);
+  } finally {
+    loadingLogs.value = false;
+  }
+};
+
+const loadMoreLogs = () => {
+  if (!loadingLogs.value && hasMoreLogs.value) {
+    fetchLogs(pageLogs.value + 1);
   }
 };
 
 watch(activeTab, (newTab) => {
   if (newTab === 'inbox' && emails.value.length === 0) fetchInbox();
-  if (newTab === 'logs' && cleanupLogs.value.length === 0) fetchLogs();
+  if (newTab === 'logs' && cleanupLogs.value.length === 0) fetchLogs(1);
 });
 
 onMounted(() => {

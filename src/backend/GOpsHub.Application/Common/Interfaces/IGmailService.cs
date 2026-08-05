@@ -17,6 +17,7 @@ public interface IGmailService
     // Pagination & Unread
     Task<(IReadOnlyList<EmailMessage> Emails, string? NextPageToken)> GetPagedEmailsAsync(string query, int maxResults = 10, string? pageToken = null, CancellationToken ct = default);
     Task MarkAsUnreadAsync(string messageId, CancellationToken ct = default);
+    Task<int> GetUnreadEmailCountAsync(CancellationToken ct = default);
 }
 
 /// <summary>
