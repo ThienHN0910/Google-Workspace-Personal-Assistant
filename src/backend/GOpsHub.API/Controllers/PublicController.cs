@@ -1,3 +1,4 @@
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Common.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -27,13 +28,43 @@ public class PublicController : ControllerBase
     /// Public Calendar busy/free slots for public viewers
     /// </summary>
     [HttpGet("calendar-status")]
-    public IActionResult GetPublicCalendarStatus()
+    public async Task<IActionResult> GetPublicCalendarStatus([FromServices] ICalendarService calendarService, CancellationToken ct)
     {
-        // Public mockup or read-only status for non-logged-in users
+        var upcomingEvents = await calendarService.GetUpcomingEventsAsync(7, ct);
+        var maskedEvents = new List<object>();
+
+        foreach (var ev in upcomingEvents)
+        {
+            if (ev.Visibility.Equals("public", StringComparison.OrdinalIgnoreCase))
+            {
+                maskedEvents.Add(new
+                {
+                    Title = ev.Title,
+                    Start = ev.Start,
+                    End = ev.End,
+                    Location = ev.Location,
+                    IsPublic = true
+                });
+            }
+            else
+            {
+                maskedEvents.Add(new
+                {
+                    Title = "Lịch bận",
+                    Start = ev.Start,
+                    End = ev.End,
+                    Location = (string?)null,
+                    IsPublic = false
+                });
+            }
+        }
+
+        var isBusyNow = upcomingEvents.Any(e => e.Start <= DateTime.UtcNow && (e.End == null || e.End >= DateTime.UtcNow));
+
         return Ok(ApiResponse<object>.Ok(new
         {
-            IsBusyNow = false,
-            NextBusySlot = (string?)null,
+            IsBusyNow = isBusyNow,
+            Events = maskedEvents,
             Message = "Lịch làm việc cá nhân của Thien HN"
         }));
     }

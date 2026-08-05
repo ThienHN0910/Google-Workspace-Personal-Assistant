@@ -81,8 +81,6 @@
         </div>
       </div>
       
-      </div>
-      
       <InfiniteScrollObserver v-if="!selectedEmail" :loading="loading" :has-more="!!nextPageToken" @load-more="loadMore" />
     </div>
 

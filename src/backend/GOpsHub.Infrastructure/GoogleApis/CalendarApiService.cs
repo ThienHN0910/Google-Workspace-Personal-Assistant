@@ -133,7 +133,8 @@ public class CalendarApiService : ICalendarService
             Start = e.Start.DateTimeDateTimeOffset?.UtcDateTime ?? DateTime.UtcNow,
             End = e.End.DateTimeDateTimeOffset?.UtcDateTime,
             Location = e.Location,
-            HtmlLink = e.HtmlLink ?? string.Empty
+            HtmlLink = e.HtmlLink ?? string.Empty,
+            Visibility = e.Visibility ?? "default"
         }).ToList();
     }
 

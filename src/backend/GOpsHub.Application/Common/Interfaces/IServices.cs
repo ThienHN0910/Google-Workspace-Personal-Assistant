@@ -68,6 +68,7 @@ public class CalendarEvent
     public DateTime? End { get; set; }
     public string? Location { get; set; }
     public string HtmlLink { get; set; } = string.Empty;
+    public string Visibility { get; set; } = "default";
 }
 
 public class CalendarBusySlot
