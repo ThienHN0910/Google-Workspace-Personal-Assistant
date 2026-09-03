@@ -118,6 +118,16 @@ public class DriveGuardController : ControllerBase
         var interval = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<int>.Ok(interval, "Đã cập nhật chu kỳ quét thành công."));
     }
+
+    /// <summary>
+    /// Trigger an immediate on-demand Drive Guard audit
+    /// </summary>
+    [HttpPost("audit/run")]
+    public async Task<ActionResult<ApiResponse<bool>>> TriggerAudit([FromServices] GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob auditJob, CancellationToken ct)
+    {
+        await auditJob.RunAuditAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã hoàn thành quét kiểm tra biến động và an ninh Google Drive."));
+    }
 }
 
 public class ResolveAlertRequest

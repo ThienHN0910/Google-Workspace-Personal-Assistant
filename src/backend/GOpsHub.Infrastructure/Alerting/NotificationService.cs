@@ -11,6 +11,8 @@ public class NotificationService : INotificationService
 {
     private readonly HttpClient _httpClient;
     private readonly string? _discordWebhookUrl;
+    private readonly string? _telegramBotToken;
+    private readonly string? _telegramChatId;
     private readonly ILogger<NotificationService> _logger;
     private readonly IHubContext<NotificationHub> _hubContext;
 
@@ -20,7 +22,9 @@ public class NotificationService : INotificationService
         IHubContext<NotificationHub> hubContext)
     {
         _httpClient = new HttpClient();
-        _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"];
+        _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"] ?? configuration["ALERTING__DISCORDWEBHOOKURL"];
+        _telegramBotToken = configuration["Telegram:BotToken"] ?? configuration["TELEGRAM_BOT_TOKEN"];
+        _telegramChatId = configuration["Telegram:ChatId"] ?? configuration["TELEGRAM_CHAT_ID"];
         _logger = logger;
         _hubContext = hubContext;
     }
@@ -79,6 +83,38 @@ public class NotificationService : INotificationService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send Discord webhook notification.");
+            }
+        }
+
+        // 3. Telegram Bot Push (Multi-Channel Alerting)
+        if (!string.IsNullOrEmpty(_telegramBotToken) && !string.IsNullOrEmpty(_telegramChatId))
+        {
+            try
+            {
+                var icon = type switch
+                {
+                    "critical" => "🚨",
+                    "warning" => "⚠️",
+                    _ => "ℹ️"
+                };
+
+                var telegramText = $"{icon} <b>{System.Net.WebUtility.HtmlEncode(title)}</b>\n\n{System.Net.WebUtility.HtmlEncode(message)}\n\n<i>G-Ops Hub • {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</i>";
+
+                var payload = new
+                {
+                    chat_id = _telegramChatId,
+                    text = telegramText,
+                    parse_mode = "HTML"
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var tgUrl = $"https://api.telegram.org/bot{_telegramBotToken}/sendMessage";
+                await _httpClient.PostAsync(tgUrl, content, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Telegram notification.");
             }
         }
     }

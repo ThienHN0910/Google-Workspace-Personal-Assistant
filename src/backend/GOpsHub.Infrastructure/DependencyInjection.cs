@@ -48,9 +48,13 @@ public static class DependencyInjection
         services.AddScoped<ISheetsService, SheetsApiService>();
         services.AddScoped<IDriveService, DriveApiService>();
         services.AddScoped<ITasksService, TasksApiService>();
+        services.AddSingleton<GeminiRateLimiter>();
         services.AddScoped<IAIService, GeminiAIService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>();
+        services.AddScoped<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>();
+        services.AddScoped<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>();
+        services.AddScoped<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>();
 
         // Hangfire Setup
         var mongoConnString = configuration["MONGODB_CONNECTION_STRING"]
