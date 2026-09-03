@@ -90,6 +90,16 @@ public class DriveGuardController : ControllerBase
     }
 
     /// <summary>
+    /// Restore quarantined file (UC06)
+    /// </summary>
+    [HttpPost("quarantine/restore")]
+    public async Task<ActionResult<ApiResponse<bool>>> RestoreFile([FromBody] RestoreQuarantinedFileCommand command)
+    {
+        var result = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<bool>.Ok(result, "Đã khôi phục file thành công."));
+    }
+
+    /// <summary>
     /// Get Drive Guard polling interval in minutes
     /// </summary>
     [HttpGet("interval")]

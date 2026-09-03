@@ -50,14 +50,48 @@ public class QuarantineFileCommandHandler : ICommandHandler<QuarantineFileComman
 
     public async Task<bool> HandleAsync(QuarantineFileCommand command, CancellationToken ct = default)
     {
-        await _driveService.MoveFileAsync(command.FileId, command.QuarantineFolderId, ct);
+        var targetFolderId = command.QuarantineFolderId;
+        if (string.IsNullOrWhiteSpace(targetFolderId) || targetFolderId == "QUARANTINE_DEFAULT_FOLDER_ID")
+        {
+            targetFolderId = await _driveService.EnsureQuarantineFolderAsync(ct);
+        }
+
+        await _driveService.MoveFileAsync(command.FileId, targetFolderId, ct);
 
         var alert = await _alertRepo.FindOneAsync(a => a.FileId == command.FileId, ct);
         if (alert != null)
         {
             alert.IsResolved = true;
             alert.ResolvedAt = DateTime.UtcNow;
-            alert.ResolutionNote = "File quarantined automatically.";
+            alert.ResolutionNote = "File quarantined automatically to G-Ops Quarantine.";
+            await _alertRepo.UpdateAsync(alert, ct);
+        }
+
+        return true;
+    }
+}
+
+public record RestoreQuarantinedFileCommand(string FileId, string TargetFolderId) : ICommand<bool>;
+
+public class RestoreQuarantinedFileCommandHandler : ICommandHandler<RestoreQuarantinedFileCommand, bool>
+{
+    private readonly IDriveService _driveService;
+    private readonly IRepository<SecurityAlert> _alertRepo;
+
+    public RestoreQuarantinedFileCommandHandler(IDriveService driveService, IRepository<SecurityAlert> alertRepo)
+    {
+        _driveService = driveService;
+        _alertRepo = alertRepo;
+    }
+
+    public async Task<bool> HandleAsync(RestoreQuarantinedFileCommand command, CancellationToken ct = default)
+    {
+        await _driveService.RestoreFileAsync(command.FileId, command.TargetFolderId, ct);
+
+        var alert = await _alertRepo.FindOneAsync(a => a.FileId == command.FileId, ct);
+        if (alert != null)
+        {
+            alert.ResolutionNote = "File restored from quarantine by administrator.";
             await _alertRepo.UpdateAsync(alert, ct);
         }
 

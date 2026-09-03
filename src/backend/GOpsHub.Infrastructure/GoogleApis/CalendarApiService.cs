@@ -84,11 +84,32 @@ public class CalendarApiService : ICalendarService
         });
     }
 
-    public async Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default)
+    public async Task<IReadOnlyList<GOpsHub.Application.Common.Interfaces.CalendarListEntry>> GetCalendarListAsync(CancellationToken ct = default)
+    {
+        var service = await GetCalendarClientAsync(ct);
+        if (service == null) return Array.Empty<GOpsHub.Application.Common.Interfaces.CalendarListEntry>();
+
+        var request = service.CalendarList.List();
+        var response = await request.ExecuteAsync(ct);
+        if (response.Items == null) return Array.Empty<GOpsHub.Application.Common.Interfaces.CalendarListEntry>();
+
+        return response.Items.Select(c => new GOpsHub.Application.Common.Interfaces.CalendarListEntry
+        {
+            Id = c.Id,
+            Summary = c.Summary,
+            Description = c.Description,
+            Primary = c.Primary ?? false,
+            BackgroundColor = c.BackgroundColor,
+            ForegroundColor = c.ForegroundColor
+        }).ToList();
+    }
+
+    public async Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, string? calendarId = "primary", bool createMeetLink = false, IReadOnlyList<string>? attendees = null, string? colorId = null, bool isAllDay = false, int? reminderMinutes = null, CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return string.Empty;
 
+        var targetCalendar = string.IsNullOrWhiteSpace(calendarId) ? "primary" : calendarId;
         var eventEndTime = end ?? start.AddHours(1);
 
         var calendarEvent = new Event
@@ -96,52 +117,159 @@ public class CalendarApiService : ICalendarService
             Summary = title,
             Location = location,
             Description = description,
-            Start = new EventDateTime { DateTimeDateTimeOffset = start },
-            End = new EventDateTime { DateTimeDateTimeOffset = eventEndTime },
             Visibility = isPublic ? "public" : "private"
         };
 
-        var created = await service.Events.Insert(calendarEvent, "primary").ExecuteAsync(ct);
+        if (isAllDay)
+        {
+            calendarEvent.Start = new EventDateTime { Date = start.ToString("yyyy-MM-dd") };
+            calendarEvent.End = new EventDateTime { Date = (end ?? start.AddDays(1)).ToString("yyyy-MM-dd") };
+        }
+        else
+        {
+            calendarEvent.Start = new EventDateTime { DateTimeDateTimeOffset = start };
+            calendarEvent.End = new EventDateTime { DateTimeDateTimeOffset = eventEndTime };
+        }
+
+        if (!string.IsNullOrEmpty(colorId))
+        {
+            calendarEvent.ColorId = colorId;
+        }
+
+        if (attendees != null && attendees.Count > 0)
+        {
+            calendarEvent.Attendees = attendees
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(email => new EventAttendee { Email = email.Trim() })
+                .ToList();
+        }
+
+        if (createMeetLink)
+        {
+            calendarEvent.ConferenceData = new ConferenceData
+            {
+                CreateRequest = new CreateConferenceRequest
+                {
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    ConferenceSolutionKey = new ConferenceSolutionKey { Type = "hangoutsMeet" }
+                }
+            };
+        }
+
+        if (reminderMinutes.HasValue)
+        {
+            calendarEvent.Reminders = new Event.RemindersData
+            {
+                UseDefault = false,
+                Overrides = new List<EventReminder>
+                {
+                    new EventReminder { Method = "popup", Minutes = reminderMinutes.Value }
+                }
+            };
+        }
+
+        var insertRequest = service.Events.Insert(calendarEvent, targetCalendar);
+        if (createMeetLink)
+        {
+            insertRequest.ConferenceDataVersion = 1;
+        }
+
+        var created = await insertRequest.ExecuteAsync(ct);
         return created.Id;
     }
 
-    public async Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default)
+    public async Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, string? calendarId = "primary", bool createMeetLink = false, IReadOnlyList<string>? attendees = null, string? colorId = null, bool isAllDay = false, int? reminderMinutes = null, CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return;
 
-        var existing = await service.Events.Get("primary", eventId).ExecuteAsync(ct);
+        var targetCalendar = string.IsNullOrWhiteSpace(calendarId) ? "primary" : calendarId;
+        var existing = await service.Events.Get(targetCalendar, eventId).ExecuteAsync(ct);
         if (existing == null) return;
 
         existing.Summary = title;
         existing.Location = location;
         existing.Description = description;
-        existing.Start = new EventDateTime { DateTimeDateTimeOffset = start };
-        existing.End = new EventDateTime { DateTimeDateTimeOffset = end ?? start.AddHours(1) };
         existing.Visibility = isPublic ? "public" : "private";
 
-        await service.Events.Update(existing, "primary", eventId).ExecuteAsync(ct);
+        if (isAllDay)
+        {
+            existing.Start = new EventDateTime { Date = start.ToString("yyyy-MM-dd") };
+            existing.End = new EventDateTime { Date = (end ?? start.AddDays(1)).ToString("yyyy-MM-dd") };
+        }
+        else
+        {
+            existing.Start = new EventDateTime { DateTimeDateTimeOffset = start };
+            existing.End = new EventDateTime { DateTimeDateTimeOffset = end ?? start.AddHours(1) };
+        }
+
+        if (!string.IsNullOrEmpty(colorId))
+        {
+            existing.ColorId = colorId;
+        }
+
+        if (attendees != null)
+        {
+            existing.Attendees = attendees
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(email => new EventAttendee { Email = email.Trim() })
+                .ToList();
+        }
+
+        if (createMeetLink && existing.ConferenceData == null)
+        {
+            existing.ConferenceData = new ConferenceData
+            {
+                CreateRequest = new CreateConferenceRequest
+                {
+                    RequestId = Guid.NewGuid().ToString("N"),
+                    ConferenceSolutionKey = new ConferenceSolutionKey { Type = "hangoutsMeet" }
+                }
+            };
+        }
+
+        if (reminderMinutes.HasValue)
+        {
+            existing.Reminders = new Event.RemindersData
+            {
+                UseDefault = false,
+                Overrides = new List<EventReminder>
+                {
+                    new EventReminder { Method = "popup", Minutes = reminderMinutes.Value }
+                }
+            };
+        }
+
+        var updateRequest = service.Events.Update(existing, targetCalendar, eventId);
+        if (createMeetLink)
+        {
+            updateRequest.ConferenceDataVersion = 1;
+        }
+
+        await updateRequest.ExecuteAsync(ct);
     }
 
-    public async Task DeleteEventAsync(string eventId, CancellationToken ct = default)
+    public async Task DeleteEventAsync(string eventId, string? calendarId = "primary", CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return;
 
-        await service.Events.Delete("primary", eventId).ExecuteAsync(ct);
+        var targetCalendar = string.IsNullOrWhiteSpace(calendarId) ? "primary" : calendarId;
+        await service.Events.Delete(targetCalendar, eventId).ExecuteAsync(ct);
     }
 
-    public async Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, string? calendarId = "primary", CancellationToken ct = default)
     {
-        return await GetEventsAsync(DateTime.UtcNow, DateTime.UtcNow.AddDays(days), ct);
+        return await GetEventsAsync(DateTime.UtcNow, DateTime.UtcNow.AddDays(days), calendarId, ct);
     }
 
-    public async Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, string? calendarId = "primary", CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return Array.Empty<CalendarEvent>();
 
-        var request = service.Events.List("primary");
+        var targetCalendar = string.IsNullOrWhiteSpace(calendarId) ? "primary" : calendarId;
+        var request = service.Events.List(targetCalendar);
         request.TimeMinDateTimeOffset = timeMin ?? DateTime.UtcNow.AddDays(-30);
         request.TimeMaxDateTimeOffset = timeMax ?? DateTime.UtcNow.AddDays(30);
         request.SingleEvents = true;
@@ -159,11 +287,16 @@ public class CalendarApiService : ICalendarService
             Location = e.Location,
             Description = e.Description,
             HtmlLink = e.HtmlLink ?? string.Empty,
-            Visibility = string.Equals(e.Visibility, "private", StringComparison.OrdinalIgnoreCase) ? "private" : "public"
+            Visibility = string.Equals(e.Visibility, "private", StringComparison.OrdinalIgnoreCase) ? "private" : "public",
+            MeetUrl = e.ConferenceData?.EntryPoints?.FirstOrDefault(x => x.EntryPointType == "video")?.Uri ?? e.HangoutLink,
+            Attendees = e.Attendees?.Select(a => a.Email).Where(email => !string.IsNullOrEmpty(email)).ToList() ?? new List<string>(),
+            ColorId = e.ColorId,
+            IsAllDay = !string.IsNullOrEmpty(e.Start?.Date),
+            ReminderMinutes = e.Reminders?.Overrides?.FirstOrDefault()?.Minutes
         }).ToList();
     }
 
-    public async Task<IReadOnlyList<CalendarBusySlot>> GetBusySlotsAsync(DateTime start, DateTime end, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CalendarBusySlot>> GetBusySlotsAsync(DateTime start, DateTime end, string? calendarId = "primary", CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
         if (service == null) return Array.Empty<CalendarBusySlot>();

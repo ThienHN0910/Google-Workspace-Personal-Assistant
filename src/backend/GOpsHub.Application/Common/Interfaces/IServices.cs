@@ -54,17 +54,28 @@ public class AIBatchTransactionResult : AITransactionResult
     public string EmailId { get; set; } = string.Empty;
 }
 
+public class CalendarListEntry
+{
+    public string Id { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool Primary { get; set; }
+    public string? BackgroundColor { get; set; }
+    public string? ForegroundColor { get; set; }
+}
+
 /// <summary>
 /// Google Calendar API service abstraction.
 /// </summary>
 public interface ICalendarService
 {
-    Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default);
-    Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default);
-    Task DeleteEventAsync(string eventId, CancellationToken ct = default);
-    Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, CancellationToken ct = default);
-    Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, CancellationToken ct = default);
-    Task<IReadOnlyList<CalendarBusySlot>> GetBusySlotsAsync(DateTime start, DateTime end, CancellationToken ct = default);
+    Task<IReadOnlyList<CalendarListEntry>> GetCalendarListAsync(CancellationToken ct = default);
+    Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, string? calendarId = "primary", bool createMeetLink = false, IReadOnlyList<string>? attendees = null, string? colorId = null, bool isAllDay = false, int? reminderMinutes = null, CancellationToken ct = default);
+    Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, string? calendarId = "primary", bool createMeetLink = false, IReadOnlyList<string>? attendees = null, string? colorId = null, bool isAllDay = false, int? reminderMinutes = null, CancellationToken ct = default);
+    Task DeleteEventAsync(string eventId, string? calendarId = "primary", CancellationToken ct = default);
+    Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, string? calendarId = "primary", CancellationToken ct = default);
+    Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, string? calendarId = "primary", CancellationToken ct = default);
+    Task<IReadOnlyList<CalendarBusySlot>> GetBusySlotsAsync(DateTime start, DateTime end, string? calendarId = "primary", CancellationToken ct = default);
 }
 
 public class CalendarEvent
@@ -77,6 +88,11 @@ public class CalendarEvent
     public string? Description { get; set; }
     public string HtmlLink { get; set; } = string.Empty;
     public string Visibility { get; set; } = "default";
+    public string? MeetUrl { get; set; }
+    public IReadOnlyList<string> Attendees { get; set; } = Array.Empty<string>();
+    public string? ColorId { get; set; }
+    public bool IsAllDay { get; set; }
+    public int? ReminderMinutes { get; set; }
 }
 
 public class CalendarBusySlot
@@ -99,6 +115,8 @@ public interface IDriveService
     Task<IReadOnlyList<DrivePermission>> GetFilePermissionsAsync(string fileId, CancellationToken ct = default);
     Task RevokePermissionAsync(string fileId, string permissionId, CancellationToken ct = default);
     Task<string?> SetupWatchAsync(string folderId, string webhookUrl, CancellationToken ct = default);
+    Task<string> EnsureQuarantineFolderAsync(CancellationToken ct = default);
+    Task RestoreFileAsync(string fileId, string originalFolderId, CancellationToken ct = default);
 }
 
 public class DriveFileInfo

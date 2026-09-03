@@ -36,6 +36,8 @@ public class ApproveDraftCommandHandler : ICommandHandler<ApproveDraftCommand, A
             $"Re: {draft.OriginalEmail.Subject}",
             finalContent,
             draft.OriginalEmail.GmailMessageId,
+            null,
+            null,
             ct);
 
         draft.GmailDraftId = gmailDraftId;

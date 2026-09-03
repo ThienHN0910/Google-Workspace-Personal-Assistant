@@ -34,7 +34,7 @@ public class PublicController : ControllerBase
         DateTime minDate = startDate ?? DateTime.UtcNow.AddDays(-30);
         DateTime maxDate = endDate ?? DateTime.UtcNow.AddDays(30);
 
-        var upcomingEvents = await calendarService.GetEventsAsync(minDate, maxDate, ct);
+        var upcomingEvents = await calendarService.GetEventsAsync(minDate, maxDate, "primary", ct);
         var maskedEvents = new List<object>();
 
         foreach (var ev in upcomingEvents)

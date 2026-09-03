@@ -58,7 +58,10 @@
             <p class="reason">{{ a.reason }}</p>
             <div class="alert-actions">
               <button class="quarantine-btn" @click="handleQuarantine(a.fileId)">
-                <i class="pi pi-shield"></i> Cách ly vào Quarantine Folder
+                <i class="pi pi-shield"></i> Cách ly vào "G-Ops Quarantine"
+              </button>
+              <button class="restore-btn" @click="handleRestore(a.fileId)" title="Khôi phục file">
+                <i class="pi pi-replay"></i> Khôi phục
               </button>
               <button class="resolve-btn" @click="handleResolveAlert(a.id)">
                 <i class="pi pi-check"></i> Đã xử lý
@@ -232,13 +235,13 @@ const handleQuarantine = async (fileId: string) => {
   try {
     const res: any = await api.post('/driveguard/quarantine', {
       fileId,
-      quarantineFolderId: 'QUARANTINE_DEFAULT_FOLDER_ID'
+      quarantineFolderId: '' // Automatically provision or find "G-Ops Quarantine" folder on real Google Drive
     });
     if (res.success) {
       showToast({
         severity: 'warn',
         summary: 'Đã cách ly file',
-        detail: 'File nguy hiểm đã được chuyển vào khu vực cách ly an toàn.',
+        detail: 'File nguy hiểm đã được chuyển vào thư mục Google Drive "G-Ops Quarantine".',
       });
       fetchData();
     }
@@ -247,6 +250,32 @@ const handleQuarantine = async (fileId: string) => {
       severity: 'error',
       summary: 'Lỗi cách ly',
       detail: 'Không thể di chuyển file vào thư mục cách ly.',
+    });
+  }
+};
+
+const handleRestore = async (fileId: string) => {
+  const targetFolder = prompt('Nhập ID thư mục Google Drive muốn khôi phục file về (hoặc để "root"):', 'root');
+  if (targetFolder === null) return;
+
+  try {
+    const res: any = await api.post('/driveguard/quarantine/restore', {
+      fileId,
+      targetFolderId: targetFolder.trim() || 'root'
+    });
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đã khôi phục',
+        detail: 'File đã được khôi phục về thư mục đích an toàn.',
+      });
+      fetchData();
+    }
+  } catch (e) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể khôi phục file.',
     });
   }
 };
@@ -447,6 +476,21 @@ onMounted(fetchData);
   gap: 0.35rem;
   font-size: 0.85rem;
   &:hover { background: #dc2626; }
+}
+
+.restore-btn {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  &:hover { background: rgba(99, 102, 241, 0.25); }
 }
 
 .resolve-btn {

@@ -30,9 +30,11 @@ public class EmailOpsController : ControllerBase
     /// Get recent emails from Inbox
     /// </summary>
     [HttpGet("inbox")]
-    public async Task<ActionResult<ApiResponse<object>>> GetInbox([FromQuery] bool isRead = false, [FromQuery] int maxResults = 10, [FromQuery] string? pageToken = null, CancellationToken ct = default)
+    public async Task<ActionResult<ApiResponse<object>>> GetInbox([FromQuery] bool isRead = false, [FromQuery] int maxResults = 10, [FromQuery] string? pageToken = null, [FromQuery] string? search = null, CancellationToken ct = default)
     {
-        var query = isRead ? "in:inbox is:read" : "in:inbox is:unread";
+        var query = !string.IsNullOrWhiteSpace(search) 
+            ? search 
+            : (isRead ? "in:inbox is:read" : "in:inbox is:unread");
         var (emails, nextToken) = await _gmailService.GetPagedEmailsAsync(query, maxResults, pageToken, ct);
         return Ok(ApiResponse<object>.Ok(new { Items = emails, NextPageToken = nextToken }));
     }
@@ -51,6 +53,20 @@ public class EmailOpsController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu chưa đọc."));
     }
 
+    [HttpPost("{id}/star")]
+    public async Task<ActionResult<ApiResponse<bool>>> StarEmail(string id, CancellationToken ct)
+    {
+        await _gmailService.StarEmailAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã gắn sao email."));
+    }
+
+    [HttpPost("{id}/unstar")]
+    public async Task<ActionResult<ApiResponse<bool>>> UnstarEmail(string id, CancellationToken ct)
+    {
+        await _gmailService.UnstarEmailAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã bỏ gắn sao email."));
+    }
+
     [HttpDelete("{id}")]
     public async Task<ActionResult<ApiResponse<bool>>> TrashEmail(string id, CancellationToken ct)
     {
@@ -64,7 +80,7 @@ public class EmailOpsController : ControllerBase
         var email = await _gmailService.GetEmailByIdAsync(id, ct);
         if (email == null) return NotFound(ApiResponse<bool>.Fail("Không tìm thấy email."));
 
-        var draftId = await _gmailService.CreateDraftAsync(email.From, $"Re: {email.Subject}", request.Body, email.ThreadId, ct);
+        var draftId = await _gmailService.CreateDraftAsync(email.From, $"Re: {email.Subject}", request.Body, email.ThreadId, null, null, ct);
         await _gmailService.SendDraftAsync(draftId, ct);
         
         return Ok(ApiResponse<bool>.Ok(true, "Đã gửi phản hồi."));
@@ -86,7 +102,7 @@ public class EmailOpsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.To))
             return BadRequest(ApiResponse<bool>.Fail("Địa chỉ người nhận không được để trống."));
 
-        var draftId = await _gmailService.CreateDraftAsync(request.To, request.Subject ?? string.Empty, request.Body ?? string.Empty, null, ct);
+        var draftId = await _gmailService.CreateDraftAsync(request.To, request.Subject ?? string.Empty, request.Body ?? string.Empty, null, request.Cc, request.Bcc, ct);
         await _gmailService.SendDraftAsync(draftId, ct);
         return Ok(ApiResponse<bool>.Ok(true, "Đã gửi email thành công."));
     }
@@ -253,6 +269,8 @@ public class ReplyEmailRequest
 public class SendEmailRequest
 {
     public string To { get; set; } = string.Empty;
+    public string? Cc { get; set; }
+    public string? Bcc { get; set; }
     public string Subject { get; set; } = string.Empty;
     public string Body { get; set; } = string.Empty;
 }
