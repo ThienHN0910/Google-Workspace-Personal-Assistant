@@ -6,7 +6,7 @@
         <p class="subtitle">Chào mừng trở lại, {{ authStore.user?.displayName || 'Admin' }} 👋</p>
       </div>
       <div class="header-actions">
-        <router-link to="/email" class="quick-btn btn-primary"><i class="pi pi-envelope"></i> Soạn Email</router-link>
+        <button @click="showComposeModal = true" class="quick-btn btn-primary"><i class="pi pi-envelope"></i> Soạn Email</button>
         <router-link to="/tasks" class="quick-btn btn-secondary"><i class="pi pi-check-square"></i> Thêm Task</router-link>
         <div class="status-chip">
           <span class="pulse-dot"></span>
@@ -36,6 +36,17 @@
         <div class="stat-val" :class="{ warning: summary.unreadEmails > 0 }">{{ summary.unreadEmails }}</div>
         <router-link v-if="summary.unreadEmails > 0" to="/email" class="card-footer link">Đọc ngay ➔</router-link>
         <div v-else class="card-footer">Inbox Zero!</div>
+      </div>
+
+      <!-- UC02 AI Drafts Pending -->
+      <div class="bento-card" :class="{ 'has-action': (summary.pendingDraftsCount || 0) > 0 }">
+        <div class="card-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">
+          <i class="pi pi-sparkles"></i>
+        </div>
+        <div class="card-title">Bản nháp AI chờ duyệt</div>
+        <div class="stat-val" :class="{ warning: (summary.pendingDraftsCount || 0) > 0 }">{{ summary.pendingDraftsCount || 0 }}</div>
+        <router-link v-if="(summary.pendingDraftsCount || 0) > 0" to="/email" class="card-footer link">Duyệt ngay ➔</router-link>
+        <div v-else class="card-footer">UC02 AI Drafts</div>
       </div>
 
       <!-- UC04 Monthly Finance Net -->
@@ -90,6 +101,35 @@
         </div>
       </div>
 
+      <!-- Middle Column: AI Drafts Quick Review (UC02) -->
+      <div class="feed-section">
+        <div class="feed-header-row">
+          <h2>✨ Bản nháp AI chờ duyệt</h2>
+          <router-link to="/email" class="sub-link">Tất cả</router-link>
+        </div>
+        <div v-if="loadingQuickDrafts" class="empty-feed">
+          <LoadingSpinner text="Đang tải bản nháp..." />
+        </div>
+        <div v-else-if="quickDrafts.length === 0" class="empty-feed">
+          <i class="pi pi-sparkles"></i> Tuyệt vời! Không có bản nháp AI nào cần duyệt.
+        </div>
+        <div v-else class="quick-drafts-list">
+          <div v-for="d in quickDrafts" :key="d.id" class="quick-draft-card">
+            <div class="qd-sender">{{ d.originalEmail?.from || 'Người gửi' }}</div>
+            <div class="qd-subject">{{ d.originalEmail?.subject || '(Không có tiêu đề)' }}</div>
+            <div class="qd-snippet">{{ d.draftContent?.substring(0, 90) }}...</div>
+            <div class="qd-actions">
+              <button class="btn-qd-approve" @click="quickApprove(d.id, d.draftContent)">
+                <i class="pi pi-check"></i> Duyệt nhanh
+              </button>
+              <button class="btn-qd-reject" @click="quickReject(d.id)" title="Từ chối">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Right Column: Today's Tasks -->
       <div class="feed-section">
         <h2>✅ Việc cần làm hôm nay</h2>
@@ -113,6 +153,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Compose Email Modal -->
+    <ComposeEmailModal
+      v-if="showComposeModal"
+      @close="showComposeModal = false"
+      @sent="fetchSummary"
+    />
   </div>
 </template>
 
@@ -120,8 +167,10 @@
 import { ref, onMounted, defineAsyncComponent } from 'vue';
 import { useAuthStore } from '@/stores/auth.store';
 import api from '@/services/api.service';
+import { showToast } from '@/services/notification.service';
 
 const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
+const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
 
 const authStore = useAuthStore();
 const summary = ref({
@@ -131,7 +180,13 @@ const summary = ref({
   monthlyExpense: 0,
   monthlyNetBalance: 0,
   activeAlerts: 0,
+  pendingDraftsCount: 0,
+  pendingSchedulesCount: 0,
 });
+
+const showComposeModal = ref(false);
+const quickDrafts = ref<any[]>([]);
+const loadingQuickDrafts = ref(false);
 
 const tasks = ref<any[]>([]);
 const loadingTasks = ref(true);
@@ -152,10 +207,69 @@ const fetchSummary = async () => {
   try {
     const res: any = await api.get('/dashboard/summary');
     if (res.success && res.data) {
-      summary.value = res.data;
+      summary.value = {
+        ...summary.value,
+        ...res.data,
+      };
     }
   } catch (e) {
     console.error('Failed to load dashboard summary:', e);
+  }
+};
+
+const fetchQuickDrafts = async () => {
+  loadingQuickDrafts.value = true;
+  try {
+    const res: any = await api.get('/emailops/drafts/pending?page=1&pageSize=3');
+    if (res.success && res.data) {
+      quickDrafts.value = res.data.items || [];
+    }
+  } catch (err) {
+    console.error('Failed to load quick drafts:', err);
+  } finally {
+    loadingQuickDrafts.value = false;
+  }
+};
+
+const quickApprove = async (id: string, content: string) => {
+  try {
+    const res: any = await api.post(`/emailops/drafts/${id}/approve`, { customContent: content });
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đã phê duyệt nháp',
+        detail: 'Bản nháp phản hồi đã được lưu trên Gmail.',
+      });
+      quickDrafts.value = quickDrafts.value.filter(d => d.id !== id);
+      fetchSummary();
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: err.message || 'Không thể phê duyệt bản nháp.',
+    });
+  }
+};
+
+const quickReject = async (id: string) => {
+  try {
+    const res: any = await api.post(`/emailops/drafts/${id}/reject`, { reason: 'Từ chối từ Dashboard' });
+    if (res.success) {
+      showToast({
+        severity: 'info',
+        summary: 'Đã từ chối',
+        detail: 'Bản nháp AI đã bị từ chối.',
+      });
+      quickDrafts.value = quickDrafts.value.filter(d => d.id !== id);
+      fetchSummary();
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: err.message || 'Không thể từ chối bản nháp.',
+    });
   }
 };
 
@@ -164,7 +278,6 @@ const fetchTasks = async () => {
   try {
     const res: any = await api.get('/tasks');
     if (res.success && res.data) {
-      // Chỉ lấy task chưa hoàn thành
       tasks.value = res.data.filter((t: any) => t.status !== 'completed');
     }
   } catch (e) {
@@ -176,6 +289,7 @@ const fetchTasks = async () => {
 
 onMounted(() => {
   fetchSummary();
+  fetchQuickDrafts();
   fetchTasks();
 });
 </script>
@@ -342,12 +456,8 @@ onMounted(() => {
 /* Feeds Grid */
 .feeds-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
-  
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
 }
 
 .feed-section {
@@ -356,11 +466,96 @@ onMounted(() => {
   border-radius: 1.25rem;
   padding: 1.5rem;
 
+  .feed-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+
+    h2 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0;
+    }
+
+    .sub-link {
+      font-size: 0.8rem;
+      color: #818cf8;
+      text-decoration: none;
+      font-weight: 600;
+      &:hover { text-decoration: underline; }
+    }
+  }
+
   h2 {
     font-size: 1.125rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
     color: #f8fafc;
+  }
+}
+
+.quick-drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.quick-draft-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+
+  .qd-sender {
+    font-size: 0.8rem;
+    color: #818cf8;
+    font-weight: 600;
+  }
+
+  .qd-subject {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin: 0.2rem 0;
+  }
+
+  .qd-snippet {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 0.75rem;
+  }
+
+  .qd-actions {
+    display: flex;
+    gap: 0.5rem;
+
+    .btn-qd-approve {
+      background: #10b981;
+      color: #fff;
+      border: none;
+      border-radius: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      &:hover { background: #059669; }
+    }
+
+    .btn-qd-reject {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: none;
+      border-radius: 0.4rem;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      &:hover { background: rgba(239, 68, 68, 0.3); }
+    }
   }
 }
 

@@ -24,7 +24,9 @@ public class GetPendingBankEmailsQueryHandler : IQueryHandler<GetPendingBankEmai
     }
 }
 
-public record SyncBankTransactionsCommand(string Domain, string BankName, string SpreadsheetId) : ICommand<int>;
+public record BankSyncTarget(string Domain, string BankName);
+
+public record SyncBankTransactionsCommand(string? Domain, string? BankName, string SpreadsheetId, List<BankSyncTarget>? Targets = null) : ICommand<int>;
 
 public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransactionsCommand, int>
 {
@@ -53,56 +55,69 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
 
     public async Task<int> HandleAsync(SyncBankTransactionsCommand command, CancellationToken ct = default)
     {
-        var emails = await _gmailService.GetEmailsAsync($"from:{command.Domain} is:unread", 20, ct);
-        if (emails == null || !emails.Any()) return 0;
-
-        var batchContentBuilder = new System.Text.StringBuilder();
-        foreach (var email in emails)
+        var syncTargets = new List<BankSyncTarget>();
+        if (command.Targets != null && command.Targets.Any())
         {
-            batchContentBuilder.AppendLine($"--- EMAIL ID: {email.Id} ---");
-            batchContentBuilder.AppendLine(email.Body ?? email.Snippet);
+            syncTargets.AddRange(command.Targets);
+        }
+        else if (!string.IsNullOrEmpty(command.Domain) && !string.IsNullOrEmpty(command.BankName))
+        {
+            syncTargets.Add(new BankSyncTarget(command.Domain, command.BankName));
         }
 
-        var batchResult = await _aiService.ParseBatchTransactionEmailsAsync(batchContentBuilder.ToString(), command.BankName, ct);
-        if (batchResult == null || !batchResult.Any()) return 0;
+        if (!syncTargets.Any()) return 0;
 
-        int processed = 0;
-        foreach (var aiResult in batchResult)
+        int totalProcessed = 0;
+        foreach (var target in syncTargets)
         {
-            if (string.IsNullOrEmpty(aiResult.EmailId)) continue;
+            var emails = await _gmailService.GetEmailsAsync($"from:{target.Domain} is:unread", 20, ct);
+            if (emails == null || !emails.Any()) continue;
 
-            var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
-                ? TransactionType.Credit
-                : TransactionType.Debit;
-
-            var transaction = new Transaction
+            var batchContentBuilder = new System.Text.StringBuilder();
+            foreach (var email in emails)
             {
-                SourceEmailId = aiResult.EmailId,
-                TransactionDate = aiResult.TransactionDate,
-                BankName = command.BankName,
-                TransactionType = transactionType,
-                Amount = aiResult.Amount,
-                FeeAmount = aiResult.FeeAmount,
-                TransactionCode = aiResult.TransactionCode,
-                SourceAccount = aiResult.SourceAccount,
-                TargetAccount = aiResult.TargetAccount,
-                BeneficiaryName = aiResult.BeneficiaryName,
-                Currency = "VND",
-                Description = aiResult.Description,
-                Category = aiResult.Category,
-                BalanceAfter = aiResult.BalanceAfter,
-                IsAutoRead = true
-            };
+                batchContentBuilder.AppendLine($"--- EMAIL ID: {email.Id} ---");
+                batchContentBuilder.AppendLine(email.Body ?? email.Snippet);
+            }
 
-            var saved = await _transactionRepo.CreateAsync(transaction, ct);
+            var batchResult = await _aiService.ParseBatchTransactionEmailsAsync(batchContentBuilder.ToString(), target.BankName, ct);
+            if (batchResult == null || !batchResult.Any()) continue;
 
-            await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
+            foreach (var aiResult in batchResult)
+            {
+                if (string.IsNullOrEmpty(aiResult.EmailId)) continue;
 
-            await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
-            processed++;
+                var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
+                    ? TransactionType.Credit
+                    : TransactionType.Debit;
+
+                var transaction = new Transaction
+                {
+                    SourceEmailId = aiResult.EmailId,
+                    TransactionDate = aiResult.TransactionDate,
+                    BankName = target.BankName,
+                    TransactionType = transactionType,
+                    Amount = aiResult.Amount,
+                    FeeAmount = aiResult.FeeAmount,
+                    TransactionCode = aiResult.TransactionCode,
+                    SourceAccount = aiResult.SourceAccount,
+                    TargetAccount = aiResult.TargetAccount,
+                    BeneficiaryName = aiResult.BeneficiaryName,
+                    Currency = "VND",
+                    Description = aiResult.Description,
+                    Category = aiResult.Category,
+                    BalanceAfter = aiResult.BalanceAfter,
+                    IsAutoRead = true
+                };
+
+                var saved = await _transactionRepo.CreateAsync(transaction, ct);
+                await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
+                await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
+                totalProcessed++;
+            }
         }
 
-        return processed;
+        return totalProcessed;
     }
 
     private async Task SyncToMonthlyGoogleSheetAsync(Transaction saved, string? customSpreadsheetId, CancellationToken ct)
@@ -442,5 +457,33 @@ public class UpdateFinanceConfigCommandHandler : ICommandHandler<UpdateFinanceCo
                 Value = value
             }, ct);
         }
+    }
+}
+
+public record FinanceMonthlySummaryDto(decimal TotalIncome, decimal TotalExpense, decimal NetBalance, int TotalTransactions);
+
+public record GetMonthlyFinanceSummaryQuery(int? Year = null, int? Month = null) : IQuery<FinanceMonthlySummaryDto>;
+
+public class GetMonthlyFinanceSummaryQueryHandler : IQueryHandler<GetMonthlyFinanceSummaryQuery, FinanceMonthlySummaryDto>
+{
+    private readonly IRepository<Transaction> _transactionRepo;
+
+    public GetMonthlyFinanceSummaryQueryHandler(IRepository<Transaction> transactionRepo)
+    {
+        _transactionRepo = transactionRepo;
+    }
+
+    public async Task<FinanceMonthlySummaryDto> HandleAsync(GetMonthlyFinanceSummaryQuery query, CancellationToken ct = default)
+    {
+        var targetYear = query.Year ?? DateTime.UtcNow.Year;
+        var targetMonth = query.Month ?? DateTime.UtcNow.Month;
+        var startDate = new DateTime(targetYear, targetMonth, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = startDate.AddMonths(1);
+
+        var transactions = await _transactionRepo.FindAsync(t => t.TransactionDate >= startDate && t.TransactionDate < endDate, ct);
+        var totalIncome = transactions.Where(t => t.TransactionType == TransactionType.Credit).Sum(t => t.Amount);
+        var totalExpense = transactions.Where(t => t.TransactionType == TransactionType.Debit).Sum(t => t.Amount);
+
+        return new FinanceMonthlySummaryDto(totalIncome, totalExpense, totalIncome - totalExpense, transactions.Count);
     }
 }

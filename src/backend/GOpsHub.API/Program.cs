@@ -1,5 +1,5 @@
 using System.Text;
-using GOpsHub.API.Hubs;
+using GOpsHub.Infrastructure.Alerting;
 using GOpsHub.API.Middleware;
 using GOpsHub.Application;
 using GOpsHub.Infrastructure;
@@ -130,7 +130,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.MapControllers();
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<GOpsHub.Infrastructure.Alerting.NotificationHub>("/hubs/notifications");
 
 app.Run();
 

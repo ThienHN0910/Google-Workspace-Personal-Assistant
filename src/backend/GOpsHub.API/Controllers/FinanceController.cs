@@ -64,6 +64,16 @@ public class FinanceController : ControllerBase
     }
 
     /// <summary>
+    /// Get monthly income, expense and net summary
+    /// </summary>
+    [HttpGet("summary-month")]
+    public async Task<ActionResult<ApiResponse<FinanceMonthlySummaryDto>>> GetMonthlySummary([FromQuery] int? year = null, [FromQuery] int? month = null)
+    {
+        var summary = await _dispatcher.QueryAsync(new GetMonthlyFinanceSummaryQuery(year, month));
+        return Ok(ApiResponse<FinanceMonthlySummaryDto>.Ok(summary));
+    }
+
+    /// <summary>
     /// Get Google Drive & Sheets export configuration
     /// </summary>
     [HttpGet("config")]

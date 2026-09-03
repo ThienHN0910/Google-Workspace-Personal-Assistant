@@ -200,3 +200,45 @@ public class UpdateDriveGuardIntervalCommandHandler : ICommandHandler<UpdateDriv
         return command.Minutes;
     }
 }
+
+public record DeleteMonitoredFolderCommand(string FolderId) : ICommand<bool>;
+
+public class DeleteMonitoredFolderCommandHandler : ICommandHandler<DeleteMonitoredFolderCommand, bool>
+{
+    private readonly IRepository<MonitoredFolder> _folderRepo;
+
+    public DeleteMonitoredFolderCommandHandler(IRepository<MonitoredFolder> folderRepo)
+    {
+        _folderRepo = folderRepo;
+    }
+
+    public async Task<bool> HandleAsync(DeleteMonitoredFolderCommand command, CancellationToken ct = default)
+    {
+        await _folderRepo.DeleteAsync(command.FolderId, ct);
+        return true;
+    }
+}
+
+public record ResolveSecurityAlertCommand(string AlertId, string? Note = null) : ICommand<bool>;
+
+public class ResolveSecurityAlertCommandHandler : ICommandHandler<ResolveSecurityAlertCommand, bool>
+{
+    private readonly IRepository<SecurityAlert> _alertRepo;
+
+    public ResolveSecurityAlertCommandHandler(IRepository<SecurityAlert> alertRepo)
+    {
+        _alertRepo = alertRepo;
+    }
+
+    public async Task<bool> HandleAsync(ResolveSecurityAlertCommand command, CancellationToken ct = default)
+    {
+        var alert = await _alertRepo.GetByIdAsync(command.AlertId, ct);
+        if (alert == null) return false;
+
+        alert.IsResolved = true;
+        alert.ResolvedAt = DateTime.UtcNow;
+        alert.ResolutionNote = command.Note ?? "Đã xử lý bởi quản trị viên.";
+        await _alertRepo.UpdateAsync(alert, ct);
+        return true;
+    }
+}

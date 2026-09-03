@@ -10,6 +10,8 @@ import 'primeicons/primeicons.css';
 import 'quill/dist/quill.snow.css'; // Required for PrimeVue Editor
 import '@/assets/styles/main.scss';
 
+import ToastService from 'primevue/toastservice';
+
 const app = createApp(App);
 
 app.use(createPinia());
@@ -22,5 +24,6 @@ app.use(PrimeVue, {
     },
   },
 });
+app.use(ToastService);
 
 app.mount('#app');

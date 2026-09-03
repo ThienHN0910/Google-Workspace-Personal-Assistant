@@ -9,12 +9,28 @@
         <button class="btn-config" @click="showConfigPanel = !showConfigPanel">
           ⚙️ Cấu hình Drive & Sheets
         </button>
-        <button class="btn-sync" @click="syncVPBank" :disabled="syncState.isSyncing">
-          <span v-if="!syncState.isSyncing">🔄 Đồng bộ VPBank</span>
-          <span v-else>⏳ Đang nhờ AI phân tích...</span>
-        </button>
+        <div class="sync-controls">
+          <select v-model="selectedBank" class="bank-select" :disabled="syncState.isSyncing">
+            <option v-for="opt in bankOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <button class="btn-sync" @click="syncTransactions" :disabled="syncState.isSyncing">
+            <span v-if="!syncState.isSyncing"><i class="pi pi-sync"></i> Đồng bộ ngay</span>
+            <span v-else><i class="pi pi-spin pi-spinner"></i> Đang nhờ AI phân tích...</span>
+          </button>
+        </div>
       </div>
     </header>
+
+    <!-- Custom Bank Input Bar -->
+    <div v-if="selectedBank === 'CUSTOM'" class="custom-bank-bar card">
+      <div class="custom-bank-inputs">
+        <input v-model="customDomain" placeholder="Domain gửi thư (vd: custombank.com.vn)..." />
+        <input v-model="customBankName" placeholder="Tên ngân hàng (vd: MyBank)..." />
+      </div>
+      <span class="field-hint">Hệ thống sẽ lọc các thư chưa đọc từ domain này và nhờ AI phân tích giao dịch.</span>
+    </div>
 
     <!-- Config Panel -->
     <div v-if="showConfigPanel" class="config-panel card">
@@ -72,22 +88,24 @@
       <div class="card income">
         <i class="pi pi-arrow-up-right"></i>
         <div>
-          <span>Tổng Thu</span>
-          <h3>{{ formatCurrency(totalIncome) }}</h3>
+          <span>Tổng Thu (Tháng này)</span>
+          <h3>{{ formatCurrency(monthlySummary.totalIncome) }}</h3>
         </div>
       </div>
       <div class="card expense">
         <i class="pi pi-arrow-down-right"></i>
         <div>
-          <span>Tổng Chi</span>
-          <h3>{{ formatCurrency(totalExpense) }}</h3>
+          <span>Tổng Chi (Tháng này)</span>
+          <h3>{{ formatCurrency(monthlySummary.totalExpense) }}</h3>
         </div>
       </div>
       <div class="card balance">
         <i class="pi pi-wallet"></i>
         <div>
-          <span>Số dư</span>
-          <h3>{{ formatCurrency(totalIncome - totalExpense) }}</h3>
+          <span>Số dư ròng (Net)</span>
+          <h3 :class="{ positive: monthlySummary.netBalance >= 0, negative: monthlySummary.netBalance < 0 }">
+            {{ formatCurrency(monthlySummary.netBalance) }}
+          </h3>
         </div>
       </div>
     </div>
@@ -144,6 +162,7 @@
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import { showToast } from '@/services/notification.service';
 
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
@@ -154,6 +173,28 @@ const config = ref({
   folderId: '',
   fileNamePattern: 'BaoCaoTaiChinh_{yyyy_MM}',
   spreadsheetId: ''
+});
+
+const bankOptions = [
+  { label: '🔄 Tất cả ngân hàng (Khuyên dùng)', value: 'ALL', domain: '' },
+  { label: 'VPBank (vpb.com.vn)', value: 'VPB', domain: 'vpb.com.vn', bankName: 'VPBank' },
+  { label: 'Vietcombank (vietcombank.com.vn)', value: 'VCB', domain: 'vietcombank.com.vn', bankName: 'Vietcombank' },
+  { label: 'Techcombank (techcombank.com.vn)', value: 'TCB', domain: 'techcombank.com.vn', bankName: 'Techcombank' },
+  { label: 'MB Bank (mbbank.com.vn)', value: 'MB', domain: 'mbbank.com.vn', bankName: 'MBBank' },
+  { label: 'TPBank (tpb.com.vn)', value: 'TPB', domain: 'tpb.com.vn', bankName: 'TPBank' },
+  { label: 'MoMo (momo.vn)', value: 'MOMO', domain: 'momo.vn', bankName: 'MoMo' },
+  { label: '➕ Tùy chỉnh domain khác...', value: 'CUSTOM', domain: '' }
+];
+
+const selectedBank = ref('ALL');
+const customDomain = ref('');
+const customBankName = ref('');
+
+const monthlySummary = ref({
+  totalIncome: 0,
+  totalExpense: 0,
+  netBalance: 0,
+  totalTransactions: 0
 });
 
 const fetchConfig = async () => {
@@ -181,14 +222,26 @@ const saveConfig = async () => {
       SpreadsheetId: config.value.spreadsheetId
     });
     if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đã lưu',
+        detail: 'Cấu hình Google Drive & Sheets đã được lưu.',
+      });
       configStatusMsg.value = '✅ Đã lưu cấu hình thành công!';
       setTimeout(() => { configStatusMsg.value = ''; }, 3000);
     } else {
-      configStatusMsg.value = '❌ ' + (res.message || 'Lỗi khi lưu cấu hình');
+      showToast({
+        severity: 'error',
+        summary: 'Lỗi',
+        detail: res.message || 'Lỗi khi lưu cấu hình.',
+      });
     }
   } catch (e) {
-    console.error('Failed to save finance config:', e);
-    configStatusMsg.value = '❌ Lỗi kết nối khi lưu cấu hình';
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể lưu cấu hình Drive & Sheets.',
+    });
   } finally {
     savingConfig.value = false;
   }
@@ -201,27 +254,77 @@ const syncState = ref({
   isSyncing: false
 });
 
-const syncVPBank = async () => {
-  if (syncState.value.isSyncing) return;
-  
-  syncState.value.isSyncing = true;
-  
+const fetchMonthlySummary = async () => {
   try {
-    const res: any = await api.post('/finance/transactions/sync-batch', {
-      Domain: 'vpb.com.vn',
-      BankName: 'VPBank',
-      SpreadsheetId: config.value.spreadsheetId || ''
-    });
-    
-    if (res.success) {
-      alert(`Đồng bộ hoàn tất! (Xử lý ${res.data} giao dịch mới)`);
-      await fetchTransactions(1);
-    } else {
-      alert(res.message || "Lỗi khi đồng bộ.");
+    const res: any = await api.get('/finance/summary-month');
+    if (res.success && res.data) {
+      monthlySummary.value = res.data;
     }
-  } catch (e) {
-    console.error("Lỗi khi đồng bộ batch:", e);
-    alert("Có lỗi xảy ra trong quá trình đồng bộ (Có thể do lỗi mạng hoặc quota).");
+  } catch (err) {
+    console.error('Failed to load monthly finance summary:', err);
+  }
+};
+
+const syncTransactions = async () => {
+  if (syncState.value.isSyncing) return;
+  syncState.value.isSyncing = true;
+
+  try {
+    const payload: any = {
+      SpreadsheetId: config.value.spreadsheetId || ''
+    };
+
+    if (selectedBank.value === 'ALL') {
+      payload.Targets = [
+        { Domain: 'vpb.com.vn', BankName: 'VPBank' },
+        { Domain: 'vietcombank.com.vn', BankName: 'Vietcombank' },
+        { Domain: 'techcombank.com.vn', BankName: 'Techcombank' },
+        { Domain: 'mbbank.com.vn', BankName: 'MBBank' },
+        { Domain: 'tpb.com.vn', BankName: 'TPBank' },
+        { Domain: 'momo.vn', BankName: 'MoMo' },
+      ];
+    } else if (selectedBank.value === 'CUSTOM') {
+      if (!customDomain.value.trim()) {
+        showToast({
+          severity: 'warn',
+          summary: 'Thiếu domain',
+          detail: 'Vui lòng nhập domain email ngân hàng cần quét.',
+        });
+        syncState.value.isSyncing = false;
+        return;
+      }
+      payload.Domain = customDomain.value.trim();
+      payload.BankName = customBankName.value.trim() || 'Custom Bank';
+    } else {
+      const b = bankOptions.find(opt => opt.value === selectedBank.value);
+      if (b) {
+        payload.Domain = b.domain;
+        payload.BankName = b.bankName;
+      }
+    }
+
+    const res: any = await api.post('/finance/transactions/sync-batch', payload);
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đồng bộ hoàn tất',
+        detail: `Đã quét và đồng bộ ${res.data} giao dịch mới vào Google Sheets!`,
+      });
+      await fetchTransactions(1);
+      await fetchMonthlySummary();
+    } else {
+      showToast({
+        severity: 'error',
+        summary: 'Lỗi',
+        detail: res.message || 'Lỗi khi đồng bộ.',
+      });
+    }
+  } catch (e: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi đồng bộ',
+      detail: e.message || 'Có lỗi xảy ra trong quá trình đồng bộ.',
+    });
   } finally {
     syncState.value.isSyncing = false;
   }
@@ -264,16 +367,9 @@ const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 };
 
-const totalIncome = computed(() => {
-  return transactions.value.filter(t => t.transactionType === 0).reduce((sum, t) => sum + t.amount, 0);
-});
-
-const totalExpense = computed(() => {
-  return transactions.value.filter(t => t.transactionType === 1).reduce((sum, t) => sum + t.amount, 0);
-});
-
 onMounted(() => {
   fetchTransactions(1);
+  fetchMonthlySummary();
   fetchConfig();
 });
 </script>
@@ -290,7 +386,58 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
+
+.sync-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+
+  .bank-select {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f8fafc;
+    padding: 0.7rem 0.85rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+
+    &:focus {
+      border-color: #6366f1;
+    }
+  }
+}
+
+.custom-bank-bar {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+  border-radius: 0.75rem;
+
+  .custom-bank-inputs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+
+    input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0.5rem;
+      padding: 0.6rem 0.85rem;
+      color: #f8fafc;
+      font-size: 0.85rem;
+      &:focus { outline: none; border-color: #6366f1; }
+    }
+  }
+}
+
+.positive { color: #34d399; }
+.negative { color: #f87171; }
 
 .btn-config {
   background: rgba(255, 255, 255, 0.08);

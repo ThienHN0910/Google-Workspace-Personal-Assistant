@@ -54,6 +54,8 @@ public class DashboardController : ControllerBase
         var totalExpense = monthTransactions.Where(x => x.TransactionType == Domain.Enums.TransactionType.Debit).Sum(x => x.Amount);
 
         var activeAlerts = await _alertRepo.CountAsync(x => !x.IsResolved, ct);
+        var pendingDrafts = await _draftRepo.CountAsync(x => x.Status == Domain.Enums.DraftStatus.Pending, ct);
+        var pendingSchedules = await _scheduleRepo.CountAsync(x => x.Status == Domain.Enums.ScheduleStatus.PendingConfirm, ct);
 
         return Ok(ApiResponse<object>.Ok(new
         {
@@ -62,7 +64,9 @@ public class DashboardController : ControllerBase
             MonthlyIncome = totalIncome,
             MonthlyExpense = totalExpense,
             MonthlyNetBalance = totalIncome - totalExpense,
-            ActiveAlerts = activeAlerts
+            ActiveAlerts = activeAlerts,
+            PendingDraftsCount = pendingDrafts,
+            PendingSchedulesCount = pendingSchedules
         }));
     }
 }

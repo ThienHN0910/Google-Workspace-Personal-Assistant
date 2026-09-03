@@ -65,6 +65,17 @@ public class TasksController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true, "Đã đánh dấu Task chưa hoàn thành."));
     }
 
+    [HttpPut("{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> UpdateTask(string id, [FromBody] UpdateTaskRequest request, CancellationToken ct)
+    {
+        var listId = await _tasksService.GetDefaultTaskListAsync(ct);
+        if (string.IsNullOrEmpty(listId))
+            return BadRequest(ApiResponse<bool>.Fail("Không tìm thấy Task List."));
+
+        await _tasksService.UpdateTaskAsync(listId, id, request.Title, request.Notes, request.Due, request.Status, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã cập nhật Task thành công."));
+    }
+
     [HttpDelete("{id}")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteTask(string id, CancellationToken ct)
     {
@@ -85,4 +96,12 @@ public class CreateTaskRequest
     public DateTime? CalendarStartTime { get; set; }
     public DateTime? CalendarEndTime { get; set; }
     public bool IsPublic { get; set; } = true;
+}
+
+public class UpdateTaskRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public DateTime? Due { get; set; }
+    public string? Status { get; set; }
 }

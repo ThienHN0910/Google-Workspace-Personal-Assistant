@@ -100,6 +100,26 @@ public class SchedulingController : ControllerBase
 
         return Ok(ApiResponse<string>.Ok(eventId, "Đã tạo sự kiện thành công."));
     }
+
+    /// <summary>
+    /// Update an existing calendar event
+    /// </summary>
+    [HttpPut("events/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> UpdateEvent(string id, [FromBody] UpdateEventRequest request, CancellationToken ct)
+    {
+        await _calendarService.UpdateEventAsync(id, request.Title, request.Start, request.End, request.Location, request.Description, request.IsPublic, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã cập nhật sự kiện thành công."));
+    }
+
+    /// <summary>
+    /// Delete a calendar event
+    /// </summary>
+    [HttpDelete("events/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteEvent(string id, CancellationToken ct)
+    {
+        await _calendarService.DeleteEventAsync(id, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã xóa sự kiện thành công."));
+    }
 }
 
 public class CreateEventRequest
@@ -110,5 +130,15 @@ public class CreateEventRequest
     public string? Location { get; set; }
     public string? Description { get; set; }
     public bool CreateTask { get; set; }
+    public bool IsPublic { get; set; } = true;
+}
+
+public class UpdateEventRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public DateTime Start { get; set; }
+    public DateTime? End { get; set; }
+    public string? Location { get; set; }
+    public string? Description { get; set; }
     public bool IsPublic { get; set; } = true;
 }

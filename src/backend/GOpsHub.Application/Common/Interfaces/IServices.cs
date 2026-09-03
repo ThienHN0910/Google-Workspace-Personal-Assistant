@@ -60,6 +60,7 @@ public class AIBatchTransactionResult : AITransactionResult
 public interface ICalendarService
 {
     Task<string> CreateEventAsync(string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default);
+    Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default);
     Task DeleteEventAsync(string eventId, CancellationToken ct = default);
     Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, CancellationToken ct = default);
     Task<IReadOnlyList<CalendarEvent>> GetEventsAsync(DateTime? timeMin = null, DateTime? timeMax = null, CancellationToken ct = default);
@@ -73,6 +74,7 @@ public class CalendarEvent
     public DateTime Start { get; set; }
     public DateTime? End { get; set; }
     public string? Location { get; set; }
+    public string? Description { get; set; }
     public string HtmlLink { get; set; } = string.Empty;
     public string Visibility { get; set; } = "default";
 }

@@ -35,7 +35,12 @@
               <span class="folder-name">{{ f.folderName }}</span>
               <span class="folder-id">ID: {{ f.googleFolderId }}</span>
             </div>
-            <span class="status-badge active"><i class="pi pi-eye"></i> Đang theo dõi</span>
+            <div class="folder-actions">
+              <span class="status-badge active"><i class="pi pi-eye"></i> Đang theo dõi</span>
+              <button class="btn-delete-folder" @click="handleDeleteFolder(f.id)" title="Xóa thư mục khỏi theo dõi">
+                <i class="pi pi-trash"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -54,6 +59,9 @@
             <div class="alert-actions">
               <button class="quarantine-btn" @click="handleQuarantine(a.fileId)">
                 <i class="pi pi-shield"></i> Cách ly vào Quarantine Folder
+              </button>
+              <button class="resolve-btn" @click="handleResolveAlert(a.id)">
+                <i class="pi pi-check"></i> Đã xử lý
               </button>
             </div>
           </div>
@@ -81,6 +89,7 @@
 <script setup lang="ts">
 import { ref, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
+import { showToast } from '@/services/notification.service';
 
 const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
@@ -157,13 +166,43 @@ const addFolder = async () => {
     const res: any = await api.post('/driveguard/folders', newFolder.value);
     if (res.success) {
       newFolder.value = { folderName: '', googleFolderId: '' };
+      showToast({
+        severity: 'success',
+        summary: 'Thành công',
+        detail: 'Đã thêm thư mục vào danh sách theo dõi an ninh.',
+      });
       fetchData();
-      alert('Đã thêm thư mục theo dõi!');
     }
   } catch (e) {
-    alert('Lỗi thêm thư mục. Vui lòng kiểm tra lại.');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể thêm thư mục. Vui lòng kiểm tra lại Google Folder ID.',
+    });
   } finally {
     addingFolder.value = false;
+  }
+};
+
+const handleDeleteFolder = async (folderId: string) => {
+  if (!confirm('Bạn có chắc chắn muốn hủy theo dõi thư mục này?')) return;
+
+  try {
+    const res: any = await api.delete(`/driveguard/folders/${folderId}`);
+    if (res.success) {
+      showToast({
+        severity: 'info',
+        summary: 'Đã xóa',
+        detail: 'Đã dừng theo dõi thư mục này.',
+      });
+      folders.value = folders.value.filter(f => f.id !== folderId);
+    }
+  } catch (e) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể xóa thư mục theo dõi.',
+    });
   }
 };
 
@@ -172,10 +211,18 @@ const updateInterval = async () => {
   try {
     const res: any = await api.post('/driveguard/interval', { minutes: intervalMinutes.value });
     if (res.success) {
-      alert('Đã cập nhật chu kỳ quét thành công! Hệ thống sẽ quét theo lịch mới.');
+      showToast({
+        severity: 'success',
+        summary: 'Đã cập nhật',
+        detail: `Hệ thống sẽ quét Google Drive định kỳ mỗi ${intervalMinutes.value} phút.`,
+      });
     }
   } catch (e) {
-    alert('Lỗi cập nhật cấu hình.');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể cập nhật chu kỳ quét.',
+    });
   } finally {
     updatingInterval.value = false;
   }
@@ -188,11 +235,41 @@ const handleQuarantine = async (fileId: string) => {
       quarantineFolderId: 'QUARANTINE_DEFAULT_FOLDER_ID'
     });
     if (res.success) {
-      alert('Đã cách ly file!');
+      showToast({
+        severity: 'warn',
+        summary: 'Đã cách ly file',
+        detail: 'File nguy hiểm đã được chuyển vào khu vực cách ly an toàn.',
+      });
       fetchData();
     }
   } catch (e) {
-    alert('Lỗi cách ly file');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi cách ly',
+      detail: 'Không thể di chuyển file vào thư mục cách ly.',
+    });
+  }
+};
+
+const handleResolveAlert = async (alertId: string) => {
+  try {
+    const res: any = await api.post(`/driveguard/alerts/${alertId}/resolve`, {
+      note: 'Đã xử lý bởi quản trị viên.'
+    });
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đã xử lý',
+        detail: 'Cảnh báo an ninh đã được đánh dấu là đã giải quyết.',
+      });
+      alerts.value = alerts.value.filter(a => a.id !== alertId);
+    }
+  } catch (e) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể cập nhật trạng thái cảnh báo.',
+    });
   }
 };
 
@@ -308,6 +385,22 @@ onMounted(fetchData);
 
   .folder-name { font-weight: 700; color: #f8fafc; margin-right: 1rem; }
   .folder-id { font-size: 0.85rem; color: #94a3b8; font-family: monospace; }
+
+  .folder-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    .btn-delete-folder {
+      background: none;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      padding: 0.35rem 0.6rem;
+      border-radius: 0.35rem;
+      cursor: pointer;
+      &:hover { background: rgba(239, 68, 68, 0.15); }
+    }
+  }
 }
 
 .status-badge.active {
@@ -335,6 +428,12 @@ onMounted(fetchData);
 
 .reason { font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.75rem; }
 
+.alert-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .quarantine-btn {
   background: #ef4444;
   color: #fff;
@@ -348,6 +447,21 @@ onMounted(fetchData);
   gap: 0.35rem;
   font-size: 0.85rem;
   &:hover { background: #dc2626; }
+}
+
+.resolve-btn {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  &:hover { background: rgba(16, 185, 129, 0.25); }
 }
 
 .log-item {

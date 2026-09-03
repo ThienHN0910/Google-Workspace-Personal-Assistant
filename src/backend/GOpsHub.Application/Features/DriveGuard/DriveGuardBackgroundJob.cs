@@ -13,19 +13,22 @@ public class DriveGuardBackgroundJob
     private readonly IRepository<SecurityAlert> _alertRepo;
     private readonly IDriveService _driveService;
     private readonly ILogger<DriveGuardBackgroundJob> _logger;
+    private readonly INotificationService _notificationService;
 
     public DriveGuardBackgroundJob(
         IRepository<MonitoredFolder> folderRepo,
         IRepository<DriveAuditLog> logRepo,
         IRepository<SecurityAlert> alertRepo,
         IDriveService driveService,
-        ILogger<DriveGuardBackgroundJob> logger)
+        ILogger<DriveGuardBackgroundJob> logger,
+        INotificationService notificationService)
     {
         _folderRepo = folderRepo;
         _logRepo = logRepo;
         _alertRepo = alertRepo;
         _driveService = driveService;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task RunAuditAsync(CancellationToken ct)
@@ -75,6 +78,11 @@ public class DriveGuardBackgroundJob
                         };
                         await _alertRepo.CreateAsync(alert, ct);
                         _logger.LogWarning("Security Alert: Suspicious file detected: {FileName}", file.Name);
+                        await _notificationService.SendNotificationAsync(
+                            "🚨 Cảnh báo an ninh Drive Guard",
+                            $"Phát hiện file nguy hiểm ({ext}): {file.Name} tại thư mục {folder.FolderName}.",
+                            "critical",
+                            ct);
                     }
                 }
 
