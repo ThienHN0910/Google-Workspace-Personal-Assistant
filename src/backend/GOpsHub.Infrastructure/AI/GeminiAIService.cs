@@ -12,13 +12,15 @@ public class GeminiAIService : IAIService
     private readonly string? _apiKey;
     private readonly string _model;
     private readonly ILogger<GeminiAIService> _logger;
+    private readonly GeminiRateLimiter _rateLimiter;
 
-    public GeminiAIService(IConfiguration configuration, ILogger<GeminiAIService> logger)
+    public GeminiAIService(IConfiguration configuration, ILogger<GeminiAIService> logger, GeminiRateLimiter rateLimiter)
     {
         _httpClient = new HttpClient();
         _apiKey = configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"];
         _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.6-flash-lite";
         _logger = logger;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<AIReplyResult> GenerateEmailReplyAsync(string emailContent, string language = "vi", string? templateHint = null, CancellationToken ct = default)
@@ -251,6 +253,8 @@ Chỉ trả về JSON array hợp lệ.";
             _logger.LogWarning("Gemini API key is not configured. Returning fallback response.");
             return "Cảm ơn bạn đã gửi email. Tôi đã nhận được thông tin và sẽ phản hồi sớm nhất.";
         }
+
+        await _rateLimiter.WaitForSlotAsync(ct);
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
 

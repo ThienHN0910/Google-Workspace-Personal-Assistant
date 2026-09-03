@@ -18,6 +18,10 @@
             <button class="btn-small" @click="updateInterval" :disabled="updatingInterval">
               {{ updatingInterval ? 'Đang lưu...' : 'Áp dụng' }}
             </button>
+            <button class="btn-scan-now" @click="handleScanNow" :disabled="scanningNow">
+              <i class="pi" :class="scanningNow ? 'pi-spin pi-spinner' : 'pi-sync'"></i>
+              {{ scanningNow ? 'Đang quét...' : 'Quét ngay' }}
+            </button>
           </div>
         </div>
         
@@ -231,6 +235,30 @@ const updateInterval = async () => {
   }
 };
 
+const scanningNow = ref(false);
+const handleScanNow = async () => {
+  scanningNow.value = true;
+  try {
+    const res: any = await api.post('/driveguard/audit/run', {});
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Hoàn thành quét',
+        detail: res.message || 'Đã kiểm tra xong biến động thư mục Google Drive.',
+      });
+      fetchData();
+    }
+  } catch (e: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: e.message || 'Không thể thực hiện quét ngay.',
+    });
+  } finally {
+    scanningNow.value = false;
+  }
+};
+
 const handleQuarantine = async (fileId: string) => {
   try {
     const res: any = await api.post('/driveguard/quarantine', {
@@ -361,6 +389,23 @@ onMounted(fetchData);
   font-weight: 600;
   cursor: pointer;
   &:hover:not(:disabled) { background: #059669; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.btn-scan-now {
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #a5b4fc;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s;
+  &:hover:not(:disabled) { background: #6366f1; color: #fff; }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 

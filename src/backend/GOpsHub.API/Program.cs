@@ -123,10 +123,29 @@ using (var scope = app.Services.CreateScope())
     var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
     var interval = config != null && int.TryParse(config.Value, out int min) ? min : 5;
     
+    // 1. Drive Guard Audit Job (UC05 & UC06)
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
         "drive-guard-audit", 
         job => job.RunAuditAsync(CancellationToken.None), 
         $"*/{interval} * * * *");
+
+    // 2. Automated Inbox Zero Cleanup Job (UC01 - Every 6 hours)
+    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>(
+        "email-cleanup",
+        job => job.RunAutoCleanupAsync(CancellationToken.None),
+        "0 */6 * * *");
+
+    // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Every 15 minutes)
+    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>(
+        "bank-telemetry",
+        job => job.RunTelemetryAsync(CancellationToken.None),
+        "*/15 * * * *");
+
+    // 4. Smart Calendar Schedule Extractor Job (UC03 - Every hour)
+    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>(
+        "calendar-extractor",
+        job => job.RunScheduleExtractionAsync(CancellationToken.None),
+        "0 * * * *");
 }
 
 app.MapControllers();

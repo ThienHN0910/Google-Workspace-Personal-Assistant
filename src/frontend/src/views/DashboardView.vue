@@ -154,6 +154,9 @@
       </div>
     </div>
 
+    <!-- Background Automation Hub (UC01, UC03, UC04, UC05, UC06) -->
+    <BackgroundJobsPanel />
+
     <!-- Compose Email Modal -->
     <ComposeEmailModal
       v-if="showComposeModal"
@@ -171,6 +174,7 @@ import { showToast } from '@/services/notification.service';
 
 const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
 const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
+const BackgroundJobsPanel = defineAsyncComponent(() => import('@/components/common/BackgroundJobsPanel.vue'));
 
 const authStore = useAuthStore();
 const summary = ref({

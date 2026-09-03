@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\GOpsHub.Application\GOpsHub.Application.csproj" />
     <ProjectReference Include="..\GOpsHub.Domain\GOpsHub.Domain.csproj" />
+    <ProjectReference Include="..\GOpsHub.Infrastructure\GOpsHub.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
