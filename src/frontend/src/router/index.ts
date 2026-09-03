@@ -65,6 +65,11 @@ const routes = [
         name: 'DriveGuard',
         component: () => import('@/views/DriveGuardView.vue'),
       },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/SettingsView.vue'),
+      },
     ],
   },
 
