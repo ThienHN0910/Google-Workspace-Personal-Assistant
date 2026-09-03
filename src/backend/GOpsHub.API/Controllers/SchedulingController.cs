@@ -56,6 +56,16 @@ public class SchedulingController : ControllerBase
     }
 
     /// <summary>
+    /// Get all user calendars (UC03)
+    /// </summary>
+    [HttpGet("calendars")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CalendarListEntry>>>> GetCalendars(CancellationToken ct)
+    {
+        var calendars = await _calendarService.GetCalendarListAsync(ct);
+        return Ok(ApiResponse<IReadOnlyList<CalendarListEntry>>.Ok(calendars));
+    }
+
+    /// <summary>
     /// Get upcoming events from Google Calendar
     /// </summary>
     [HttpGet("upcoming")]
@@ -63,11 +73,12 @@ public class SchedulingController : ControllerBase
         [FromQuery] int days = 30,
         [FromQuery] DateTime? startDate = null,
         [FromQuery] DateTime? endDate = null,
+        [FromQuery] string? calendarId = "primary",
         CancellationToken ct = default)
     {
         DateTime minDate = startDate ?? DateTime.UtcNow.AddDays(-30);
         DateTime maxDate = endDate ?? DateTime.UtcNow.AddDays(days);
-        var events = await _calendarService.GetEventsAsync(minDate, maxDate, ct);
+        var events = await _calendarService.GetEventsAsync(minDate, maxDate, calendarId, ct);
         return Ok(ApiResponse<IReadOnlyList<CalendarEvent>>.Ok(events));
     }
 
@@ -77,7 +88,22 @@ public class SchedulingController : ControllerBase
     [HttpPost("manual")]
     public async Task<ActionResult<ApiResponse<string>>> CreateManualEvent([FromBody] CreateEventRequest request, [FromServices] ITasksService tasksService, CancellationToken ct)
     {
-        var eventId = await _calendarService.CreateEventAsync(request.Title, request.Start, request.End, request.Location, request.Description, request.IsPublic, ct);
+        var calendarId = string.IsNullOrWhiteSpace(request.CalendarId) ? "primary" : request.CalendarId;
+        var eventId = await _calendarService.CreateEventAsync(
+            request.Title, 
+            request.Start, 
+            request.End, 
+            request.Location, 
+            request.Description, 
+            request.IsPublic,
+            calendarId,
+            request.CreateMeetLink,
+            request.Attendees,
+            request.ColorId,
+            request.IsAllDay,
+            request.ReminderMinutes,
+            ct);
+
         if (string.IsNullOrEmpty(eventId))
             return BadRequest(ApiResponse<string>.Fail("Không thể tạo sự kiện. Hãy kiểm tra kết nối Google."));
 
@@ -88,7 +114,7 @@ public class SchedulingController : ControllerBase
                 var listId = await tasksService.GetDefaultTaskListAsync(ct);
                 if (!string.IsNullOrEmpty(listId))
                 {
-                    await tasksService.CreateTaskAsync(listId, request.Title, request.Description, request.Start, ct);
+                    await tasksService.CreateTaskAsync(listId, request.Title, request.Description, request.Start, null, false, ct);
                 }
             }
             catch (Exception ex)
@@ -107,7 +133,23 @@ public class SchedulingController : ControllerBase
     [HttpPut("events/{id}")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateEvent(string id, [FromBody] UpdateEventRequest request, CancellationToken ct)
     {
-        await _calendarService.UpdateEventAsync(id, request.Title, request.Start, request.End, request.Location, request.Description, request.IsPublic, ct);
+        var calendarId = string.IsNullOrWhiteSpace(request.CalendarId) ? "primary" : request.CalendarId;
+        await _calendarService.UpdateEventAsync(
+            id, 
+            request.Title, 
+            request.Start, 
+            request.End, 
+            request.Location, 
+            request.Description, 
+            request.IsPublic,
+            calendarId,
+            request.CreateMeetLink,
+            request.Attendees,
+            request.ColorId,
+            request.IsAllDay,
+            request.ReminderMinutes,
+            ct);
+
         return Ok(ApiResponse<bool>.Ok(true, "Đã cập nhật sự kiện thành công."));
     }
 
@@ -115,30 +157,42 @@ public class SchedulingController : ControllerBase
     /// Delete a calendar event
     /// </summary>
     [HttpDelete("events/{id}")]
-    public async Task<ActionResult<ApiResponse<bool>>> DeleteEvent(string id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteEvent(string id, [FromQuery] string? calendarId = "primary", CancellationToken ct = default)
     {
-        await _calendarService.DeleteEventAsync(id, ct);
+        await _calendarService.DeleteEventAsync(id, calendarId, ct);
         return Ok(ApiResponse<bool>.Ok(true, "Đã xóa sự kiện thành công."));
     }
 }
 
 public class CreateEventRequest
 {
+    public string? CalendarId { get; set; } = "primary";
     public string Title { get; set; } = string.Empty;
     public DateTime Start { get; set; }
     public DateTime? End { get; set; }
     public string? Location { get; set; }
     public string? Description { get; set; }
+    public bool CreateMeetLink { get; set; }
+    public List<string>? Attendees { get; set; }
+    public string? ColorId { get; set; }
+    public bool IsAllDay { get; set; }
+    public int? ReminderMinutes { get; set; }
     public bool CreateTask { get; set; }
     public bool IsPublic { get; set; } = true;
 }
 
 public class UpdateEventRequest
 {
+    public string? CalendarId { get; set; } = "primary";
     public string Title { get; set; } = string.Empty;
     public DateTime Start { get; set; }
     public DateTime? End { get; set; }
     public string? Location { get; set; }
     public string? Description { get; set; }
+    public bool CreateMeetLink { get; set; }
+    public List<string>? Attendees { get; set; }
+    public string? ColorId { get; set; }
+    public bool IsAllDay { get; set; }
+    public int? ReminderMinutes { get; set; }
     public bool IsPublic { get; set; } = true;
 }

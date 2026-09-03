@@ -9,7 +9,9 @@ public interface IGmailService
     Task TrashEmailAsync(string messageId, CancellationToken ct = default);
     Task ArchiveEmailAsync(string messageId, CancellationToken ct = default);
     Task MarkAsReadAsync(string messageId, CancellationToken ct = default);
-    Task<string> CreateDraftAsync(string to, string subject, string body, string? threadId = null, CancellationToken ct = default);
+    Task StarEmailAsync(string messageId, CancellationToken ct = default);
+    Task UnstarEmailAsync(string messageId, CancellationToken ct = default);
+    Task<string> CreateDraftAsync(string to, string subject, string body, string? threadId = null, string? cc = null, string? bcc = null, CancellationToken ct = default);
     Task SendDraftAsync(string draftId, CancellationToken ct = default);
     Task DeleteDraftAsync(string draftId, CancellationToken ct = default);
     Task<EmailMessage?> GetEmailByIdAsync(string messageId, CancellationToken ct = default);
@@ -29,11 +31,14 @@ public class EmailMessage
     public string ThreadId { get; set; } = string.Empty;
     public string From { get; set; } = string.Empty;
     public string To { get; set; } = string.Empty;
+    public string? Cc { get; set; }
+    public string? Bcc { get; set; }
     public string Subject { get; set; } = string.Empty;
     public string Snippet { get; set; } = string.Empty;
     public string? Body { get; set; }
     public DateTime ReceivedAt { get; set; }
     public bool IsRead { get; set; }
+    public bool IsStarred => Labels.Contains("STARRED");
     public List<string> Labels { get; set; } = new();
     public List<EmailAttachment> Attachments { get; set; } = new();
 }

@@ -31,12 +31,36 @@
 
       <form @submit.prevent="handleSend" class="compose-form">
         <div class="form-group">
-          <label>Người nhận (To) <span class="required">*</span></label>
+          <div class="field-label-row">
+            <label>Người nhận (To) <span class="required">*</span></label>
+            <div class="cc-bcc-toggles">
+              <button type="button" class="btn-toggle-field" :class="{ active: showCc }" @click="showCc = !showCc">Cc</button>
+              <button type="button" class="btn-toggle-field" :class="{ active: showBcc }" @click="showBcc = !showBcc">Bcc</button>
+            </div>
+          </div>
           <input
             v-model="form.to"
             type="email"
             placeholder="nguoinhan@example.com"
             required
+          />
+        </div>
+
+        <div v-if="showCc" class="form-group">
+          <label>Cc (Đồng kính gửi)</label>
+          <input
+            v-model="form.cc"
+            type="text"
+            placeholder="cc1@example.com, cc2@example.com"
+          />
+        </div>
+
+        <div v-if="showBcc" class="form-group">
+          <label>Bcc (Kính gửi ẩn danh)</label>
+          <input
+            v-model="form.bcc"
+            type="text"
+            placeholder="bcc1@example.com, bcc2@example.com"
           />
         </div>
 
@@ -82,10 +106,14 @@ const emit = defineEmits(['close', 'sent']);
 
 const form = ref({
   to: '',
+  cc: '',
+  bcc: '',
   subject: '',
   body: '',
 });
 
+const showCc = ref(false);
+const showBcc = ref(false);
 const showAiPrompt = ref(true);
 const aiPrompt = ref('');
 const generatingAi = ref(false);
@@ -134,6 +162,8 @@ const handleSend = async () => {
   try {
     const res: any = await api.post('/EmailOps/send', {
       To: form.value.to,
+      Cc: form.value.cc.trim() || undefined,
+      Bcc: form.value.bcc.trim() || undefined,
       Subject: form.value.subject,
       Body: form.value.body,
     });
@@ -310,6 +340,36 @@ const handleSend = async () => {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+
+    .field-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      .cc-bcc-toggles {
+        display: flex;
+        gap: 0.35rem;
+
+        .btn-toggle-field {
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: #94a3b8;
+          font-size: 0.75rem;
+          font-weight: 700;
+          padding: 0.15rem 0.45rem;
+          border-radius: 0.3rem;
+          cursor: pointer;
+          transition: all 0.15s;
+
+          &:hover { color: #f8fafc; border-color: rgba(255, 255, 255, 0.25); }
+          &.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            color: #818cf8;
+          }
+        }
+      }
+    }
 
     label {
       font-size: 0.85rem;

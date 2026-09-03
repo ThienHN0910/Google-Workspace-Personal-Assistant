@@ -40,6 +40,15 @@
         </div>
 
         <div class="toolbar-right">
+          <div class="calendar-select-box" v-if="calendars.length > 0">
+            <i class="pi pi-calendar"></i>
+            <select v-model="selectedCalendarId" @change="onCalendarChange" class="cal-select">
+              <option v-for="c in calendars" :key="c.id" :value="c.id">
+                {{ c.summary }} {{ c.primary ? '(Chính)' : '' }}
+              </option>
+            </select>
+          </div>
+
           <div class="view-switcher">
             <button :class="{ active: viewMode === 'week' }" @click="viewMode = 'week'">
               <i class="pi pi-th-large"></i> Tuần
@@ -216,16 +225,44 @@
     <div v-if="selectedEvent && !showEditModal" class="modal-overlay" @click.self="selectedEvent = null">
       <div class="modal-content event-detail-modal">
         <div class="modal-header">
-          <h3>{{ selectedEvent.title }}</h3>
+          <div class="title-with-color">
+            <span class="color-badge" :style="{ background: getEventColor(selectedEvent.colorId) }"></span>
+            <h3>{{ selectedEvent.title }}</h3>
+          </div>
           <button class="close-btn" @click="selectedEvent = null"><i class="pi pi-times"></i></button>
         </div>
 
         <div class="detail-body">
+          <!-- Google Meet Banner -->
+          <div v-if="selectedEvent.meetUrl" class="meet-banner">
+            <div class="meet-info">
+              <i class="pi pi-video text-green"></i>
+              <div>
+                <strong>Google Meet:</strong>
+                <p class="meet-url-text">{{ selectedEvent.meetUrl }}</p>
+              </div>
+            </div>
+            <a :href="selectedEvent.meetUrl" target="_blank" class="btn-join-meet">
+              <i class="pi pi-video"></i> Tham gia Meet
+            </a>
+          </div>
+
           <div class="info-row">
             <i class="pi pi-clock"></i>
             <div>
               <strong>Thời gian:</strong>
-              <p>{{ formatDateTime(selectedEvent.start) }} - {{ selectedEvent.end ? formatDateTime(selectedEvent.end) : 'Không xác định' }}</p>
+              <p v-if="selectedEvent.isAllDay">Cả ngày ({{ formatDateTime(selectedEvent.start).split(' ')[0] }})</p>
+              <p v-else>{{ formatDateTime(selectedEvent.start) }} - {{ selectedEvent.end ? formatDateTime(selectedEvent.end) : 'Không xác định' }}</p>
+            </div>
+          </div>
+
+          <div v-if="selectedEvent.attendees && selectedEvent.attendees.length > 0" class="info-row">
+            <i class="pi pi-users"></i>
+            <div>
+              <strong>Người tham gia ({{ selectedEvent.attendees.length }}):</strong>
+              <div class="attendees-list">
+                <span v-for="att in selectedEvent.attendees" :key="att" class="attendee-chip">{{ att }}</span>
+              </div>
             </div>
           </div>
 
@@ -270,7 +307,7 @@
 
     <!-- Edit Event Modal -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="showEditModal = false">
-      <div class="modal-content">
+      <div class="modal-content event-edit-modal">
         <h3>✏️ Chỉnh sửa sự kiện Google Calendar</h3>
         <form @submit.prevent="handleUpdateEvent">
           <div class="form-group">
@@ -287,6 +324,52 @@
               <input type="datetime-local" v-model="editForm.end" />
             </div>
           </div>
+
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="editForm.isAllDay" />
+              Sự kiện cả ngày (All-day event)
+            </label>
+          </div>
+
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="editForm.createMeetLink" />
+              📹 Tạo/Giữ link Google Meet tự động
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
+            <input v-model="editForm.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
+          </div>
+
+          <div class="form-group">
+            <label>🎨 Màu sự kiện</label>
+            <div class="color-palette">
+              <span 
+                v-for="c in calendarColors" 
+                :key="c.id" 
+                class="color-dot" 
+                :style="{ background: c.color }" 
+                :class="{ active: editForm.colorId === c.id }"
+                @click="editForm.colorId = c.id"
+                :title="c.name"
+              ></span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>⏰ Nhắc nhở trước</label>
+            <select v-model="editForm.reminderMinutes" class="form-select">
+              <option :value="null">Mặc định Google Calendar</option>
+              <option :value="10">10 phút trước</option>
+              <option :value="30">30 phút trước</option>
+              <option :value="60">1 tiếng trước</option>
+              <option :value="1440">1 ngày trước</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>Địa điểm</label>
             <input v-model="editForm.location" placeholder="Phòng họp A / Google Meet..." />
@@ -313,9 +396,18 @@
 
     <!-- Create Manual Event Modal -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content">
+      <div class="modal-content event-edit-modal">
         <h3>Tạo sự kiện mới</h3>
         <form @submit.prevent="handleCreateManual">
+          <div class="form-group" v-if="calendars.length > 0">
+            <label>Chọn Lịch Google</label>
+            <select v-model="newEvent.calendarId" class="form-select">
+              <option v-for="c in calendars" :key="c.id" :value="c.id">
+                {{ c.summary }} {{ c.primary ? '(Chính)' : '' }}
+              </option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>Tiêu đề <span class="required">*</span></label>
             <input v-model="newEvent.title" required placeholder="Họp team..." autofocus />
@@ -330,9 +422,55 @@
               <input type="datetime-local" v-model="newEvent.end" />
             </div>
           </div>
+
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="newEvent.isAllDay" />
+              Sự kiện cả ngày (All-day event)
+            </label>
+          </div>
+
+          <div class="form-group-checkbox">
+            <label>
+              <input type="checkbox" v-model="newEvent.createMeetLink" />
+              📹 1-Click Tạo link họp Google Meet tự động
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
+            <input v-model="newEvent.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
+          </div>
+
+          <div class="form-group">
+            <label>🎨 Màu sự kiện</label>
+            <div class="color-palette">
+              <span 
+                v-for="c in calendarColors" 
+                :key="c.id" 
+                class="color-dot" 
+                :style="{ background: c.color }" 
+                :class="{ active: newEvent.colorId === c.id }"
+                @click="newEvent.colorId = c.id"
+                :title="c.name"
+              ></span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>⏰ Nhắc nhở trước</label>
+            <select v-model="newEvent.reminderMinutes" class="form-select">
+              <option :value="null">Mặc định Google Calendar</option>
+              <option :value="10">10 phút trước</option>
+              <option :value="30">30 phút trước</option>
+              <option :value="60">1 tiếng trước</option>
+              <option :value="1440">1 ngày trước</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>Địa điểm</label>
-            <input v-model="newEvent.location" placeholder="Phòng họp A..." />
+            <input v-model="newEvent.location" placeholder="Phòng họp A / Google Meet..." />
           </div>
           <div class="form-group">
             <label>Mô tả</label>
@@ -373,6 +511,47 @@ const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/c
 const activeTab = ref<'calendar' | 'extracted'>('calendar');
 const viewMode = ref<'week' | 'month' | 'agenda'>('week');
 const currentDate = ref(new Date());
+
+const calendars = ref<any[]>([]);
+const selectedCalendarId = ref('primary');
+
+const calendarColors = [
+  { id: '', name: 'Mặc định', color: '#6366f1' },
+  { id: '1', name: 'Lavender', color: '#7986cb' },
+  { id: '2', name: 'Sage', color: '#33b679' },
+  { id: '3', name: 'Grape', color: '#8e24aa' },
+  { id: '4', name: 'Flamingo', color: '#e67c73' },
+  { id: '5', name: 'Banana', color: '#f6bf26' },
+  { id: '6', name: 'Tangerine', color: '#f4511e' },
+  { id: '7', name: 'Peacock', color: '#039be5' },
+  { id: '8', name: 'Graphite', color: '#616161' },
+  { id: '9', name: 'Blueberry', color: '#3f51b5' },
+  { id: '10', name: 'Basil', color: '#0b8043' },
+  { id: '11', name: 'Tomato', color: '#d50000' },
+];
+
+const getEventColor = (colorId?: string) => {
+  if (!colorId) return '#6366f1';
+  const found = calendarColors.find(c => c.id === colorId);
+  return found ? found.color : '#6366f1';
+};
+
+const fetchCalendars = async () => {
+  try {
+    const res: any = await api.get('/scheduling/calendars');
+    if (res.success && res.data) {
+      calendars.value = res.data;
+      const primary = res.data.find((c: any) => c.primary);
+      if (primary) selectedCalendarId.value = primary.id;
+    }
+  } catch (e) {
+    console.error('Failed to fetch calendars', e);
+  }
+};
+
+const onCalendarChange = () => {
+  fetchCalendarEvents();
+};
 
 const upcomingEvents = ref<any[]>([]);
 const extractedSchedules = ref<any[]>([]);
@@ -509,7 +688,7 @@ const fetchCalendarEvents = async () => {
       endDate = end.toISOString();
     }
 
-    const res: any = await api.get(`/scheduling/upcoming?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`);
+    const res: any = await api.get(`/scheduling/upcoming?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&calendarId=${encodeURIComponent(selectedCalendarId.value)}`);
     if (res.success && res.data) {
       upcomingEvents.value = res.data;
     }
@@ -540,11 +719,17 @@ const showEditModal = ref(false);
 const savingEdit = ref(false);
 const editForm = ref({
   id: '',
+  calendarId: 'primary',
   title: '',
   start: '',
   end: '',
   location: '',
   description: '',
+  createMeetLink: false,
+  attendees: '',
+  colorId: '',
+  isAllDay: false,
+  reminderMinutes: null as number | null,
   isPublic: true,
 });
 
@@ -559,11 +744,17 @@ const openEditModal = (event: any) => {
 
   editForm.value = {
     id: event.id,
+    calendarId: selectedCalendarId.value,
     title: event.title,
     start: toLocalIsoString(startDate),
     end: toLocalIsoString(endDate),
     location: event.location || '',
     description: event.description || '',
+    createMeetLink: !!event.meetUrl,
+    attendees: event.attendees ? event.attendees.join(', ') : '',
+    colorId: event.colorId || '',
+    isAllDay: !!event.isAllDay,
+    reminderMinutes: event.reminderMinutes || null,
     isPublic: event.visibility === 'public',
   };
   showEditModal.value = true;
@@ -574,12 +765,22 @@ const handleUpdateEvent = async () => {
 
   savingEdit.value = true;
   try {
+    const attendeesList = editForm.value.attendees
+      ? editForm.value.attendees.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+      : [];
+
     const res: any = await api.put(`/scheduling/events/${editForm.value.id}`, {
+      CalendarId: selectedCalendarId.value,
       Title: editForm.value.title,
       Start: new Date(editForm.value.start).toISOString(),
       End: editForm.value.end ? new Date(editForm.value.end).toISOString() : null,
       Location: editForm.value.location,
       Description: editForm.value.description,
+      CreateMeetLink: editForm.value.createMeetLink,
+      Attendees: attendeesList,
+      ColorId: editForm.value.colorId || null,
+      IsAllDay: editForm.value.isAllDay,
+      ReminderMinutes: editForm.value.reminderMinutes,
       IsPublic: editForm.value.isPublic,
     });
 
@@ -614,7 +815,7 @@ const handleDeleteEvent = async (id: string) => {
   if (!confirm('Bạn có chắc chắn muốn xóa sự kiện này khỏi Google Calendar?')) return;
 
   try {
-    const res: any = await api.delete(`/scheduling/events/${id}`);
+    const res: any = await api.delete(`/scheduling/events/${id}?calendarId=${encodeURIComponent(selectedCalendarId.value)}`);
     if (res.success) {
       showToast({
         severity: 'info',
@@ -637,11 +838,17 @@ const handleDeleteEvent = async (id: string) => {
 const showModal = ref(false);
 const creating = ref(false);
 const newEvent = ref({
+  calendarId: 'primary',
   title: '',
   start: '',
   end: '',
   location: '',
   description: '',
+  createMeetLink: false,
+  attendees: '',
+  colorId: '',
+  isAllDay: false,
+  reminderMinutes: null as number | null,
   createTask: false,
   isPublic: true,
 });
@@ -656,11 +863,17 @@ const openCreateModal = () => {
   end.setHours(now.getHours() + 1);
 
   newEvent.value = {
+    calendarId: selectedCalendarId.value || 'primary',
     title: '',
     start: toLocalIsoString(now),
     end: toLocalIsoString(end),
     location: '',
     description: '',
+    createMeetLink: false,
+    attendees: '',
+    colorId: '',
+    isAllDay: false,
+    reminderMinutes: null,
     createTask: false,
     isPublic: true,
   };
@@ -674,12 +887,22 @@ const closeModal = () => {
 const handleCreateManual = async () => {
   creating.value = true;
   try {
+    const attendeesList = newEvent.value.attendees
+      ? newEvent.value.attendees.split(',').map((e: string) => e.trim()).filter((e: string) => e.length > 0)
+      : [];
+
     const res: any = await api.post('/scheduling/manual', {
+      CalendarId: newEvent.value.calendarId || selectedCalendarId.value,
       Title: newEvent.value.title,
       Start: new Date(newEvent.value.start).toISOString(),
       End: newEvent.value.end ? new Date(newEvent.value.end).toISOString() : null,
       Location: newEvent.value.location,
       Description: newEvent.value.description,
+      CreateMeetLink: newEvent.value.createMeetLink,
+      Attendees: attendeesList,
+      ColorId: newEvent.value.colorId || null,
+      IsAllDay: newEvent.value.isAllDay,
+      ReminderMinutes: newEvent.value.reminderMinutes,
       CreateTask: newEvent.value.createTask,
       IsPublic: newEvent.value.isPublic,
     });
@@ -786,7 +1009,8 @@ const formatDateTime = (dateStr: string) => {
   });
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchCalendars();
   fetchCalendarEvents();
   fetchExtracted(1);
 });
@@ -1416,5 +1640,112 @@ onMounted(() => {
   color: #94a3b8;
   gap: 0.75rem;
   i { font-size: 3rem; color: #cbd5e1; opacity: 0.4; }
+}
+
+/* New Calendar & Meet Styles */
+.calendar-select-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  color: #818cf8;
+
+  .cal-select {
+    background: transparent;
+    border: none;
+    color: #f8fafc;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    &:focus { outline: none; }
+  }
+}
+
+.title-with-color {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+
+  .color-badge {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+}
+
+.meet-banner {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  .meet-info {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    i { font-size: 1.5rem; }
+    .meet-url-text { font-size: 0.85rem; color: #34d399; word-break: break-all; margin: 0; }
+  }
+
+  .btn-join-meet {
+    background: #10b981;
+    color: #fff;
+    padding: 0.45rem 0.85rem;
+    border-radius: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    text-decoration: none;
+    white-space: nowrap;
+    &:hover { background: #059669; }
+  }
+}
+
+.attendees-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+
+  .attendee-chip {
+    background: rgba(99, 102, 241, 0.15);
+    color: #c7d2fe;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 0.2rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+  }
+}
+
+.color-palette {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.5rem 0;
+
+  .color-dot {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    border: 2px solid transparent;
+
+    &:hover { transform: scale(1.2); }
+    &.active { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 8px rgba(255, 255, 255, 0.5); }
+  }
 }
 </style>

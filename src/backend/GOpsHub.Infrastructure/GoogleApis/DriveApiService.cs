@@ -203,4 +203,36 @@ public class DriveApiService : IDriveService
         var watchResp = await service.Files.Watch(channel, folderId).ExecuteAsync(ct);
         return watchResp.Id;
     }
+
+    public async Task<string> EnsureQuarantineFolderAsync(CancellationToken ct = default)
+    {
+        var service = await GetDriveClientAsync(ct);
+        if (service == null) return string.Empty;
+
+        // Search if "G-Ops Quarantine" folder already exists
+        var listReq = service.Files.List();
+        listReq.Q = "name = 'G-Ops Quarantine' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+        listReq.Fields = "files(id, name)";
+        var listResp = await listReq.ExecuteAsync(ct);
+
+        var existingFolder = listResp.Files?.FirstOrDefault();
+        if (existingFolder != null)
+        {
+            return existingFolder.Id;
+        }
+
+        // Create new folder in root
+        var folderMetadata = new Google.Apis.Drive.v3.Data.File
+        {
+            Name = "G-Ops Quarantine",
+            MimeType = "application/vnd.google-apps.folder"
+        };
+        var created = await service.Files.Create(folderMetadata).ExecuteAsync(ct);
+        return created.Id;
+    }
+
+    public async Task RestoreFileAsync(string fileId, string originalFolderId, CancellationToken ct = default)
+    {
+        await MoveFileAsync(fileId, originalFolderId, ct);
+    }
 }

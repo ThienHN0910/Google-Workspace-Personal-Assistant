@@ -23,6 +23,15 @@
     <!-- Tab 1: Inbox -->
     <div v-if="activeTab === 'inbox'" class="tab-content">
       <div class="inbox-filters">
+        <div class="search-box">
+          <i class="pi pi-search"></i>
+          <input 
+            v-model="searchQuery" 
+            placeholder="Tìm kiếm Gmail (từ khóa, người gửi, subject...)" 
+            @keyup.enter="resetAndFetch"
+          />
+          <button v-if="searchQuery" class="btn-clear-search" @click="clearSearch"><i class="pi pi-times"></i></button>
+        </div>
         <label class="switch-label">
           <input type="checkbox" v-model="showUnreadOnly" @change="resetAndFetch" />
           Chỉ hiển thị thư chưa đọc
@@ -42,6 +51,9 @@
           <div v-html="selectedEmail.body || selectedEmail.snippet"></div>
         </div>
         <div class="detail-actions">
+          <button class="btn-cancel" :class="{ 'text-yellow': selectedEmail.isStarred }" @click="toggleStar(selectedEmail)">
+            <i class="pi" :class="selectedEmail.isStarred ? 'pi-star-fill' : 'pi-star'"></i> {{ selectedEmail.isStarred ? 'Bỏ gắn sao' : 'Gắn sao' }}
+          </button>
           <button class="btn-cancel" @click="markAsRead(selectedEmail.id)" v-if="!selectedEmail.isRead"><i class="pi pi-check"></i> Đánh dấu đã đọc</button>
           <button class="btn-danger" @click="trashEmail(selectedEmail.id)"><i class="pi pi-trash"></i> Xóa</button>
           <button class="btn-submit" @click="draftAi(selectedEmail.id)" :disabled="draftingAi">
@@ -82,9 +94,12 @@
             <div class="email-snippet">{{ email.snippet }}</div>
           </div>
           <div class="quick-actions">
+            <button class="action-btn" :class="{ 'text-yellow': email.isStarred }" @click.stop="toggleStar(email)" title="Đánh dấu sao">
+              <i class="pi" :class="email.isStarred ? 'pi-star-fill' : 'pi-star'"></i>
+            </button>
             <button v-if="email.isRead" class="action-btn text-blue" @click.stop="markAsUnread(email.id)" title="Đánh dấu chưa đọc"><i class="pi pi-envelope"></i></button>
             <button v-if="!email.isRead" class="action-btn text-green" @click.stop="markAsRead(email.id)" title="Đánh dấu đã đọc"><i class="pi pi-check"></i></button>
-            <button class="action-btn text-red" @click.stop="trashEmail(email.id)" title="Xóa tạm"><i class="pi pi-trash"></i></button>
+            <button class="action-btn text-red" @click.stop="trashEmail(email.id)" title="Chuyển vào thùng rác"><i class="pi pi-trash"></i></button>
           </div>
         </div>
       </div>
@@ -180,6 +195,7 @@ const sendingReply = ref(false);
 
 const showUnreadOnly = ref(true);
 const nextPageToken = ref<string | null>(null);
+const searchQuery = ref('');
 
 const resetAndFetch = () => {
   emails.value = [];
@@ -187,12 +203,18 @@ const resetAndFetch = () => {
   fetchInbox();
 };
 
+const clearSearch = () => {
+  searchQuery.value = '';
+  resetAndFetch();
+};
+
 const fetchInbox = async (token: string | null = null) => {
   loading.value = true;
   try {
     const isReadParam = showUnreadOnly.value ? 'false' : 'true';
     let url = `/emailops/inbox?isRead=${isReadParam}&maxResults=10`;
-    if (token) url += `&pageToken=${token}`;
+    if (token) url += `&pageToken=${encodeURIComponent(token)}`;
+    if (searchQuery.value.trim()) url += `&search=${encodeURIComponent(searchQuery.value.trim())}`;
     
     const res: any = await api.get(url);
     if (res.success && res.data) {
@@ -212,6 +234,22 @@ const fetchInbox = async (token: string | null = null) => {
 
 const loadMore = () => {
   if (nextPageToken.value) fetchInbox(nextPageToken.value);
+};
+
+const toggleStar = async (email: any) => {
+  const isNowStarred = !email.isStarred;
+  email.isStarred = isNowStarred;
+  try {
+    if (isNowStarred) {
+      await api.post(`/emailops/${email.id}/star`, {});
+      showToast({ severity: 'info', summary: 'Đã gắn sao ⭐', detail: email.subject });
+    } else {
+      await api.post(`/emailops/${email.id}/unstar`, {});
+      showToast({ severity: 'info', summary: 'Đã bỏ gắn sao', detail: email.subject });
+    }
+  } catch (e) {
+    email.isStarred = !isNowStarred;
+  }
 };
 
 const selectEmail = (email: any) => {
@@ -548,17 +586,54 @@ button {
     padding: 0.5rem;
     border-radius: 0.25rem;
     transition: background 0.2s;
+    color: #64748b;
     &:hover { background: rgba(255,255,255,0.1); }
     &.text-blue { color: #60a5fa; }
     &.text-green { color: #34d399; }
     &.text-red { color: #f87171; }
+    &.text-yellow { color: #eab308; }
   }
 }
 
 .inbox-filters {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  .search-box {
+    flex: 1;
+    max-width: 450px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    color: #94a3b8;
+
+    input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #f8fafc;
+      font-size: 0.9rem;
+      &:focus { outline: none; }
+    }
+
+    .btn-clear-search {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 0;
+      font-size: 0.85rem;
+      &:hover { color: #f8fafc; }
+    }
+  }
 }
 
 .switch-label {

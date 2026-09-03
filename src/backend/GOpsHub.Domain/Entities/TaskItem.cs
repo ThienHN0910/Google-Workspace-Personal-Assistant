@@ -26,6 +26,15 @@ public class TaskItem : BaseEntity
     [BsonElement("status")]
     public string Status { get; set; } = "needsAction"; // needsAction or completed
 
+    [BsonElement("parentTaskId")]
+    public string? ParentTaskId { get; set; }
+
+    [BsonElement("isStarred")]
+    public bool IsStarred { get; set; }
+
+    [BsonElement("completedAt")]
+    public DateTime? CompletedAt { get; set; }
+
     [BsonElement("sourceEmailId")]
     public string? SourceEmailId { get; set; }
 }

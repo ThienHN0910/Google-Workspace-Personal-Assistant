@@ -232,12 +232,45 @@ public class GmailApiService : IGmailService
         }
     }
 
-    public async Task<string> CreateDraftAsync(string to, string subject, string body, string? threadId = null, CancellationToken ct = default)
+    public async Task StarEmailAsync(string messageId, CancellationToken ct = default)
+    {
+        var service = await GetGmailClientAsync(ct);
+        if (service == null) return;
+
+        var mods = new ModifyMessageRequest
+        {
+            AddLabelIds = new List<string> { "STARRED" }
+        };
+        await service.Users.Messages.Modify(mods, "me", messageId).ExecuteAsync(ct);
+    }
+
+    public async Task UnstarEmailAsync(string messageId, CancellationToken ct = default)
+    {
+        var service = await GetGmailClientAsync(ct);
+        if (service == null) return;
+
+        var mods = new ModifyMessageRequest
+        {
+            RemoveLabelIds = new List<string> { "STARRED" }
+        };
+        await service.Users.Messages.Modify(mods, "me", messageId).ExecuteAsync(ct);
+    }
+
+    public async Task<string> CreateDraftAsync(string to, string subject, string body, string? threadId = null, string? cc = null, string? bcc = null, CancellationToken ct = default)
     {
         var service = await GetGmailClientAsync(ct);
         if (service == null) return string.Empty;
 
-        var rawMessage = $"To: {to}\r\nSubject: {subject}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n{body}";
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"To: {to}");
+        if (!string.IsNullOrWhiteSpace(cc)) sb.AppendLine($"Cc: {cc}");
+        if (!string.IsNullOrWhiteSpace(bcc)) sb.AppendLine($"Bcc: {bcc}");
+        sb.AppendLine($"Subject: {subject}");
+        sb.AppendLine("Content-Type: text/html; charset=utf-8");
+        sb.AppendLine();
+        sb.Append(body);
+
+        var rawMessage = sb.ToString();
         var encodedMessage = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(rawMessage))
             .Replace('+', '-').Replace('/', '_').Replace("=", "");
 
