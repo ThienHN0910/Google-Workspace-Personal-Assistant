@@ -1,14 +1,22 @@
 <template>
   <div class="email-ops-page">
-    <div class="tabs">
-      <button :class="{ active: activeTab === 'inbox' }" @click="activeTab = 'inbox'">
-        📥 Hộp thư đến (Inbox)
-      </button>
-      <button :class="{ active: activeTab === 'rules' }" @click="activeTab = 'rules'">
-        🧹 Quy tắc dọn Inbox
-      </button>
-      <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
-        📋 Nhật ký dọn dẹp
+    <div class="page-top-bar">
+      <div class="tabs">
+        <button :class="{ active: activeTab === 'inbox' }" @click="activeTab = 'inbox'">
+          📥 Hộp thư đến (Inbox)
+        </button>
+        <button :class="{ active: activeTab === 'drafts' }" @click="activeTab = 'drafts'">
+          ✨ Bản nháp AI chờ duyệt ({{ pendingDrafts.length }})
+        </button>
+        <button :class="{ active: activeTab === 'rules' }" @click="activeTab = 'rules'">
+          🧹 Quy tắc dọn Inbox
+        </button>
+        <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
+          📋 Nhật ký dọn dẹp
+        </button>
+      </div>
+      <button class="btn-compose-main" @click="showComposeModal = true">
+        <i class="pi pi-pencil"></i> Soạn thư mới
       </button>
     </div>
 
@@ -114,6 +122,31 @@
       </div>
       <InfiniteScrollObserver :loading="loadingLogs" :has-more="hasMoreLogs" @load-more="loadMoreLogs" />
     </div>
+
+    <!-- Tab 4: AI Drafts Pending Approval (UC02) -->
+    <div v-else-if="activeTab === 'drafts'" class="tab-content">
+      <LoadingSpinner v-if="loadingDrafts && pendingDrafts.length === 0" text="Đang tải bản nháp AI chờ duyệt..." />
+      <div v-else-if="pendingDrafts.length === 0" class="empty-state">
+        <i class="pi pi-check-circle" style="color: #10b981; font-size: 2.5rem;"></i>
+        <p>Tuyệt vời! Không có bản nháp AI nào đang chờ bạn phê duyệt.</p>
+      </div>
+      <div v-else class="drafts-list">
+        <DraftReviewCard
+          v-for="draft in pendingDrafts"
+          :key="draft.id"
+          :draft="draft"
+          @approve="handleApproveDraft"
+          @reject="handleRejectDraft"
+        />
+      </div>
+    </div>
+
+    <!-- Compose Email Modal -->
+    <ComposeEmailModal
+      v-if="showComposeModal"
+      @close="showComposeModal = false"
+      @sent="resetAndFetch"
+    />
   </div>
 </template>
 
@@ -121,11 +154,18 @@
 import { ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import { showToast } from '@/services/notification.service';
 
 // Lazy loading heavy components
 const CleanupRuleList = defineAsyncComponent(() => import('@/components/email/CleanupRuleList.vue'));
 const Editor = defineAsyncComponent(() => import('primevue/editor'));
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
+const DraftReviewCard = defineAsyncComponent(() => import('@/components/email/DraftReviewCard.vue'));
+const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
+
+const showComposeModal = ref(false);
+const pendingDrafts = ref<any[]>([]);
+const loadingDrafts = ref(false);
 
 const activeTab = ref('inbox');
 const emails = ref<any[]>([]);
@@ -207,8 +247,17 @@ const trashEmail = async (id: string) => {
     await api.delete(`/emailops/${id}`);
     emails.value = emails.value.filter(e => e.id !== id);
     selectedEmail.value = null;
+    showToast({
+      severity: 'info',
+      summary: 'Đã xóa',
+      detail: 'Đã chuyển email vào thùng rác.',
+    });
   } catch (e) {
-    alert('Lỗi xóa email');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể xóa email.',
+    });
   }
 };
 
@@ -226,9 +275,18 @@ const draftAi = async (id: string) => {
       
       replyText.value = content;
       editorKey.value++; // Ép PrimeVue Editor render lại khi có dữ liệu
+      showToast({
+        severity: 'success',
+        summary: 'Tạo nháp AI thành công',
+        detail: 'Đã điền nội dung đề xuất vào khung soạn thảo.',
+      });
     }
   } catch (e) {
-    alert('Lỗi tạo nháp AI');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi AI',
+      detail: 'Không thể tạo bản nháp AI từ email này.',
+    });
   } finally {
     draftingAi.value = false;
   }
@@ -239,10 +297,18 @@ const extractSchedule = async (id: string) => {
   try {
     const res: any = await api.post('/scheduling/extract', { gmailMessageId: id });
     if (res.success) {
-      alert('Đã trích xuất lịch thành công! Bạn hãy mở tab Lịch (Scheduling) để xem và xác nhận.');
+      showToast({
+        severity: 'success',
+        summary: 'Trích xuất lịch thành công',
+        detail: 'Hãy mở tab Scheduling (Lịch) để xem và xác nhận sự kiện.',
+      });
     }
   } catch (e) {
-    alert('Lỗi trích xuất lịch AI. Email này có thể không chứa thông tin sự kiện.');
+    showToast({
+      severity: 'warn',
+      summary: 'Không trích xuất được',
+      detail: 'Email này có thể không chứa thông tin ngày giờ sự kiện.',
+    });
   } finally {
     extractingSchedule.value = false;
   }
@@ -252,12 +318,74 @@ const sendReply = async (id: string) => {
   sendingReply.value = true;
   try {
     await api.post(`/emailops/${id}/reply`, { body: replyText.value });
-    alert('Đã gửi phản hồi thành công');
+    showToast({
+      severity: 'success',
+      summary: 'Đã gửi',
+      detail: 'Phản hồi đã được gửi thành công.',
+    });
     selectedEmail.value = null;
   } catch (e) {
-    alert('Lỗi gửi phản hồi');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể gửi phản hồi.',
+    });
   } finally {
     sendingReply.value = false;
+  }
+};
+
+const fetchPendingDrafts = async () => {
+  loadingDrafts.value = true;
+  try {
+    const res: any = await api.get('/emailops/drafts/pending?page=1&pageSize=50');
+    if (res.success && res.data) {
+      pendingDrafts.value = res.data.items || [];
+    }
+  } catch (err) {
+    console.error('Failed to fetch pending drafts:', err);
+  } finally {
+    loadingDrafts.value = false;
+  }
+};
+
+const handleApproveDraft = async ({ id, content }: { id: string; content: string }) => {
+  try {
+    const res: any = await api.post(`/emailops/drafts/${id}/approve`, { customContent: content });
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Đã phê duyệt nháp',
+        detail: 'Bản nháp phản hồi đã được lưu trên Gmail của bạn.',
+      });
+      pendingDrafts.value = pendingDrafts.value.filter(d => d.id !== id);
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi duyệt nháp',
+      detail: err.message || 'Không thể phê duyệt bản nháp.',
+    });
+  }
+};
+
+const handleRejectDraft = async ({ id }: { id: string }) => {
+  try {
+    const res: any = await api.post(`/emailops/drafts/${id}/reject`, { reason: 'Từ chối bởi người dùng' });
+    if (res.success) {
+      showToast({
+        severity: 'info',
+        summary: 'Đã từ chối',
+        detail: 'Bản nháp AI đã bị từ chối.',
+      });
+      pendingDrafts.value = pendingDrafts.value.filter(d => d.id !== id);
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: err.message || 'Không thể từ chối bản nháp.',
+    });
   }
 };
 
@@ -301,21 +429,56 @@ const loadMoreLogs = () => {
 
 watch(activeTab, (newTab) => {
   if (newTab === 'inbox' && emails.value.length === 0) fetchInbox();
+  if (newTab === 'drafts') fetchPendingDrafts();
   if (newTab === 'logs' && cleanupLogs.value.length === 0) fetchLogs(1);
 });
 
 onMounted(() => {
   fetchInbox();
+  fetchPendingDrafts();
 });
 </script>
 
 <style scoped lang="scss">
-.tabs {
+.page-top-bar {
   display: flex;
-  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   padding-bottom: 0.5rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-compose-main {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.55rem 1.15rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+
+  &:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+}
+
+.drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 button {

@@ -60,6 +60,26 @@ public class DriveGuardController : ControllerBase
     }
 
     /// <summary>
+    /// Delete monitored folder (UC05)
+    /// </summary>
+    [HttpDelete("folders/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteMonitoredFolder(string id)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteMonitoredFolderCommand(id));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã xóa thư mục khỏi danh sách theo dõi."));
+    }
+
+    /// <summary>
+    /// Resolve security alert (UC06)
+    /// </summary>
+    [HttpPost("alerts/{id}/resolve")]
+    public async Task<ActionResult<ApiResponse<bool>>> ResolveSecurityAlert(string id, [FromBody] ResolveAlertRequest? request)
+    {
+        var result = await _dispatcher.SendAsync(new ResolveSecurityAlertCommand(id, request?.Note));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã đánh dấu cảnh báo an ninh đã xử lý."));
+    }
+
+    /// <summary>
     /// Quarantine dangerous file (UC06)
     /// </summary>
     [HttpPost("quarantine")]
@@ -88,4 +108,9 @@ public class DriveGuardController : ControllerBase
         var interval = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<int>.Ok(interval, "Đã cập nhật chu kỳ quét thành công."));
     }
+}
+
+public class ResolveAlertRequest
+{
+    public string? Note { get; set; }
 }

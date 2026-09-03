@@ -105,6 +105,24 @@ public class CalendarApiService : ICalendarService
         return created.Id;
     }
 
+    public async Task UpdateEventAsync(string eventId, string title, DateTime start, DateTime? end, string? location, string? description, bool isPublic = true, CancellationToken ct = default)
+    {
+        var service = await GetCalendarClientAsync(ct);
+        if (service == null) return;
+
+        var existing = await service.Events.Get("primary", eventId).ExecuteAsync(ct);
+        if (existing == null) return;
+
+        existing.Summary = title;
+        existing.Location = location;
+        existing.Description = description;
+        existing.Start = new EventDateTime { DateTimeDateTimeOffset = start };
+        existing.End = new EventDateTime { DateTimeDateTimeOffset = end ?? start.AddHours(1) };
+        existing.Visibility = isPublic ? "public" : "private";
+
+        await service.Events.Update(existing, "primary", eventId).ExecuteAsync(ct);
+    }
+
     public async Task DeleteEventAsync(string eventId, CancellationToken ct = default)
     {
         var service = await GetCalendarClientAsync(ct);
@@ -139,6 +157,7 @@ public class CalendarApiService : ICalendarService
             Start = e.Start.DateTimeDateTimeOffset?.UtcDateTime ?? (e.Start.Date != null ? DateTime.Parse(e.Start.Date) : DateTime.UtcNow),
             End = e.End?.DateTimeDateTimeOffset?.UtcDateTime ?? (e.End?.Date != null ? DateTime.Parse(e.End.Date) : (DateTime?)null),
             Location = e.Location,
+            Description = e.Description,
             HtmlLink = e.HtmlLink ?? string.Empty,
             Visibility = string.Equals(e.Visibility, "private", StringComparison.OrdinalIgnoreCase) ? "private" : "public"
         }).ToList();

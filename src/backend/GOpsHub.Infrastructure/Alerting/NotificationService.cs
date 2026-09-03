@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using GOpsHub.Application.Common.Interfaces;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -11,21 +12,40 @@ public class NotificationService : INotificationService
     private readonly HttpClient _httpClient;
     private readonly string? _discordWebhookUrl;
     private readonly ILogger<NotificationService> _logger;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
     public NotificationService(
         IConfiguration configuration,
-        ILogger<NotificationService> logger)
+        ILogger<NotificationService> logger,
+        IHubContext<NotificationHub> hubContext)
     {
         _httpClient = new HttpClient();
         _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"];
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     public async Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default)
     {
         _logger.LogInformation("Notification [{Type}]: {Title} - {Message}", type, title, message);
 
-        // Discord Webhook Push (UC12 Multi-Channel Alerting)
+        // 1. Broadcast via SignalR to all connected frontend clients
+        try
+        {
+            await _hubContext.Clients.All.SendAsync("ReceiveNotification", new
+            {
+                title,
+                message,
+                type,
+                timestamp = DateTime.UtcNow
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to broadcast SignalR notification.");
+        }
+
+        // 2. Discord Webhook Push (UC12 Multi-Channel Alerting)
         if (!string.IsNullOrEmpty(_discordWebhookUrl))
         {
             try

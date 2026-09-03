@@ -35,6 +35,9 @@
           </div>
         </div>
         <div class="task-actions">
+          <button class="edit-btn" @click="openEditModal(task)" title="Chỉnh sửa">
+            <i class="pi pi-pencil"></i>
+          </button>
           <button class="delete-btn" @click="handleDelete(task.googleTaskId)" title="Xóa">
             <i class="pi pi-trash"></i>
           </button>
@@ -55,11 +58,41 @@
             <div class="task-title">{{ task.title }}</div>
           </div>
           <div class="task-actions">
+            <button class="edit-btn" @click="openEditModal(task)" title="Chỉnh sửa">
+              <i class="pi pi-pencil"></i>
+            </button>
             <button class="delete-btn" @click="handleDelete(task.googleTaskId)" title="Xóa">
               <i class="pi pi-trash"></i>
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div v-if="showEditModal" class="modal-overlay" @click.self="showEditModal = false">
+      <div class="modal-content">
+        <h3>✏️ Chỉnh sửa Task</h3>
+        <form @submit.prevent="handleUpdateTask">
+          <div class="form-group">
+            <label>Tiêu đề <span class="required">*</span></label>
+            <input v-model="editTaskForm.title" required placeholder="Nhập tiêu đề công việc..." autofocus />
+          </div>
+          <div class="form-group">
+            <label>Ghi chú</label>
+            <textarea v-model="editTaskForm.notes" rows="3" placeholder="Chi tiết..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Hạn chót</label>
+            <input type="datetime-local" v-model="editTaskForm.due" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" @click="showEditModal = false">Hủy</button>
+            <button type="submit" class="btn-submit" :disabled="savingEdit">
+              {{ savingEdit ? 'Đang lưu...' : 'Lưu Thay Đổi' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -121,11 +154,22 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import { showToast } from '@/services/notification.service';
 
 const tasks = ref<any[]>([]);
 const loading = ref(true);
 const showModal = ref(false);
 const creating = ref(false);
+
+const showEditModal = ref(false);
+const savingEdit = ref(false);
+const editTaskForm = ref({
+  id: '',
+  title: '',
+  notes: '',
+  due: '',
+  status: 'needsAction'
+});
 
 const newTask = ref({
   title: '',
@@ -167,11 +211,59 @@ const closeModal = () => {
   showModal.value = false;
 };
 
+const openEditModal = (task: any) => {
+  let formattedDue = '';
+  if (task.due) {
+    const d = new Date(task.due);
+    const pad = (n: number) => (n < 10 ? '0' + n : n);
+    formattedDue = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  editTaskForm.value = {
+    id: task.googleTaskId,
+    title: task.title,
+    notes: task.notes || '',
+    due: formattedDue,
+    status: task.status || 'needsAction'
+  };
+  showEditModal.value = true;
+};
+
+const handleUpdateTask = async () => {
+  if (!editTaskForm.value.title.trim()) return;
+  savingEdit.value = true;
+  try {
+    const payload = {
+      title: editTaskForm.value.title,
+      notes: editTaskForm.value.notes,
+      due: editTaskForm.value.due ? new Date(editTaskForm.value.due).toISOString() : null,
+      status: editTaskForm.value.status
+    };
+    const res: any = await api.put(`/tasks/${editTaskForm.value.id}`, payload);
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Cập nhật thành công',
+        detail: 'Task đã được lưu vào Google Tasks.',
+      });
+      showEditModal.value = false;
+      fetchTasks();
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể cập nhật task.',
+    });
+  } finally {
+    savingEdit.value = false;
+  }
+};
+
 const onStartTimeChange = () => {
   if (newTask.value.calendarStartTime) {
     const start = new Date(newTask.value.calendarStartTime);
     const end = new Date(start.getTime() + 60 * 60 * 1000); // Default 60 mins
-    // Format to yyyy-MM-ddThh:mm for datetime-local
     const offset = end.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(end.getTime() - offset)).toISOString().slice(0, 16);
     newTask.value.calendarEndTime = localISOTime;
@@ -193,10 +285,19 @@ const handleCreate = async () => {
       isPublic: newTask.value.isPublic
     };
     await api.post('/tasks', payload);
+    showToast({
+      severity: 'success',
+      summary: 'Đã tạo task',
+      detail: 'Công việc mới đã được lưu vào Google Tasks.',
+    });
     closeModal();
     fetchTasks();
   } catch (e) {
-    alert('Lỗi tạo task');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể tạo task mới.',
+    });
   } finally {
     creating.value = false;
   }
@@ -204,27 +305,38 @@ const handleCreate = async () => {
 
 const handleComplete = async (id: string) => {
   try {
-    // Optimistic update
     const task = tasks.value.find(t => t.googleTaskId === id);
     if (task) task.status = 'completed';
     
     await api.patch(`/tasks/${id}/complete`, {});
+    showToast({
+      severity: 'success',
+      summary: 'Đã hoàn thành',
+      detail: 'Chúc mừng bạn đã hoàn thành công việc!',
+    });
   } catch (e) {
-    alert('Lỗi hoàn thành task');
-    fetchTasks(); // Revert on error
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể hoàn thành task.',
+    });
+    fetchTasks();
   }
 };
 
 const handleUncomplete = async (id: string) => {
   try {
-    // Optimistic update
     const task = tasks.value.find(t => t.googleTaskId === id);
     if (task) task.status = 'needsAction';
     
     await api.patch(`/tasks/${id}/uncomplete`, {});
   } catch (e) {
-    alert('Lỗi phục hồi task');
-    fetchTasks(); // Revert on error
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: 'Không thể phục hồi trạng thái task.',
+    });
+    fetchTasks();
   }
 };
 
@@ -233,8 +345,17 @@ const handleDelete = async (id: string) => {
     try {
       await api.delete(`/tasks/${id}`);
       tasks.value = tasks.value.filter(t => t.googleTaskId !== id);
+      showToast({
+        severity: 'info',
+        summary: 'Đã xóa',
+        detail: 'Đã xóa task khỏi Google Tasks.',
+      });
     } catch (e) {
-      alert('Lỗi xóa task');
+      showToast({
+        severity: 'error',
+        summary: 'Lỗi',
+        detail: 'Không thể xóa task.',
+      });
     }
   }
 };
@@ -341,12 +462,25 @@ onMounted(fetchTasks);
 }
 
 .task-actions {
+  display: flex;
+  gap: 0.25rem;
   opacity: 0;
   transition: opacity 0.2s;
 }
 
 .task-item:hover .task-actions {
   opacity: 1;
+}
+
+.edit-btn {
+  background: transparent;
+  border: none;
+  color: #818cf8;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 1.1rem;
+  &:hover { background: rgba(99, 102, 241, 0.15); }
 }
 
 .delete-btn {

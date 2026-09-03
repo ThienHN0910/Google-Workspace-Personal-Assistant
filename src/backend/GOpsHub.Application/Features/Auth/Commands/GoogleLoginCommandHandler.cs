@@ -22,7 +22,8 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
         _googleAuthService = googleAuthService;
         _userRepository = userRepository;
         _jwtService = jwtService;
-        _allowedAdminEmail = configuration["ADMIN_EMAIL"] ?? configuration["Security:AdminEmail"] ?? "hnt.vn.vn@gmail.com";
+        var email = configuration["ADMIN_EMAIL"] ?? configuration["Security:AdminEmail"];
+        _allowedAdminEmail = string.IsNullOrWhiteSpace(email) ? "hnt.vn.vn@gmail.com" : email;
     }
 
     public async Task<GoogleLoginResult> HandleAsync(GoogleLoginCommand command, CancellationToken ct = default)

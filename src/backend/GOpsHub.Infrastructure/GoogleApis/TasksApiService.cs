@@ -138,6 +138,28 @@ public class TasksApiService : ITasksService
         return created.Id;
     }
 
+    public async System.Threading.Tasks.Task UpdateTaskAsync(string taskListId, string taskId, string title, string? notes, DateTime? due, string? status = null, CancellationToken ct = default)
+    {
+        var service = await GetTasksClientAsync(ct);
+        if (service == null) return;
+
+        var task = await service.Tasks.Get(taskListId, taskId).ExecuteAsync(ct);
+        if (task == null) return;
+
+        task.Title = title;
+        task.Notes = notes;
+        if (due.HasValue)
+        {
+            task.Due = due.Value.ToString("yyyy-MM-dd'T'HH:mm:ss.fffK");
+        }
+        if (!string.IsNullOrEmpty(status))
+        {
+            task.Status = status;
+        }
+
+        await service.Tasks.Update(task, taskListId, taskId).ExecuteAsync(ct);
+    }
+
     public async System.Threading.Tasks.Task CompleteTaskAsync(string taskListId, string taskId, CancellationToken ct = default)
     {
         var service = await GetTasksClientAsync(ct);

@@ -1,9 +1,9 @@
 <template>
   <div class="draft-card">
     <div class="email-info">
-      <div class="sender">{{ draft.originalEmail.from }}</div>
-      <div class="subject">{{ draft.originalEmail.subject }}</div>
-      <div class="snippet">{{ draft.originalEmail.snippet }}</div>
+      <div class="sender">{{ draft.originalEmail?.from || 'Không rõ người gửi' }}</div>
+      <div class="subject">{{ draft.originalEmail?.subject || '(Không có tiêu đề)' }}</div>
+      <div class="snippet">{{ draft.originalEmail?.snippet || '' }}</div>
     </div>
 
     <div class="ai-generated">

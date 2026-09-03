@@ -77,8 +77,29 @@ public class EmailOpsController : ControllerBase
         if (email == null) return NotFound(ApiResponse<string>.Fail("Không tìm thấy email."));
 
         var aiResult = await _aiService.GenerateEmailReplyAsync(email.Snippet ?? email.Body ?? "", "vi", null, ct);
-        
         return Ok(ApiResponse<string>.Ok(aiResult.DraftContent, "Đã tạo nháp AI."));
+    }
+
+    [HttpPost("send")]
+    public async Task<ActionResult<ApiResponse<bool>>> SendEmail([FromBody] SendEmailRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.To))
+            return BadRequest(ApiResponse<bool>.Fail("Địa chỉ người nhận không được để trống."));
+
+        var draftId = await _gmailService.CreateDraftAsync(request.To, request.Subject ?? string.Empty, request.Body ?? string.Empty, null, ct);
+        await _gmailService.SendDraftAsync(draftId, ct);
+        return Ok(ApiResponse<bool>.Ok(true, "Đã gửi email thành công."));
+    }
+
+    [HttpPost("compose-ai")]
+    public async Task<ActionResult<ApiResponse<AIReplyResult>>> ComposeAiDraft([FromBody] ComposeAiRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Prompt))
+            return BadRequest(ApiResponse<AIReplyResult>.Fail("Prompt yêu cầu soạn thảo không được để trống."));
+
+        var promptBuilder = $"Yêu cầu soạn thảo email mới bằng tiếng Việt: {request.Prompt}. Người nhận: {request.RecipientHint ?? "Đối tác/Đồng nghiệp"}. Hãy sinh nội dung hoàn chỉnh và tiêu đề phù hợp.";
+        var aiResult = await _aiService.GenerateEmailReplyAsync(promptBuilder, "vi", null, ct);
+        return Ok(ApiResponse<AIReplyResult>.Ok(aiResult, "AI đã soạn thảo nội dung thành công."));
     }
 
     /// <summary>
@@ -227,4 +248,17 @@ public class UpdateCleanupRuleRequest
 public class ReplyEmailRequest
 {
     public string Body { get; set; } = string.Empty;
+}
+
+public class SendEmailRequest
+{
+    public string To { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+}
+
+public class ComposeAiRequest
+{
+    public string Prompt { get; set; } = string.Empty;
+    public string? RecipientHint { get; set; }
 }
