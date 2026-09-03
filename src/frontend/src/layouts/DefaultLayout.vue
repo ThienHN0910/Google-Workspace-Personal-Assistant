@@ -32,6 +32,10 @@
           <i class="pi pi-shield"></i>
           <span>Drive Guard</span>
         </router-link>
+        <router-link to="/settings" class="nav-item">
+          <i class="pi pi-cog"></i>
+          <span>Cài đặt hệ thống</span>
+        </router-link>
 
         <div class="nav-divider"></div>
 
