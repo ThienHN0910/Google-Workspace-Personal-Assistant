@@ -22,7 +22,9 @@ public class NotificationService : INotificationService
         IHubContext<NotificationHub> hubContext)
     {
         _httpClient = new HttpClient();
-        _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"] ?? configuration["ALERTING__DISCORDWEBHOOKURL"];
+        _discordWebhookUrl = configuration["Alerting:DiscordWebhookUrl"] 
+            ?? configuration["ALERTING__DISCORDWEBHOOKURL"] 
+            ?? configuration["ALERTING_DISCORD_WEBHOOK_URL"];
         _telegramBotToken = configuration["Telegram:BotToken"] ?? configuration["TELEGRAM_BOT_TOKEN"];
         _telegramChatId = configuration["Telegram:ChatId"] ?? configuration["TELEGRAM_CHAT_ID"];
         _logger = logger;
