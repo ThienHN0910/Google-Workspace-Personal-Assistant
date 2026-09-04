@@ -30,11 +30,17 @@ public class CleanupRule : BaseEntity
     [BsonElement("subjectRegex")]
     public string? SubjectRegex { get; set; }
 
+    [BsonElement("senderRegex")]
+    public string? SenderRegex { get; set; }
+
     [BsonElement("bodyRegex")]
     public string? BodyRegex { get; set; }
 
     [BsonElement("isActive")]
     public bool IsActive { get; set; } = true;
+
+    [BsonElement("isAutoLearned")]
+    public bool IsAutoLearned { get; set; }
 }
 
 /// <summary>
@@ -69,3 +75,31 @@ public class CleanupLog : BaseEntity
     [BsonElement("details")]
     public string? Details { get; set; }
 }
+
+/// <summary>
+/// Detailed audit log for actions taken on emails (Read, Trash, Archive, Regex matched).
+/// </summary>
+public class EmailActionLog : BaseEntity
+{
+    [BsonElement("emailId")]
+    public string EmailId { get; set; } = string.Empty;
+
+    [BsonElement("subject")]
+    public string? Subject { get; set; }
+
+    [BsonElement("sender")]
+    public string? Sender { get; set; }
+
+    [BsonElement("action")]
+    public string Action { get; set; } = string.Empty; // "MarkedRead", "Trashed", "Archived"
+
+    [BsonElement("sourceJob")]
+    public string SourceJob { get; set; } = string.Empty; // "EmailCleanup", "BankTelemetry"
+
+    [BsonElement("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [BsonElement("executedAt")]
+    public DateTime ExecutedAt { get; set; } = DateTime.UtcNow;
+}
+

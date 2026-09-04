@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IDriveService, DriveApiService>();
         services.AddScoped<ITasksService, TasksApiService>();
         services.AddSingleton<GeminiRateLimiter>();
+        services.AddScoped<IAiUsageTracker, AiUsageTracker>();
         services.AddScoped<IAIService, GeminiAIService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>();

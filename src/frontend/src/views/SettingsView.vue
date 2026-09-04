@@ -233,6 +233,118 @@
             </ul>
           </div>
         </div>
+
+        <!-- Token AI Quota Monitoring -->
+        <div class="card-box mt-3">
+          <div class="box-header">
+            <h3><i class="pi pi-chart-bar"></i> Token AI Quota — Theo dõi hạn mức tháng</h3>
+            <button class="btn-refresh-usage" @click="fetchAiUsage" :disabled="loadingAiUsage">
+              <i class="pi" :class="loadingAiUsage ? 'pi-spin pi-spinner' : 'pi-refresh'"></i>
+            </button>
+          </div>
+          <p class="box-desc">
+            Theo dõi lượng token Gemini AI đã sử dụng trong tháng. Cảnh báo Telegram khi đạt 200K, khóa tác vụ AI chạy ngầm khi đạt 250K.
+          </p>
+
+          <div v-if="loadingAiUsage" class="usage-loading">
+            <i class="pi pi-spin pi-spinner"></i> Đang tải dữ liệu quota...
+          </div>
+          <div v-else class="token-usage-panel">
+            <!-- Progress Bar -->
+            <div class="usage-progress-container">
+              <div class="usage-labels">
+                <span class="usage-month">📅 {{ aiUsage.yearMonth || 'N/A' }}</span>
+                <span class="usage-count">{{ formatTokens(aiUsage.totalTokens) }} / {{ formatTokens(aiUsage.monthlyQuotaLimit) }} tokens</span>
+              </div>
+              <div class="progress-bar-track">
+                <div
+                  class="progress-bar-fill"
+                  :class="usageBarClass"
+                  :style="{ width: Math.min(aiUsage.usagePercentage, 100) + '%' }"
+                ></div>
+                <div class="progress-marker warning-marker" :style="{ left: warningPercentage + '%' }" title="Ngưỡng cảnh báo 200K"></div>
+              </div>
+              <div class="usage-stats-row">
+                <span :class="['usage-pct', usageBarClass]">{{ aiUsage.usagePercentage }}%</span>
+                <span class="usage-remaining">Còn lại: {{ formatTokens(aiUsage.remainingTokens) }} tokens</span>
+              </div>
+            </div>
+
+            <!-- Status Badges -->
+            <div class="usage-badges">
+              <span v-if="aiUsage.quotaExceeded" class="badge-danger">🚫 Đã vượt quota — AI ngầm bị khóa</span>
+              <span v-else-if="aiUsage.warningSent" class="badge-warning">⚠️ Đã cảnh báo — Gần đạt giới hạn</span>
+              <span v-else class="badge-ok">✅ Trong giới hạn an toàn</span>
+              <span v-if="!aiUsage.canRunBackgroundAi" class="badge-danger">🔒 Background AI: Đã khóa</span>
+              <span v-else class="badge-ok">🟢 Background AI: Hoạt động</span>
+            </div>
+
+            <!-- Feature Breakdown -->
+            <div v-if="Object.keys(aiUsage.featureBreakdown || {}).length > 0" class="feature-breakdown">
+              <h4><i class="pi pi-list"></i> Phân bổ theo tính năng</h4>
+              <div class="breakdown-list">
+                <div
+                  v-for="(tokens, feature) in aiUsage.featureBreakdown"
+                  :key="feature"
+                  class="breakdown-item"
+                >
+                  <span class="breakdown-feature">{{ feature }}</span>
+                  <div class="breakdown-bar-track">
+                    <div
+                      class="breakdown-bar-fill"
+                      :style="{ width: featurePercentage(tokens) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="breakdown-tokens">{{ formatTokens(tokens) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="usage-summary-grid">
+              <div class="usage-stat-card">
+                <span class="stat-label">Tổng lượt gọi</span>
+                <span class="stat-value">{{ aiUsage.callCount }}</span>
+              </div>
+              <div class="usage-stat-card">
+                <span class="stat-label">Prompt Tokens</span>
+                <span class="stat-value">{{ formatTokens(aiUsage.promptTokens) }}</span>
+              </div>
+              <div class="usage-stat-card">
+                <span class="stat-label">Response Tokens</span>
+                <span class="stat-value">{{ formatTokens(aiUsage.candidatesTokens) }}</span>
+              </div>
+              <div class="usage-stat-card">
+                <span class="stat-label">Reset đầu tháng sau</span>
+                <span class="stat-value">{{ nextResetDate }}</span>
+              </div>
+            </div>
+
+            <!-- Quota Settings -->
+            <div class="settings-grid" style="margin-top: 1.25rem;">
+              <div class="setting-item">
+                <label>
+                  <span>Giới hạn Token hàng tháng</span>
+                  <span class="field-hint">Khóa AI chạy ngầm khi vượt ngưỡng này</span>
+                </label>
+                <div class="input-with-unit">
+                  <input type="number" v-model.number="form.aiMonthlyTokenQuota" min="10000" max="10000000" />
+                  <span class="unit">tokens</span>
+                </div>
+              </div>
+              <div class="setting-item">
+                <label>
+                  <span>Ngưỡng cảnh báo Telegram</span>
+                  <span class="field-hint">Gửi cảnh báo khi đạt mốc này</span>
+                </label>
+                <div class="input-with-unit">
+                  <input type="number" v-model.number="form.aiWarningTokenThreshold" min="5000" max="10000000" />
+                  <span class="unit">tokens</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- TAB 4: Storage & Email Whitelist -->
@@ -311,7 +423,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import { showToast } from '@/services/notification.service';
 
@@ -322,14 +434,15 @@ const loading = ref(false);
 const saving = ref(false);
 const testingTelegram = ref(false);
 const newWhitelistDomain = ref('');
+const loadingAiUsage = ref(false);
 
 const form = ref({
   // Jobs
-  driveGuardIntervalMinutes: 5,
-  bankTelemetryIntervalMinutes: 15,
-  emailCleanupIntervalHours: 6,
-  calendarExtractorIntervalHours: 1,
-  bulkDeleteThreshold: 5,
+  driveGuardIntervalMinutes: 50,
+  bankTelemetryIntervalMinutes: 30,
+  emailCleanupIntervalHours: 12,
+  calendarExtractorIntervalHours: 2,
+  bulkDeleteThreshold: 3,
 
   // Alerts
   enableTelegram: true,
@@ -344,6 +457,8 @@ const form = ref({
   defaultTone: 'polite',
   maxRequestsPerMinute: 15,
   maxRequestsPerDay: 500,
+  aiMonthlyTokenQuota: 250000,
+  aiWarningTokenThreshold: 200000,
 
   // Storage
   financeFolderId: '',
@@ -351,6 +466,65 @@ const form = ref({
   financeFileNamePattern: 'BaoCaoTaiChinh_{yyyy_MM}',
   emailWhitelistDomains: [] as string[],
 });
+
+const aiUsage = ref({
+  yearMonth: '',
+  totalTokens: 0,
+  promptTokens: 0,
+  candidatesTokens: 0,
+  featureBreakdown: {} as Record<string, number>,
+  callCount: 0,
+  monthlyQuotaLimit: 250000,
+  warningThreshold: 200000,
+  warningSent: false,
+  quotaExceeded: false,
+  remainingTokens: 250000,
+  canRunBackgroundAi: true,
+  usagePercentage: 0,
+});
+
+const usageBarClass = computed(() => {
+  const pct = aiUsage.value.usagePercentage;
+  if (pct >= 100) return 'bar-danger';
+  if (pct >= 80) return 'bar-warning';
+  return 'bar-safe';
+});
+
+const warningPercentage = computed(() => {
+  if (aiUsage.value.monthlyQuotaLimit <= 0) return 80;
+  return Math.round((aiUsage.value.warningThreshold / aiUsage.value.monthlyQuotaLimit) * 100);
+});
+
+const nextResetDate = computed(() => {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return next.toLocaleDateString('vi-VN');
+});
+
+const formatTokens = (val: number) => {
+  if (!val && val !== 0) return '0';
+  if (val >= 1000) return (val / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return val.toString();
+};
+
+const featurePercentage = (tokens: number) => {
+  if (aiUsage.value.totalTokens <= 0) return 0;
+  return Math.round((tokens / aiUsage.value.totalTokens) * 100);
+};
+
+const fetchAiUsage = async () => {
+  loadingAiUsage.value = true;
+  try {
+    const res: any = await api.get('/settings/ai-usage');
+    if (res.success && res.data) {
+      aiUsage.value = { ...aiUsage.value, ...res.data };
+    }
+  } catch (e: any) {
+    console.error('Failed to load AI usage:', e);
+  } finally {
+    loadingAiUsage.value = false;
+  }
+};
 
 const fetchSettings = async () => {
   loading.value = true;
@@ -456,6 +630,7 @@ const removeWhitelistDomain = (idx: number) => {
 
 onMounted(() => {
   fetchSettings();
+  fetchAiUsage();
 });
 </script>
 
@@ -866,6 +1041,223 @@ onMounted(() => {
       display: flex;
       align-items: center;
       &:hover { color: #f87171; }
+    }
+  }
+}
+
+// Token AI Usage Panel Styles
+.btn-refresh-usage {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  width: 36px;
+  height: 36px;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.usage-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  padding: 2rem 0;
+  font-size: 0.875rem;
+}
+
+.token-usage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.usage-progress-container {
+  .usage-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+
+    .usage-month {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .usage-count {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+  }
+
+  .progress-bar-track {
+    position: relative;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow: visible;
+
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.6s ease;
+
+      &.bar-safe { background: linear-gradient(90deg, #10b981, #34d399); }
+      &.bar-warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+      &.bar-danger { background: linear-gradient(90deg, #ef4444, #f87171); }
+    }
+
+    .warning-marker {
+      position: absolute;
+      top: -3px;
+      width: 2px;
+      height: 18px;
+      background: #fbbf24;
+      border-radius: 1px;
+    }
+  }
+
+  .usage-stats-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+
+    .usage-pct {
+      font-size: 0.85rem;
+      font-weight: 700;
+      &.bar-safe { color: #34d399; }
+      &.bar-warning { color: #fbbf24; }
+      &.bar-danger { color: #ef4444; }
+    }
+
+    .usage-remaining {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+  }
+}
+
+.usage-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+
+  .badge-ok,
+  .badge-warning,
+  .badge-danger {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+  }
+
+  .badge-ok {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+
+  .badge-warning {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+  }
+
+  .badge-danger {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+  }
+}
+
+.feature-breakdown {
+  h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin: 0 0 0.75rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    i { color: #818cf8; }
+  }
+
+  .breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .breakdown-item {
+    display: grid;
+    grid-template-columns: 140px 1fr 70px;
+    align-items: center;
+    gap: 0.75rem;
+
+    .breakdown-feature {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .breakdown-bar-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 3px;
+      overflow: hidden;
+
+      .breakdown-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #818cf8);
+        border-radius: 3px;
+        transition: width 0.4s ease;
+      }
+    }
+
+    .breakdown-tokens {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      font-weight: 600;
+      text-align: right;
+    }
+  }
+}
+
+.usage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+
+  .usage-stat-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    text-align: center;
+
+    .stat-label {
+      display: block;
+      font-size: 0.7rem;
+      color: #64748b;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+    }
+
+    .stat-value {
+      display: block;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f8fafc;
     }
   }
 }

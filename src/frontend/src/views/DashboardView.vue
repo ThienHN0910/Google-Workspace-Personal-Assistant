@@ -71,6 +71,20 @@
         <router-link v-if="summary.activeAlerts > 0" to="/drive-guard" class="card-footer link">Xử lý ngay ➔</router-link>
         <div v-else class="card-footer">UC06 File Guard</div>
       </div>
+
+      <!-- AI Token Quota Mini-card -->
+      <div class="bento-card has-action" :class="{ 'alert-critical': aiUsage.quotaExceeded }">
+        <div class="card-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
+          <i class="pi pi-bolt"></i>
+        </div>
+        <div class="card-title">Token AI tháng này</div>
+        <div class="stat-val" :class="{ warning: aiUsage.usagePercentage >= 80 && !aiUsage.quotaExceeded, negative: aiUsage.quotaExceeded }">
+          {{ formatTokens(aiUsage.totalTokens) }}
+        </div>
+        <router-link to="/settings" class="card-footer link">
+          Quota: {{ formatTokens(aiUsage.monthlyQuotaLimit) }} ({{ aiUsage.usagePercentage }}%) ➔
+        </router-link>
+      </div>
     </div>
 
     <!-- Feeds Section (2 Columns) -->
@@ -188,6 +202,15 @@ const summary = ref({
   pendingSchedulesCount: 0,
 });
 
+const aiUsage = ref({
+  totalTokens: 0,
+  monthlyQuotaLimit: 250000,
+  usagePercentage: 0,
+  remainingTokens: 250000,
+  warningSent: false,
+  quotaExceeded: false,
+});
+
 const showComposeModal = ref(false);
 const quickDrafts = ref<any[]>([]);
 const loadingQuickDrafts = ref(false);
@@ -203,8 +226,32 @@ const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('vi-VN');
 };
 
+const formatTokens = (val: number) => {
+  if (!val && val !== 0) return '0';
+  if (val >= 1000) return (val / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return val.toString();
+};
+
 const isOverdue = (dateStr: string) => {
   return new Date(dateStr) < new Date();
+};
+
+const fetchAiUsage = async () => {
+  try {
+    const res: any = await api.get('/settings/ai-usage');
+    if (res.success && res.data) {
+      aiUsage.value = {
+        totalTokens: res.data.totalTokens || 0,
+        monthlyQuotaLimit: res.data.monthlyQuotaLimit || 250000,
+        usagePercentage: res.data.usagePercentage || 0,
+        remainingTokens: res.data.remainingTokens || 0,
+        warningSent: !!res.data.warningSent,
+        quotaExceeded: !!res.data.quotaExceeded,
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load AI usage on dashboard:', e);
+  }
 };
 
 const fetchSummary = async () => {
@@ -295,6 +342,7 @@ onMounted(() => {
   fetchSummary();
   fetchQuickDrafts();
   fetchTasks();
+  fetchAiUsage();
 });
 </script>
 

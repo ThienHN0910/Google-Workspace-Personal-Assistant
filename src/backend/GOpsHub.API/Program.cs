@@ -120,32 +120,42 @@ using (var scope = app.Services.CreateScope())
 {
     var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     var configRepo = scope.ServiceProvider.GetRequiredService<GOpsHub.Domain.Interfaces.IRepository<GOpsHub.Domain.Entities.AppConfiguration>>();
-    var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
-    var interval = config != null && int.TryParse(config.Value, out int min) ? min : 5;
+    var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult()
+        ?? configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
+    var driveInterval = config != null && int.TryParse(config.Value, out int min) ? min : 50;
+
+    var bankConfig = configRepo.FindOneAsync(c => c.Key == "BankTelemetryIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult();
+    var bankInterval = bankConfig != null && int.TryParse(bankConfig.Value, out int bMin) ? bMin : 30;
+
+    var emailConfig = configRepo.FindOneAsync(c => c.Key == "EmailCleanupIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
+    var emailInterval = emailConfig != null && int.TryParse(emailConfig.Value, out int eHr) ? eHr : 12;
+
+    var calConfig = configRepo.FindOneAsync(c => c.Key == "CalendarExtractorIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
+    var calInterval = calConfig != null && int.TryParse(calConfig.Value, out int cHr) ? cHr : 2;
     
     // 1. Drive Guard Audit Job (UC05 & UC06)
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
         "drive-guard-audit", 
         job => job.RunAuditAsync(CancellationToken.None), 
-        $"*/{interval} * * * *");
+        $"*/{driveInterval} * * * *");
 
-    // 2. Automated Inbox Zero Cleanup Job (UC01 - Every 6 hours)
+    // 2. Automated Inbox Zero Cleanup Job (UC01 - Default: Every 12 hours)
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>(
         "email-cleanup",
         job => job.RunAutoCleanupAsync(CancellationToken.None),
-        "0 */6 * * *");
+        $"0 */{emailInterval} * * *");
 
-    // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Every 15 minutes)
+    // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Default: Every 30 minutes)
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>(
         "bank-telemetry",
         job => job.RunTelemetryAsync(CancellationToken.None),
-        "*/15 * * * *");
+        $"*/{bankInterval} * * * *");
 
-    // 4. Smart Calendar Schedule Extractor Job (UC03 - Every hour)
+    // 4. Smart Calendar Schedule Extractor Job (UC03 - Default: Every 2 hours)
     recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>(
         "calendar-extractor",
         job => job.RunScheduleExtractionAsync(CancellationToken.None),
-        "0 * * * *");
+        $"0 */{calInterval} * * *");
 }
 
 app.MapControllers();
