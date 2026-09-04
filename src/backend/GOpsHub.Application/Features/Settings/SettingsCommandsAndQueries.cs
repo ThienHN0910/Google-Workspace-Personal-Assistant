@@ -16,11 +16,11 @@ namespace GOpsHub.Application.Features.Settings;
 public class SystemSettingsDto
 {
     // 1. Chu kỳ tác vụ ngầm & Ngưỡng an ninh
-    public int DriveGuardIntervalMinutes { get; set; } = 5;
-    public int BankTelemetryIntervalMinutes { get; set; } = 15;
-    public int EmailCleanupIntervalHours { get; set; } = 6;
-    public int CalendarExtractorIntervalHours { get; set; } = 1;
-    public int BulkDeleteThreshold { get; set; } = 5;
+    public int DriveGuardIntervalMinutes { get; set; } = 50;
+    public int BankTelemetryIntervalMinutes { get; set; } = 30;
+    public int EmailCleanupIntervalHours { get; set; } = 12;
+    public int CalendarExtractorIntervalHours { get; set; } = 2;
+    public int BulkDeleteThreshold { get; set; } = 3;
 
     // 2. Kênh thông báo & Cảnh báo
     public bool EnableTelegram { get; set; } = true;
@@ -35,6 +35,8 @@ public class SystemSettingsDto
     public string DefaultTone { get; set; } = "polite";
     public int MaxRequestsPerMinute { get; set; } = 15;
     public int MaxRequestsPerDay { get; set; } = 500;
+    public long AiMonthlyTokenQuota { get; set; } = 250_000;
+    public long AiWarningTokenThreshold { get; set; } = 200_000;
 
     // 4. Lưu trữ Drive & Whitelist Email
     public string? FinanceFolderId { get; set; }
@@ -111,6 +113,12 @@ public class GetSystemSettingsQueryHandler : IQueryHandler<GetSystemSettingsQuer
         dto.DefaultLanguage = configMap.GetValueOrDefault("DefaultLanguage") ?? "vi";
         dto.DefaultTone = configMap.GetValueOrDefault("DefaultTone") ?? "polite";
 
+        if (configMap.TryGetValue("AiMonthlyTokenQuota", out var amtq) && long.TryParse(amtq, out var amtqVal))
+            dto.AiMonthlyTokenQuota = Math.Max(1000, amtqVal);
+
+        if (configMap.TryGetValue("AiWarningTokenThreshold", out var awtt) && long.TryParse(awtt, out var awttVal))
+            dto.AiWarningTokenThreshold = Math.Max(1000, awttVal);
+
         // 4. Drive & Finance
         dto.FinanceFolderId = configMap.GetValueOrDefault("Finance_FolderId");
         dto.FinanceSpreadsheetId = configMap.GetValueOrDefault("Finance_SpreadsheetId");
@@ -172,6 +180,8 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
             ["GeminiModel"] = s.GeminiModel ?? "gemini-3.1-flash-lite",
             ["DefaultLanguage"] = s.DefaultLanguage ?? "vi",
             ["DefaultTone"] = s.DefaultTone ?? "polite",
+            ["AiMonthlyTokenQuota"] = s.AiMonthlyTokenQuota.ToString(),
+            ["AiWarningTokenThreshold"] = s.AiWarningTokenThreshold.ToString(),
 
             ["Finance_FolderId"] = s.FinanceFolderId ?? string.Empty,
             ["Finance_SpreadsheetId"] = s.FinanceSpreadsheetId ?? string.Empty,

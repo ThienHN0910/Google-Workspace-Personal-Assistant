@@ -136,6 +136,29 @@ const handleAiGenerate = async () => {
         summary: 'AI Hoàn thành',
         detail: 'Đã sinh nội dung email thành công. Bạn có thể chỉnh sửa lại trước khi gửi.',
       });
+
+      // Kiểm tra quota để thông báo cho người dùng
+      try {
+        const quotaRes: any = await api.get('/settings/ai-usage');
+        if (quotaRes.success && quotaRes.data) {
+          const d = quotaRes.data;
+          if (d.quotaExceeded) {
+            showToast({
+              severity: 'warn',
+              summary: 'Lưu ý Hạn ngạch AI',
+              detail: `Đã dùng ${d.totalTokens.toLocaleString()} / ${d.monthlyQuotaLimit.toLocaleString()} token (vượt hạn mức ngầm). Thao tác tay vẫn được ưu tiên phục vụ.`,
+            });
+          } else if (d.usagePercentage >= 80) {
+            showToast({
+              severity: 'info',
+              summary: 'Lượng Token còn lại',
+              detail: `Còn lại ${d.remainingTokens.toLocaleString()} token trong tháng (${d.usagePercentage}% đã dùng).`,
+            });
+          }
+        }
+      } catch {
+        // bỏ qua nếu không lấy được quota
+      }
     } else {
       showToast({
         severity: 'warn',

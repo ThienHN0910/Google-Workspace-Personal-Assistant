@@ -13,14 +13,20 @@ public class GeminiAIService : IAIService
     private readonly string _model;
     private readonly ILogger<GeminiAIService> _logger;
     private readonly GeminiRateLimiter _rateLimiter;
+    private readonly IAiUsageTracker _usageTracker;
 
-    public GeminiAIService(IConfiguration configuration, ILogger<GeminiAIService> logger, GeminiRateLimiter rateLimiter)
+    public GeminiAIService(
+        IConfiguration configuration,
+        ILogger<GeminiAIService> logger,
+        GeminiRateLimiter rateLimiter,
+        IAiUsageTracker usageTracker)
     {
         _httpClient = new HttpClient();
         _apiKey = configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"];
-        _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.6-flash-lite";
+        _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
         _logger = logger;
         _rateLimiter = rateLimiter;
+        _usageTracker = usageTracker;
     }
 
     public async Task<AIReplyResult> GenerateEmailReplyAsync(string emailContent, string language = "vi", string? templateHint = null, CancellationToken ct = default)
@@ -40,7 +46,7 @@ Nội dung email nhận được:
 
         try
         {
-            var responseText = await CallGeminiApiAsync(prompt, ct);
+            var responseText = await CallGeminiApiAsync(prompt, featureName: "EmailReply", isBackground: false, ct: ct);
 
             return new AIReplyResult
             {
@@ -80,7 +86,7 @@ Cấu trúc JSON yêu cầu:
 
 Chỉ trả về JSON thuần hợp lệ (không chứa markdown backticks ```json).";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
+        var responseText = await CallGeminiApiAsync(prompt, featureName: "ScheduleExtractor", isBackground: true, ct: ct);
         try
         {
             var cleanedJson = CleanJsonResponse(responseText);
@@ -120,7 +126,7 @@ Cấu trúc JSON yêu cầu:
 
 Chỉ trả về JSON thuần hợp lệ.";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
+        var responseText = await CallGeminiApiAsync(prompt, featureName: "BankTelemetry", isBackground: true, ct: ct);
         try
         {
             var cleanedJson = CleanJsonResponse(responseText);
@@ -167,7 +173,7 @@ Dữ liệu Email:
 
 Chỉ trả về JSON Array thuần hợp lệ.";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
+        var responseText = await CallGeminiApiAsync(prompt, featureName: "BankTelemetry", isBackground: true, ct: ct);
         try
         {
             var cleanedJson = CleanJsonResponse(responseText);
@@ -187,7 +193,7 @@ Chỉ trả về JSON Array thuần hợp lệ.";
     public async Task<string> SummarizeEmailThreadAsync(string threadContent, CancellationToken ct = default)
     {
         var prompt = $"Tóm tắt luồng email sau trong 3 câu ngắn gọn bằng tiếng Việt:\n\n{threadContent}";
-        return await CallGeminiApiAsync(prompt, ct);
+        return await CallGeminiApiAsync(prompt, featureName: "EmailSummary", isBackground: false, ct: ct);
     }
 
     /// <summary>
@@ -202,7 +208,7 @@ Nội dung: {snippet}
 
 Chỉ trả về 1 con số nguyên duy nhất từ 1 đến 10.";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
+        var responseText = await CallGeminiApiAsync(prompt, featureName: "EmailPriority", isBackground: true, ct: ct);
         if (int.TryParse(responseText.Trim(), out var score))
         {
             return Math.Clamp(score, 1, 10);
@@ -221,7 +227,7 @@ Chỉ trả về 1 con số nguyên duy nhất từ 1 đến 10.";
 Ví dụ trả về: [""Gửi báo cáo trước 5h chiều"", ""Họp với team thiết kế""]
 Chỉ trả về JSON array hợp lệ.";
 
-        var responseText = await CallGeminiApiAsync(prompt, ct);
+        var responseText = await CallGeminiApiAsync(prompt, featureName: "TaskExtractor", isBackground: false, ct: ct);
         try
         {
             var cleanedJson = CleanJsonResponse(responseText);
@@ -243,11 +249,21 @@ Chỉ trả về JSON array hợp lệ.";
 
 Định dạng bằng Markdown đẹp mắt với các tiêu đề rõ ràng.";
 
-        return await CallGeminiApiAsync(prompt, ct);
+        return await CallGeminiApiAsync(prompt, featureName: "ExecutiveReport", isBackground: false, ct: ct);
     }
 
-    private async Task<string> CallGeminiApiAsync(string prompt, CancellationToken ct)
+    private async Task<string> CallGeminiApiAsync(
+        string prompt,
+        string featureName = "General",
+        bool isBackground = false,
+        CancellationToken ct = default)
     {
+        if (isBackground && !await _usageTracker.CanRunBackgroundAiAsync(ct))
+        {
+            _logger.LogWarning("Background AI call blocked: monthly quota (250,000 tokens) reached.");
+            throw new InvalidOperationException("Hạn ngạch AI hàng tháng (250,000 token) đã chạm ngưỡng. Các tác vụ chạy ngầm tạm dừng cho đến đầu tháng sau.");
+        }
+
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("Gemini API key is not configured. Returning fallback response.");
@@ -288,6 +304,16 @@ Chỉ trả về JSON array hợp lệ.";
         {
             using var doc = JsonDocument.Parse(body);
 
+            // Record token usage if present
+            if (doc.RootElement.TryGetProperty("usageMetadata", out var usageElem))
+            {
+                long promptTokens = usageElem.TryGetProperty("promptTokenCount", out var pt) ? pt.GetInt64() : 0;
+                long candTokens = usageElem.TryGetProperty("candidatesTokenCount", out var ctElem) ? ctElem.GetInt64() : 0;
+                long totalTokens = usageElem.TryGetProperty("totalTokenCount", out var tt) ? tt.GetInt64() : (promptTokens + candTokens);
+
+                await _usageTracker.RecordUsageAsync(featureName, promptTokens, candTokens, totalTokens, ct);
+            }
+
             var text = doc.RootElement
                 .GetProperty("candidates")[0]
                 .GetProperty("content")
@@ -319,13 +345,53 @@ Chỉ trả về JSON array hợp lệ.";
         
         try
         {
-            var result = await CallGeminiApiAsync(aiPrompt, ct);
+            var result = await CallGeminiApiAsync(aiPrompt, featureName: "EmailCleanup", isBackground: true, ct: ct);
             return result.Trim().ToUpper().Contains("YES");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gemini API Error in CheckCleanupCondition");
             return false;
+        }
+    }
+
+    public async Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default)
+    {
+        var prompt = $@"Bạn là chuyên gia phân loại email. Hãy phân tích danh sách tóm tắt các email sau và tìm xem có nhóm email nào là thư rác, quảng cáo, khuyến mãi (sale off, giảm giá), newsletter lặp đi lặp lại hay không.
+Nếu phát hiện mẫu email lặp lại, hãy gợi ý một quy tắc Regex chuẩn để tự động nhận diện các email tương tự trong tương lai.
+Lưu ý: Mẫu regex phải viết dạng regex an toàn, ngắn gọn, không quá chung chung (tránh match nhầm email quan trọng).
+
+Danh sách email cần phân tích:
+{emailSnippetsBatch}
+
+Yêu cầu trả về đúng định dạng JSON thuần (KHÔNG có markdown block):
+{{
+  ""hasPattern"": true,
+  ""category"": ""Tên nhóm email (VD: Khuyến mãi Shopee / Sale off thời trang)"",
+  ""suggestedSubjectRegex"": ""(?i).*(khuyến mãi|sale\\s*(off|\\d+%)|siêu sale).*"",
+  ""suggestedSenderRegex"": ""(?i).*@(shopee|lazada)\\.vn.*"",
+  ""action"": ""Trash"",
+  ""targetEmailIds"": [""id1"", ""id2""],
+  ""reason"": ""Lý do các email này thuộc diện thư rác/quảng cáo lặp lại"",
+  ""confidenceScore"": 0.90
+}}
+Nếu không tìm thấy mẫu email rác lặp lại nào, trả về:
+{{
+  ""hasPattern"": false
+}}";
+
+        try
+        {
+            var responseText = await CallGeminiApiAsync(prompt, featureName: "EmailCleanup", isBackground: true, ct: ct);
+            var cleanJson = CleanJsonResponse(responseText);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<AIRegexRuleSuggestion>(cleanJson, options);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to analyze spam patterns with Gemini AI.");
+            return null;
         }
     }
 }

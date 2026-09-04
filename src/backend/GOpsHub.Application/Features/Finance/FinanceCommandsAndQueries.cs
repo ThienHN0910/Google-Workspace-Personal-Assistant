@@ -36,6 +36,7 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
     private readonly ISheetsService _sheetsService;
     private readonly IDriveService _driveService;
     private readonly IRepository<AppConfiguration> _configRepo;
+    private readonly IRepository<EmailActionLog> _actionLogRepo;
 
     public SyncBankTransactionsCommandHandler(
         IRepository<Transaction> transactionRepo,
@@ -43,7 +44,8 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
         IAIService aiService,
         ISheetsService sheetsService,
         IDriveService driveService,
-        IRepository<AppConfiguration> configRepo)
+        IRepository<AppConfiguration> configRepo,
+        IRepository<EmailActionLog> actionLogRepo)
     {
         _transactionRepo = transactionRepo;
         _gmailService = gmailService;
@@ -51,6 +53,7 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
         _sheetsService = sheetsService;
         _driveService = driveService;
         _configRepo = configRepo;
+        _actionLogRepo = actionLogRepo;
     }
 
     public async Task<int> HandleAsync(SyncBankTransactionsCommand command, CancellationToken ct = default)
@@ -112,7 +115,21 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
 
                 var saved = await _transactionRepo.CreateAsync(transaction, ct);
                 await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
+                
+                // Đánh dấu đã đọc thay vì xóa
                 await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
+
+                // Ghi audit log chi tiết
+                await _actionLogRepo.CreateAsync(new EmailActionLog
+                {
+                    EmailId = aiResult.EmailId,
+                    Subject = $"Biến động số dư: {target.BankName}",
+                    Sender = target.Domain,
+                    Action = "MarkedRead",
+                    SourceJob = "BankTelemetry",
+                    Reason = $"Đã ghi nhận giao dịch {transaction.Amount:N0} VND và đánh dấu đã đọc"
+                }, ct);
+
                 totalProcessed++;
             }
         }

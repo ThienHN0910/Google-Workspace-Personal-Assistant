@@ -14,6 +14,7 @@ public interface IAIService
     Task<string> GenerateExecutiveReportAsync(string periodStats, CancellationToken ct = default);
     Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default);
     Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default);
+    Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default);
 }
 
 public class AIReplyResult
@@ -52,6 +53,18 @@ public class AITransactionResult
 public class AIBatchTransactionResult : AITransactionResult
 {
     public string EmailId { get; set; } = string.Empty;
+}
+
+public class AIRegexRuleSuggestion
+{
+    public bool HasPattern { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public string? SuggestedSubjectRegex { get; set; }
+    public string? SuggestedSenderRegex { get; set; }
+    public string Action { get; set; } = "Trash";
+    public List<string> TargetEmailIds { get; set; } = new();
+    public string Reason { get; set; } = string.Empty;
+    public double ConfidenceScore { get; set; }
 }
 
 public class CalendarListEntry
