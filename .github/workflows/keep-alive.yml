@@ -1,0 +1,45 @@
+name: Keep-Alive Heartbeat (MonsterASP Anti-Sleep)
+
+on:
+  schedule:
+    # Run every 14 minutes to prevent MonsterASP / IIS 20-minute idle sleep
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Backend Keep-Alive
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Keep-Alive Endpoint
+        run: |
+          BACKEND_URL="${{ secrets.BACKEND_URL }}"
+          KEEP_ALIVE_KEY="${{ secrets.KEEP_ALIVE_KEY }}"
+
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️ BACKEND_URL secret is not set in repository settings. Skipping ping."
+            echo "To enable 24/7 keep-alive: Go to Settings -> Secrets and variables -> Actions -> New repository secret -> Name: BACKEND_URL, Value: https://your-monsterasp-domain"
+            exit 0
+          fi
+
+          # Strip trailing slash if present
+          BACKEND_URL="${BACKEND_URL%/}"
+          TARGET_URL="${BACKEND_URL}/api/v1/public/keep-alive"
+
+          echo "Pinging ${TARGET_URL}..."
+
+          HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -H "X-KeepAlive-Key: ${KEEP_ALIVE_KEY}" "${TARGET_URL}")
+
+          echo "HTTP Status Code: ${HTTP_CODE}"
+          echo "Response Body:"
+          cat response.json
+          echo ""
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Keep-Alive ping successful! Server is awake and Hangfire is active."
+          elif [ "$HTTP_CODE" -eq 401 ]; then
+            echo "❌ Unauthorized (401). Check KEEP_ALIVE_KEY secret."
+            exit 1
+          else
+            echo "⚠️ Server returned unexpected status: ${HTTP_CODE}"
+          fi
