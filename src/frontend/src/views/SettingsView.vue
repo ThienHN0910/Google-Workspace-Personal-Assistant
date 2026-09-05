@@ -103,6 +103,49 @@
             </div>
           </div>
         </div>
+
+        <!-- Anti-Sleep Keep-Alive (MonsterASP Free Tier) -->
+        <div class="card-box mt-3">
+          <div class="box-header">
+            <h3><i class="pi pi-heart"></i> Duy trì Máy chủ & Tác vụ ngầm (Keep-Alive Anti-Sleep)</h3>
+            <span class="badge-safe">🛡️ Chống ngủ IIS AppPool 20 phút</span>
+          </div>
+          <p class="box-desc">
+            Trên các gói hosting miễn phí (như MonsterASP free tier), máy chủ IIS sẽ tự động cho ứng dụng <strong>ngủ (sleep) sau 20 phút không có người truy cập</strong>, khiến Hangfire ngưng chạy ngầm. Cấu hình ping endpoint này mỗi <strong>10 - 14 phút</strong> trên <strong>Cron-job.org</strong>, <strong>UptimeRobot</strong> (miễn phí 100%) hoặc <strong>GitHub Actions</strong> để giữ máy chủ và các tác vụ ngầm luôn thức 24/7.
+          </p>
+
+          <div class="settings-grid">
+            <div class="setting-item full-width">
+              <label>
+                <span>Mã khóa bảo vệ Ping (Keep-Alive Secret Key)</span>
+                <span class="field-hint">Khóa bí mật để xác thực khi cron ping tới, ngăn ngừa bot quét rác bên ngoài</span>
+              </label>
+              <div class="key-input-row">
+                <input type="text" v-model="form.keepAliveKey" placeholder="Để trống nếu không cần khóa, hoặc nhập/bấm tạo khóa..." />
+                <button type="button" class="btn-generate-key" @click="generateKeepAliveKey">
+                  <i class="pi pi-refresh"></i> Tạo khóa ngẫu nhiên
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-item full-width">
+              <label>
+                <span>Đường link Cron Ping Keep-Alive (Webhook URL)</span>
+                <span class="field-hint">Dán URL này vào Cron-job.org hoặc UptimeRobot với chu kỳ 14 phút/lần (HTTP GET)</span>
+              </label>
+              <div class="copy-input-row">
+                <input type="text" readonly :value="computedKeepAliveUrl" />
+                <button type="button" class="btn-copy" @click="copyKeepAliveUrl">
+                  <i class="pi pi-copy"></i> Sao chép
+                </button>
+                <button type="button" class="btn-test-ping" @click="testKeepAlivePing" :disabled="testingPing">
+                  <i class="pi" :class="testingPing ? 'pi-spin pi-spinner' : 'pi-bolt'"></i>
+                  {{ testingPing ? 'Đang ping...' : 'Ping thử ngay' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- TAB 2: Multi-Channel Alerting -->
@@ -433,6 +476,7 @@ const activeTab = ref('jobs');
 const loading = ref(false);
 const saving = ref(false);
 const testingTelegram = ref(false);
+const testingPing = ref(false);
 const newWhitelistDomain = ref('');
 const loadingAiUsage = ref(false);
 
@@ -465,6 +509,9 @@ const form = ref({
   financeSpreadsheetId: '',
   financeFileNamePattern: 'BaoCaoTaiChinh_{yyyy_MM}',
   emailWhitelistDomains: [] as string[],
+
+  // Anti-Sleep Keep-Alive
+  keepAliveKey: '',
 });
 
 const aiUsage = ref({
@@ -626,6 +673,63 @@ const addWhitelistDomain = () => {
 
 const removeWhitelistDomain = (idx: number) => {
   form.value.emailWhitelistDomains.splice(idx, 1);
+};
+
+const computedKeepAliveUrl = computed(() => {
+  const origin = window.location.origin;
+  const keyParam = form.value.keepAliveKey ? `?key=${encodeURIComponent(form.value.keepAliveKey)}` : '';
+  return `${origin}/api/v1/public/keep-alive${keyParam}`;
+});
+
+const generateKeepAliveKey = () => {
+  const randomStr = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 12);
+  form.value.keepAliveKey = `ka_${randomStr}`;
+};
+
+const copyKeepAliveUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(computedKeepAliveUrl.value);
+    showToast({
+      severity: 'success',
+      summary: 'Đã sao chép URL',
+      detail: 'Đã sao chép link Cron Ping Keep-Alive vào bộ nhớ tạm!',
+    });
+  } catch {
+    showToast({
+      severity: 'info',
+      summary: 'URL Keep-Alive',
+      detail: computedKeepAliveUrl.value,
+    });
+  }
+};
+
+const testKeepAlivePing = async () => {
+  testingPing.value = true;
+  try {
+    const keyParam = form.value.keepAliveKey ? `?key=${encodeURIComponent(form.value.keepAliveKey)}` : '';
+    const res: any = await api.get(`/public/keep-alive${keyParam}`);
+    if (res.success) {
+      showToast({
+        severity: 'success',
+        summary: 'Ping thành công (200 OK)!',
+        detail: `Phản hồi: ${res.data?.message || 'Alive'} — Uptime: ${res.data?.uptime || 'Vừa khởi động'}`,
+      });
+    } else {
+      showToast({
+        severity: 'error',
+        summary: 'Ping thất bại',
+        detail: res.message || 'Máy chủ trả về lỗi khi ping.',
+      });
+    }
+  } catch (err: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi Ping Keep-Alive',
+      detail: err.message || 'Không thể kết nối đến endpoint Keep-Alive.',
+    });
+  } finally {
+    testingPing.value = false;
+  }
 };
 
 onMounted(() => {
@@ -1259,6 +1363,53 @@ onMounted(() => {
       font-weight: 700;
       color: #f8fafc;
     }
+  }
+}
+
+.key-input-row,
+.copy-input-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+
+  input {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  button {
+    padding: 0.65rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+
+  .btn-generate-key {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    color: #818cf8;
+    &:hover { background: #6366f1; color: #fff; }
+  }
+
+  .btn-copy {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #cbd5e1;
+    &:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+  }
+
+  .btn-test-ping {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #34d399;
+    &:hover:not(:disabled) { background: #10b981; color: #fff; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
 }
 

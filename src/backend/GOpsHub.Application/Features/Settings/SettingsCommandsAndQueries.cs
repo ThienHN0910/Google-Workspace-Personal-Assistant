@@ -43,6 +43,9 @@ public class SystemSettingsDto
     public string? FinanceSpreadsheetId { get; set; }
     public string FinanceFileNamePattern { get; set; } = "BaoCaoTaiChinh_{yyyy_MM}";
     public List<string> EmailWhitelistDomains { get; set; } = new();
+
+    // 5. Duy trì hoạt động máy chủ (Keep-Alive cho MonsterASP / Free Tier)
+    public string? KeepAliveKey { get; set; }
 }
 
 public record GetSystemSettingsQuery : IQuery<SystemSettingsDto>;
@@ -136,6 +139,11 @@ public class GetSystemSettingsQueryHandler : IQueryHandler<GetSystemSettingsQuer
             }
         }
 
+        // 5. Keep-Alive
+        dto.KeepAliveKey = configMap.GetValueOrDefault("KeepAliveKey")
+            ?? _configuration["KEEP_ALIVE_KEY"]
+            ?? _configuration["KeepAlive:Key"];
+
         return dto;
     }
 }
@@ -186,7 +194,9 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
             ["Finance_FolderId"] = s.FinanceFolderId ?? string.Empty,
             ["Finance_SpreadsheetId"] = s.FinanceSpreadsheetId ?? string.Empty,
             ["Finance_FileNamePattern"] = string.IsNullOrWhiteSpace(s.FinanceFileNamePattern) ? "BaoCaoTaiChinh_{yyyy_MM}" : s.FinanceFileNamePattern,
-            ["EmailWhitelistDomains"] = JsonSerializer.Serialize(s.EmailWhitelistDomains ?? new())
+            ["EmailWhitelistDomains"] = JsonSerializer.Serialize(s.EmailWhitelistDomains ?? new()),
+
+            ["KeepAliveKey"] = s.KeepAliveKey ?? string.Empty
         };
 
         foreach (var (key, value) in keyValues)
