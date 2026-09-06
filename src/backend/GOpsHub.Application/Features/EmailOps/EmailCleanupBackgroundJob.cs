@@ -58,13 +58,17 @@ public class EmailCleanupBackgroundJob
             .Where(r => !string.IsNullOrEmpty(r.SubjectRegex) || !string.IsNullOrEmpty(r.SenderRegex) || !string.IsNullOrEmpty(r.BodyRegex))
             .ToList();
 
-        // Fetch recent unread or promotional candidates from Inbox
-        var candidateEmails = await _gmailService.GetEmailsAsync("in:inbox -is:starred", 100, ct);
+        // Fetch recent UNREAD candidates from Inbox
+        var candidateEmails = await _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, ct);
         if (candidateEmails == null || !candidateEmails.Any())
         {
-            _logger.LogInformation("Inbox is clean or no candidate emails found.");
+            _logger.LogInformation("Hộp thư không có email chưa đọc nào. Bỏ qua quét dọn dẹp.");
             return;
         }
+
+        // Lấy danh sách email đã được đánh dấu chờ duyệt trước đó để tránh quét trùng
+        var existingPendingLogs = await _actionLogRepo.FindAsync(x => x.Action == "PendingApproval", ct);
+        var pendingEmailIds = existingPendingLogs.Select(x => x.EmailId).ToHashSet();
 
         var processedEmailIds = new HashSet<string>();
         int totalTrashed = 0;
@@ -118,17 +122,24 @@ public class EmailCleanupBackgroundJob
             }
         }
 
-        _logger.LogInformation("Giai đoạn 1 (Regex-First): Đã dọn {Count} emails mà KHÔNG tốn token AI.", totalRegexCleaned);
+        _logger.LogInformation("Giai đoạn 1 (Regex-First): Đã dọn {Count} emails chưa đọc mà KHÔNG tốn token AI.", totalRegexCleaned);
 
         // ==========================================
         // GIAI ĐOẠN 2: Học Regex Tự động & Phân tích AI cho các email còn lại
         // ==========================================
         var remainingEmails = candidateEmails
-            .Where(e => !processedEmailIds.Contains(e.Id) && !e.IsStarred && !IsProtectedSender(e.From, Enumerable.Empty<string>()))
+            .Where(e => !processedEmailIds.Contains(e.Id) 
+                     && !pendingEmailIds.Contains(e.Id) 
+                     && !e.IsStarred 
+                     && !IsProtectedSender(e.From, allActiveRules.SelectMany(r => r.WhitelistDomains)))
             .Take(15)
             .ToList();
 
-        if (remainingEmails.Any() && await _usageTracker.CanRunBackgroundAiAsync(ct))
+        if (!remainingEmails.Any())
+        {
+            _logger.LogInformation("Không còn email chưa đọc nào cần phân tích AI.");
+        }
+        else if (await _usageTracker.CanRunBackgroundAiAsync(ct))
         {
             try
             {
@@ -142,68 +153,108 @@ public class EmailCleanupBackgroundJob
 
                 if (suggestion != null && suggestion.HasPattern && (!string.IsNullOrEmpty(suggestion.SuggestedSubjectRegex) || !string.IsNullOrEmpty(suggestion.SuggestedSenderRegex)))
                 {
-                    var existingPatterns = allActiveRules
-                        .SelectMany(r => new[] { r.SubjectRegex, r.SenderRegex, r.BodyRegex })
-                        .Where(p => !string.IsNullOrEmpty(p))
-                        .Select(p => p!)
-                        .ToList();
-
-                    var patternToCheck = suggestion.SuggestedSubjectRegex ?? suggestion.SuggestedSenderRegex!;
-                    bool isDuplicate = IsRegexSimilarOrDuplicate(patternToCheck, existingPatterns);
-
-                    if (!isDuplicate)
+                    // Phân nhánh theo độ tin cậy của AI:
+                    if (suggestion.ConfidenceScore >= 0.85)
                     {
-                        var newRule = new CleanupRule
+                        // 1. Độ tin cậy cao: Tự động học quy tắc và tự động dọn dẹp
+                        var existingPatterns = allActiveRules
+                            .SelectMany(r => new[] { r.SubjectRegex, r.SenderRegex, r.BodyRegex })
+                            .Where(p => !string.IsNullOrEmpty(p))
+                            .Select(p => p!)
+                            .ToList();
+
+                        var patternToCheck = suggestion.SuggestedSubjectRegex ?? suggestion.SuggestedSenderRegex!;
+                        bool isDuplicate = IsRegexSimilarOrDuplicate(patternToCheck, existingPatterns);
+
+                        if (!isDuplicate)
                         {
-                            RuleName = $"Tự động học: {suggestion.Category}",
-                            Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? CleanupAction.Archive : CleanupAction.Trash,
-                            SubjectRegex = suggestion.SuggestedSubjectRegex,
-                            SenderRegex = suggestion.SuggestedSenderRegex,
-                            IsActive = true,
-                            IsAutoLearned = true,
-                            UseAI = false
-                        };
-
-                        await _ruleRepo.CreateAsync(newRule, ct);
-                        _logger.LogInformation("Tạo thành công CleanupRule tự động: {RuleName}", newRule.RuleName);
-
-                        // Thông báo Telegram
-                        await _notificationService.SendNotificationAsync(
-                            "🤖 AI vừa học Quy tắc Dọn dẹp mới!",
-                            $"Đã phân tích và tạo quy tắc tự động: <b>{newRule.RuleName}</b>\n• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\nTừ các lần sau, hệ thống sẽ tự động dọn dẹp nhóm này bằng Regex!",
-                            "info",
-                            ct);
-                    }
-
-                    // Dọn dẹp các email mục tiêu được AI chỉ định
-                    if (suggestion.TargetEmailIds != null && suggestion.TargetEmailIds.Any())
-                    {
-                        foreach (var targetId in suggestion.TargetEmailIds)
-                        {
-                            var targetEmail = remainingEmails.FirstOrDefault(e => e.Id == targetId);
-                            if (targetEmail != null)
+                            var newRule = new CleanupRule
                             {
-                                if (suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    await _gmailService.ArchiveEmailAsync(targetId, ct);
-                                    totalArchived++;
-                                }
-                                else
-                                {
-                                    await _gmailService.TrashEmailAsync(targetId, ct);
-                                    totalTrashed++;
-                                }
+                                RuleName = $"Tự động học: {suggestion.Category}",
+                                Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? CleanupAction.Archive : CleanupAction.Trash,
+                                SubjectRegex = suggestion.SuggestedSubjectRegex,
+                                SenderRegex = suggestion.SuggestedSenderRegex,
+                                IsActive = true,
+                                IsAutoLearned = true,
+                                UseAI = false
+                            };
 
-                                await _actionLogRepo.CreateAsync(new EmailActionLog
+                            await _ruleRepo.CreateAsync(newRule, ct);
+                            _logger.LogInformation("Tạo thành công CleanupRule tự động: {RuleName}", newRule.RuleName);
+
+                            // Thông báo Telegram
+                            await _notificationService.SendNotificationAsync(
+                                "🤖 AI vừa học Quy tắc Dọn dẹp mới!",
+                                $"Đã phân tích và tạo quy tắc tự động: <b>{newRule.RuleName}</b>\n• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\nTừ các lần sau, hệ thống sẽ tự động dọn dẹp nhóm này bằng Regex!",
+                                "info",
+                                ct);
+                        }
+
+                        // Dọn dẹp các email mục tiêu được AI chỉ định
+                        if (suggestion.TargetEmailIds != null && suggestion.TargetEmailIds.Any())
+                        {
+                            foreach (var targetId in suggestion.TargetEmailIds)
+                            {
+                                var targetEmail = remainingEmails.FirstOrDefault(e => e.Id == targetId);
+                                if (targetEmail != null)
                                 {
-                                    EmailId = targetId,
-                                    Subject = targetEmail.Subject,
-                                    Sender = targetEmail.From,
-                                    Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? "Archived" : "Trashed",
-                                    SourceJob = "EmailCleanup",
-                                    Reason = $"AiPatternMatched: Category '{suggestion.Category}' - {suggestion.Reason}"
-                                }, ct);
+                                    if (suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        await _gmailService.ArchiveEmailAsync(targetId, ct);
+                                        totalArchived++;
+                                    }
+                                    else
+                                    {
+                                        await _gmailService.TrashEmailAsync(targetId, ct);
+                                        totalTrashed++;
+                                    }
+
+                                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                                    {
+                                        EmailId = targetId,
+                                        Subject = targetEmail.Subject,
+                                        Sender = targetEmail.From,
+                                        Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? "Archived" : "Trashed",
+                                        SourceJob = "EmailCleanup",
+                                        Reason = $"AiPatternMatched ({suggestion.ConfidenceScore:P0}): Category '{suggestion.Category}' - {suggestion.Reason}"
+                                    }, ct);
+                                }
                             }
+                        }
+                    }
+                    else
+                    {
+                        // 2. Độ tin cậy phân vân (< 0.85): Đánh dấu lại và chờ người dùng duyệt xóa
+                        _logger.LogInformation("AI gợi ý với độ tin cậy phân vân ({Score:P0}) cho nhóm '{Category}'. Đánh dấu chờ người dùng duyệt.", suggestion.ConfidenceScore, suggestion.Category);
+                        int pendingCount = 0;
+                        if (suggestion.TargetEmailIds != null && suggestion.TargetEmailIds.Any())
+                        {
+                            foreach (var targetId in suggestion.TargetEmailIds)
+                            {
+                                var targetEmail = remainingEmails.FirstOrDefault(e => e.Id == targetId);
+                                if (targetEmail != null)
+                                {
+                                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                                    {
+                                        EmailId = targetId,
+                                        Subject = targetEmail.Subject,
+                                        Sender = targetEmail.From,
+                                        Action = "PendingApproval",
+                                        SourceJob = "EmailCleanup",
+                                        Reason = $"AiUncertain ({suggestion.ConfidenceScore:P0}): Nhóm '{suggestion.Category}' - {suggestion.Reason}"
+                                    }, ct);
+                                    pendingCount++;
+                                }
+                            }
+                        }
+
+                        if (pendingCount > 0)
+                        {
+                            await _notificationService.SendNotificationAsync(
+                                "⚠️ Email nghi vấn chờ duyệt dọn dẹp",
+                                $"AI phát hiện <b>{pendingCount}</b> email chưa đọc nghi ngờ rác/quảng cáo thuộc nhóm <b>{suggestion.Category}</b> (Độ tin cậy: {suggestion.ConfidenceScore:P0}).\nCác email này đã được lưu vào danh sách <b>Chờ duyệt</b> để bạn xem xét trước khi dọn.",
+                                "warning",
+                                ct);
                         }
                     }
                 }

@@ -114,28 +114,53 @@
 
     <!-- Tab 3: Logs -->
     <div v-else-if="activeTab === 'logs'" class="tab-content">
-      <div v-if="cleanupLogs.length === 0" class="empty-state">
-        <i class="pi pi-history"></i>
-        <p>Chưa có nhật ký dọn dẹp nào.</p>
+      <div class="logs-subnav">
+        <button 
+          class="subnav-btn" 
+          :class="{ active: logsSubTab === 'actions' }" 
+          @click="logsSubTab = 'actions'"
+        >
+          <i class="pi pi-list"></i> Chi tiết Email đã xử lý & Kiểm toán
+        </button>
+        <button 
+          class="subnav-btn" 
+          :class="{ active: logsSubTab === 'summaries' }" 
+          @click="logsSubTab = 'summaries'"
+        >
+          <i class="pi pi-chart-bar"></i> Thống kê theo đợt dọn dẹp
+        </button>
       </div>
-      <div v-else class="logs-list">
-        <div v-for="log in cleanupLogs" :key="log.id" class="log-card">
-          <div class="log-header">
-            <span class="log-rule">Quy tắc: {{ log.ruleName }}</span>
-            <span class="log-time">{{ formatDate(log.executedAt) }}</span>
-          </div>
-          <div class="log-body">
-            <div class="log-stat">Quét: <strong>{{ log.totalProcessed }}</strong></div>
-            <div class="log-stat text-red">Đã Xóa: <strong>{{ log.totalTrashed }}</strong></div>
-            <div class="log-stat text-orange">Lưu trữ: <strong>{{ log.totalArchived }}</strong></div>
-            <div class="log-stat text-gray">Bỏ qua: <strong>{{ log.totalSkipped }}</strong></div>
-          </div>
-          <div class="log-footer">
-            <span>Thời gian xử lý: {{ log.durationMs }}ms</span>
+
+      <!-- Sub-tab 1: Detailed Email Action Logs -->
+      <div v-if="logsSubTab === 'actions'">
+        <EmailActionLogList />
+      </div>
+
+      <!-- Sub-tab 2: Execution Summaries (CleanupLog) -->
+      <div v-else>
+        <div v-if="cleanupLogs.length === 0" class="empty-state">
+          <i class="pi pi-history"></i>
+          <p>Chưa có nhật ký dọn dẹp nào.</p>
+        </div>
+        <div v-else class="logs-list">
+          <div v-for="log in cleanupLogs" :key="log.id" class="log-card">
+            <div class="log-header">
+              <span class="log-rule">Quy tắc: {{ log.ruleName }}</span>
+              <span class="log-time">{{ formatDate(log.executedAt) }}</span>
+            </div>
+            <div class="log-body">
+              <div class="log-stat">Quét: <strong>{{ log.totalProcessed }}</strong></div>
+              <div class="log-stat text-red">Đã Xóa: <strong>{{ log.totalTrashed }}</strong></div>
+              <div class="log-stat text-orange">Lưu trữ: <strong>{{ log.totalArchived }}</strong></div>
+              <div class="log-stat text-gray">Bỏ qua: <strong>{{ log.totalSkipped }}</strong></div>
+            </div>
+            <div class="log-footer">
+              <span>Thời gian xử lý: {{ log.durationMs }}ms</span>
+            </div>
           </div>
         </div>
+        <InfiniteScrollObserver :loading="loadingLogs" :has-more="hasMoreLogs" @load-more="loadMoreLogs" />
       </div>
-      <InfiniteScrollObserver :loading="loadingLogs" :has-more="hasMoreLogs" @load-more="loadMoreLogs" />
     </div>
 
     <!-- Tab 4: AI Drafts Pending Approval (UC02) -->
@@ -177,12 +202,14 @@ const Editor = defineAsyncComponent(() => import('primevue/editor'));
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 const DraftReviewCard = defineAsyncComponent(() => import('@/components/email/DraftReviewCard.vue'));
 const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
+const EmailActionLogList = defineAsyncComponent(() => import('@/components/email/EmailActionLogList.vue'));
 
 const showComposeModal = ref(false);
 const pendingDrafts = ref<any[]>([]);
 const loadingDrafts = ref(false);
 
 const activeTab = ref('inbox');
+const logsSubTab = ref<'actions' | 'summaries'>('actions');
 const emails = ref<any[]>([]);
 const cleanupLogs = ref<any[]>([]);
 const loading = ref(true);
@@ -761,6 +788,40 @@ button {
   color: #333;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+}
+
+.logs-subnav {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+
+  .subnav-btn {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    &.active {
+      background: #4f46e5;
+      border-color: #6366f1;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+    }
+  }
 }
 
 .logs-list {

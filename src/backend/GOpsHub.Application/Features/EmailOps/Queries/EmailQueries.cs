@@ -84,3 +84,58 @@ public class GetCleanupLogsQueryHandler : IQueryHandler<GetCleanupLogsQuery, Pag
         };
     }
 }
+
+public record GetEmailActionLogsQuery(
+    int Page = 1,
+    int PageSize = 20,
+    string? Action = null,
+    string? SourceJob = null,
+    string? Search = null
+) : IQuery<PagedResult<EmailActionLog>>;
+
+public class GetEmailActionLogsQueryHandler : IQueryHandler<GetEmailActionLogsQuery, PagedResult<EmailActionLog>>
+{
+    private readonly IRepository<EmailActionLog> _actionLogRepo;
+
+    public GetEmailActionLogsQueryHandler(IRepository<EmailActionLog> actionLogRepo)
+    {
+        _actionLogRepo = actionLogRepo;
+    }
+
+    public async Task<PagedResult<EmailActionLog>> HandleAsync(GetEmailActionLogsQuery query, CancellationToken ct = default)
+    {
+        System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>? filter = null;
+
+        var hasAction = !string.IsNullOrWhiteSpace(query.Action);
+        var hasSource = !string.IsNullOrWhiteSpace(query.SourceJob);
+        var hasSearch = !string.IsNullOrWhiteSpace(query.Search);
+
+        if (hasAction || hasSource || hasSearch)
+        {
+            var search = query.Search?.Trim();
+            filter = x =>
+                (!hasAction || x.Action == query.Action) &&
+                (!hasSource || x.SourceJob == query.SourceJob) &&
+                (!hasSearch ||
+                 (x.Subject != null && x.Subject.Contains(search!)) ||
+                 (x.Sender != null && x.Sender.Contains(search!)) ||
+                 (x.Reason != null && x.Reason.Contains(search!)));
+        }
+
+        var (items, total) = await _actionLogRepo.GetPagedAsync(
+            filter,
+            query.Page,
+            query.PageSize,
+            x => x.ExecutedAt,
+            true,
+            ct);
+
+        return new PagedResult<EmailActionLog>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = query.Page,
+            PageSize = query.PageSize
+        };
+    }
+}
