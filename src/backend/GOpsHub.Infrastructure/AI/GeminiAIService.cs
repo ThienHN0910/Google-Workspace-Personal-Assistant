@@ -375,6 +375,10 @@ Yêu cầu trả về đúng định dạng JSON thuần (KHÔNG có markdown bl
   ""reason"": ""Lý do các email này thuộc diện thư rác/quảng cáo lặp lại"",
   ""confidenceScore"": 0.90
 }}
+Quy định về confidenceScore (thang điểm 0.0 đến 1.0):
+- Điểm >= 0.85: Chắc chắn là thư rác/quảng cáo/newsletter định kỳ, tự động dọn dẹp và áp dụng regex.
+- Điểm 0.50 đến 0.84: Nghi ngờ là spam/quảng cáo nhưng còn phân vân (có thể chứa thông báo/hóa đơn quan trọng), cần người dùng xem xét duyệt trước khi dọn.
+- Điểm < 0.50: Không nên xử lý (đặt hasPattern: false).
 Nếu không tìm thấy mẫu email rác lặp lại nào, trả về:
 {{
   ""hasPattern"": false

@@ -41,6 +41,7 @@ public class MongoDbContext
             nameof(SecurityAlert) => "security_alerts",
             nameof(Notification) => "notifications",
             nameof(BackupRecord) => "backup_records",
+            nameof(EmailActionLog) => "email_action_logs",
             _ => typeName.ToLowerInvariant() + "s"
         };
     }

@@ -159,6 +159,65 @@ public class EmailOpsController : ControllerBase
     }
 
     /// <summary>
+    /// Get detailed email action audit logs (UC01 / Telemetry)
+    /// </summary>
+    [HttpGet("action-logs")]
+    public async Task<ActionResult<ApiResponse<PagedResult<EmailActionLog>>>> GetEmailActionLogs(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? action = null,
+        [FromQuery] string? sourceJob = null,
+        [FromQuery] string? search = null)
+    {
+        var logs = await _dispatcher.QueryAsync(new GetEmailActionLogsQuery(page, pageSize, action, sourceJob, search));
+        return Ok(ApiResponse<PagedResult<EmailActionLog>>.Ok(logs));
+    }
+
+    /// <summary>
+    /// Delete a specific action log entry
+    /// </summary>
+    [HttpDelete("action-logs/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteEmailActionLog(string id)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteEmailActionLogCommand(id));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã xóa bản ghi nhật ký."));
+    }
+
+    /// <summary>
+    /// Batch delete action logs (by IDs, all, or older than N days)
+    /// </summary>
+    [HttpPost("action-logs/delete-batch")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteBatchEmailActionLogs([FromBody] DeleteBatchActionLogsRequest request)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteBatchEmailActionLogsCommand(
+            request.Ids,
+            request.DeleteAll,
+            request.OlderThanDays,
+            request.Action));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã xóa các bản ghi nhật ký được chọn."));
+    }
+
+    /// <summary>
+    /// Approve an uncertain email action awaiting human confirmation (Trash or Archive)
+    /// </summary>
+    [HttpPost("action-logs/{id}/approve")]
+    public async Task<ActionResult<ApiResponse<EmailActionLog>>> ApproveEmailAction(string id, [FromBody] ApproveEmailActionRequest request)
+    {
+        var updatedLog = await _dispatcher.SendAsync(new ApproveEmailActionCommand(id, request.Action ?? "Trash"));
+        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã phê duyệt và thực thi dọn dẹp email."));
+    }
+
+    /// <summary>
+    /// Dismiss an uncertain email action awaiting human confirmation
+    /// </summary>
+    [HttpPost("action-logs/{id}/reject")]
+    public async Task<ActionResult<ApiResponse<EmailActionLog>>> DismissEmailAction(string id)
+    {
+        var updatedLog = await _dispatcher.SendAsync(new DismissEmailActionCommand(id));
+        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã bỏ qua email khỏi danh sách chờ duyệt."));
+    }
+
+    /// <summary>
     /// Get pending AI drafts awaiting human approval (UC02)
     /// </summary>
     [HttpGet("drafts/pending")]
@@ -279,4 +338,17 @@ public class ComposeAiRequest
 {
     public string Prompt { get; set; } = string.Empty;
     public string? RecipientHint { get; set; }
+}
+
+public class DeleteBatchActionLogsRequest
+{
+    public List<string>? Ids { get; set; }
+    public bool DeleteAll { get; set; }
+    public int? OlderThanDays { get; set; }
+    public string? Action { get; set; }
+}
+
+public class ApproveEmailActionRequest
+{
+    public string? Action { get; set; } = "Trash";
 }

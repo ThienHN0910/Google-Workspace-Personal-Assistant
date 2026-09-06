@@ -62,6 +62,7 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
 {
     private readonly IRepository<CleanupRule> _ruleRepo;
     private readonly IRepository<CleanupLog> _logRepo;
+    private readonly IRepository<EmailActionLog> _actionLogRepo;
     private readonly IGmailService _gmailService;
     private readonly IAIService _aiService;
     private readonly ILogger<RunCleanupCommandHandler> _logger;
@@ -69,12 +70,14 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
     public RunCleanupCommandHandler(
         IRepository<CleanupRule> ruleRepo,
         IRepository<CleanupLog> logRepo,
+        IRepository<EmailActionLog> actionLogRepo,
         IGmailService gmailService,
         IAIService aiService,
         ILogger<RunCleanupCommandHandler> logger)
     {
         _ruleRepo = ruleRepo;
         _logRepo = logRepo;
+        _actionLogRepo = actionLogRepo;
         _gmailService = gmailService;
         _aiService = aiService;
         _logger = logger;
@@ -137,11 +140,29 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                 {
                     await _gmailService.TrashEmailAsync(email.Id, ct);
                     trashed++;
+                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                    {
+                        EmailId = email.Id,
+                        Subject = email.Subject,
+                        Sender = email.From,
+                        Action = "Trashed",
+                        SourceJob = "ManualCleanup",
+                        Reason = $"ManualRule: {rule.RuleName}"
+                    }, ct);
                 }
                 else if (rule.Action == CleanupAction.Archive)
                 {
                     await _gmailService.ArchiveEmailAsync(email.Id, ct);
                     archived++;
+                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                    {
+                        EmailId = email.Id,
+                        Subject = email.Subject,
+                        Sender = email.From,
+                        Action = "Archived",
+                        SourceJob = "ManualCleanup",
+                        Reason = $"ManualRule: {rule.RuleName}"
+                    }, ct);
                 }
             }
 
