@@ -7,10 +7,10 @@
 [![Google Gemini AI](https://img.shields.io/badge/AI-Google_Gemini-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Case Study](https://img.shields.io/badge/Case_Study-Portfolio-007ACC?style=flat-square&logo=vercel)](https://thienhn0910.vercel.app/projects/google-workspace-personal-assistant)
 [![Blog](https://img.shields.io/badge/Blog-Architecture_Deep_Dive-orange?style=flat-square)](https://thienhn0910.vercel.app/blog/architecting-g-ops-hub-dotnet-cqrs-hangfire)
-[![Author](https://img.shields.io/badge/Author-thienhn0910-4FC08D?style=flat-square)](https://thienhn0910.vercel.app/)
+[![Author](https://img.shields.io/badge/Author-ThienHN-4FC08D?style=flat-square)](https://thienhn0910.vercel.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **G-Ops Hub** is an intelligent, AI-powered personal operations engine built for the Google Workspace ecosystem (Gmail, Calendar, Drive, Sheets, Tasks). It automates repetitive operational workflows, enforces Drive asset security, logs financial transactions, and provides interactive scheduling dashboards. Engineered by [Thien Nguyen](https://thienhn0910.vercel.app/).
+> **G-Ops Hub** is an intelligent, AI-powered personal operations engine built for the Google Workspace ecosystem (Gmail, Calendar, Drive, Sheets, Tasks). It automates repetitive operational workflows, enforces Drive asset security, logs financial transactions, and provides interactive scheduling dashboards. Engineered by [ThienHN](https://thienhn0910.vercel.app/).
 
 ---
 
@@ -219,7 +219,7 @@ For deep technical insights, database schemas, and architectural logs, explore t
 
 - 📌 **Full Project Case Study**: [G-Ops Hub — Google Workspace Personal Assistant](https://thienhn0910.vercel.app/projects/google-workspace-personal-assistant)
 - 📖 **Architecture Deep-Dive Article**: [Architecting G-Ops Hub: .NET CQRS, Hangfire, and Multi-Channel Automation](https://thienhn0910.vercel.app/blog/architecting-g-ops-hub-dotnet-cqrs-hangfire)
-- 👨‍💻 **Author Portfolio**: [thienhn0910.vercel.app](https://thienhn0910.vercel.app/)
+- 👨‍💻 **Author Portfolio**: [ThienHN (thienhn0910.vercel.app)](https://thienhn0910.vercel.app/)
 - 🚀 **Explore More Engineering Projects**: [Portfolio Projects Showcase](https://thienhn0910.vercel.app/projects)
 
 ---
