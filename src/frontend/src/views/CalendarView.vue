@@ -1,9 +1,17 @@
 <template>
   <div class="calendar-page">
     <header class="page-header">
-      <div class="header-content">
-        <h1>📅 Quản lý Lịch hẹn & Scheduling (UC03)</h1>
-        <p>Đồng bộ 2 chiều với Google Calendar — Lưới tương tác & Trích xuất AI</p>
+      <div class="title-group">
+        <div class="title-icon-badge">
+          <i class="pi pi-calendar"></i>
+        </div>
+        <div class="title-text">
+          <div class="title-row">
+            <h1>Lịch Hẹn & Google Calendar Cockpit</h1>
+            <span class="version-tag">UC03 Scheduling</span>
+          </div>
+          <p class="subtitle">Đồng bộ 2 chiều với Google Calendar — Lưới tương tác & Trích xuất AI</p>
+        </div>
       </div>
       <div class="header-actions">
         <button class="primary-btn" @click="openCreateModal">
@@ -12,14 +20,19 @@
       </div>
     </header>
 
-    <!-- Navigation Tabs -->
-    <div class="tabs">
-      <button :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'">
-        🗓️ Lưới Lịch Google Calendar
-      </button>
-      <button :class="{ active: activeTab === 'extracted' }" @click="activeTab = 'extracted'">
-        ✨ Trích xuất từ Email ({{ extractedSchedules.length }})
-      </button>
+    <!-- Navigation Tabs (Cyber Glass & Scrollable on mobile) -->
+    <div class="tabs-nav-wrapper">
+      <div class="tabs-nav">
+        <button :class="{ active: activeTab === 'calendar' }" @click="activeTab = 'calendar'">
+          <i class="pi pi-calendar"></i>
+          <span>Lưới Lịch Google Calendar</span>
+        </button>
+        <button :class="{ active: activeTab === 'extracted' }" @click="activeTab = 'extracted'">
+          <i class="pi pi-sparkles"></i>
+          <span>Trích xuất từ Email</span>
+          <span v-if="extractedSchedules.length > 0" class="tab-badge-violet">{{ extractedSchedules.length }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- TAB 1: CALENDAR VIEW (WEEK / MONTH / AGENDA) -->
@@ -1020,64 +1033,161 @@ onMounted(async () => {
 .calendar-page {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
+/* ============================================================
+   CYBER-COCKPIT HEADER
+   ============================================================ */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+  padding: 0.25rem 0.1rem;
 
-  h1 {
-    font-size: 1.75rem;
-    font-weight: 800;
-    color: #f8fafc;
-    margin: 0;
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+
+    .title-icon-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.2));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      color: #38bdf8;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+    }
+
+    .title-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        flex-wrap: wrap;
+
+        h1 {
+          font-size: 1.45rem;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          margin: 0;
+          background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .version-tag {
+          font-size: 0.675rem;
+          font-family: var(--font-mono, monospace);
+          font-weight: 700;
+          padding: 0.15rem 0.5rem;
+          border-radius: 9999px;
+          background: rgba(56, 189, 248, 0.12);
+          border: 1px solid rgba(56, 189, 248, 0.3);
+          color: #38bdf8;
+          letter-spacing: 0.04em;
+        }
+      }
+
+      .subtitle {
+        color: #94a3b8;
+        font-size: 0.825rem;
+        margin: 0;
+      }
+    }
   }
 
-  p {
-    font-size: 0.875rem;
-    color: #94a3b8;
-    margin: 0.25rem 0 0;
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
   }
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  height: 38px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: 1px solid rgba(99, 102, 241, 0.4);
   color: #fff;
-  border: none;
+  padding: 0 1.15rem;
   border-radius: 0.5rem;
-  padding: 0.65rem 1.25rem;
   font-weight: 600;
+  font-size: 0.825rem;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-  &:hover { filter: brightness(1.1); }
+  gap: 0.45rem;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25);
+
+  &:hover {
+    filter: brightness(1.1);
+    transform: translate3d(0, -1.5px, 0);
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  }
 }
 
-.tabs {
-  display: flex;
-  gap: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 0.5rem;
+/* ============================================================
+   TABS NAVIGATION
+   ============================================================ */
+.tabs-nav-wrapper {
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  margin-bottom: 0.25rem;
 
-  button {
-    background: none;
-    border: none;
-    color: #94a3b8;
-    font-weight: 600;
-    font-size: 0.95rem;
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
+  &::-webkit-scrollbar { display: none; }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 
-    &.active {
-      color: #818cf8;
-      border-bottom-color: #818cf8;
+  .tabs-nav {
+    display: flex;
+    gap: 0.5rem;
+    min-width: max-content;
+
+    button {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 0.65rem 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+
+      i { font-size: 0.95rem; }
+
+      &:hover { color: #f1f5f9; }
+
+      &.active {
+        color: #38bdf8;
+        border-bottom-color: #06b6d4;
+      }
+
+      .tab-badge-violet {
+        background: rgba(139, 92, 246, 0.2);
+        border: 1px solid rgba(139, 92, 246, 0.4);
+        color: #c084fc;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.45rem;
+        border-radius: 9999px;
+        font-weight: 700;
+      }
     }
   }
 }
@@ -1164,23 +1274,25 @@ onMounted(async () => {
 
 /* 1. Week Grid */
 .week-grid {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
   overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
 }
 
 .week-header-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 23, 42, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.6);
 }
 
 .day-header-cell {
   padding: 1rem 0.5rem;
   text-align: center;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 
   &:last-child { border-right: none; }
 
@@ -1207,13 +1319,13 @@ onMounted(async () => {
 
 .day-body-column {
   padding: 0.5rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 
   &:last-child { border-right: none; }
-  &.is-today-col { background: rgba(99, 102, 241, 0.03); }
+  &.is-today-col { background: rgba(99, 102, 241, 0.04); }
 }
 
 .event-pill {
@@ -1222,10 +1334,10 @@ onMounted(async () => {
   border-radius: 0.4rem;
   padding: 0.5rem;
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform 0.15s ease, background 0.15s ease;
 
   &:hover {
-    transform: translateY(-2px);
+    transform: translate3d(0, -2px, 0);
     background: rgba(99, 102, 241, 0.28);
   }
 
@@ -1268,17 +1380,19 @@ onMounted(async () => {
 
 /* 2. Month Grid */
 .month-grid {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
   overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
 }
 
 .month-header-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  background: rgba(15, 23, 42, 0.4);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 
   .month-header-cell {
     padding: 0.75rem;
@@ -1307,11 +1421,11 @@ onMounted(async () => {
 
   &.not-current-month {
     opacity: 0.35;
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.2);
   }
 
   &.is-today-cell {
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(99, 102, 241, 0.08);
     .day-num {
       background: #6366f1;
       color: #fff;
@@ -1344,6 +1458,7 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.15s ease;
 
   &:hover { background: rgba(99, 102, 241, 0.35); }
 
@@ -1372,19 +1487,21 @@ onMounted(async () => {
   }
 
   .agenda-card {
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(11, 17, 32, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 0.75rem;
     padding: 1rem 1.25rem;
     display: flex;
     align-items: center;
     gap: 1.5rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: #6366f1;
+      background: rgba(15, 23, 42, 0.85);
+      border-color: rgba(99, 102, 241, 0.5);
+      transform: translate3d(0, -2px, 0);
     }
   }
 
@@ -1454,14 +1571,14 @@ onMounted(async () => {
 }
 
 .modal-content {
-  background: #1e293b;
+  background: #0b1120;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1rem;
   width: 100%;
   max-width: 580px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8);
   padding: 1.75rem;
 
   h3 {
@@ -1581,10 +1698,17 @@ onMounted(async () => {
 }
 
 .schedule-card {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 17, 32, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.75rem;
   padding: 1.25rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    transform: translate3d(0, -2px, 0);
+  }
 
   .card-header {
     display: flex;
