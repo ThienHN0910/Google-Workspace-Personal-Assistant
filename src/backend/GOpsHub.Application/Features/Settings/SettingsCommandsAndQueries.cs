@@ -30,7 +30,7 @@ public class SystemSettingsDto
     public string? DiscordWebhookUrl { get; set; }
 
     // 3. Trợ lý AI & Quota
-    public string GeminiModel { get; set; } = "gemini-3.1-flash-lite";
+    public string GeminiModel { get; set; } = "gemini-3.5-flash-lite";
     public string DefaultLanguage { get; set; } = "vi";
     public string DefaultTone { get; set; } = "polite";
     public int MaxRequestsPerMinute { get; set; } = 15;
@@ -111,7 +111,7 @@ public class GetSystemSettingsQueryHandler : IQueryHandler<GetSystemSettingsQuer
         dto.GeminiModel = configMap.GetValueOrDefault("GeminiModel")
             ?? _configuration["Gemini:Model"]
             ?? _configuration["GEMINI_MODEL"]
-            ?? "gemini-3.1-flash-lite";
+            ?? "gemini-3.5-flash-lite";
 
         dto.DefaultLanguage = configMap.GetValueOrDefault("DefaultLanguage") ?? "vi";
         dto.DefaultTone = configMap.GetValueOrDefault("DefaultTone") ?? "polite";
@@ -185,7 +185,7 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
             ["EnableDiscord"] = s.EnableDiscord.ToString(),
             ["DiscordWebhookUrl"] = s.DiscordWebhookUrl ?? string.Empty,
 
-            ["GeminiModel"] = s.GeminiModel ?? "gemini-3.1-flash-lite",
+            ["GeminiModel"] = string.IsNullOrWhiteSpace(s.GeminiModel) ? "gemini-3.5-flash-lite" : s.GeminiModel.Trim(),
             ["DefaultLanguage"] = s.DefaultLanguage ?? "vi",
             ["DefaultTone"] = s.DefaultTone ?? "polite",
             ["AiMonthlyTokenQuota"] = s.AiMonthlyTokenQuota.ToString(),
@@ -220,6 +220,16 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
         }
 
         // Dynamic Hangfire Rescheduling (Không cần restart server!)
+        HangfireJobRescheduler.RescheduleJobs(_recurringJobManager, s, _logger);
+
+        return true;
+    }
+}
+
+public static class HangfireJobRescheduler
+{
+    public static void RescheduleJobs(IRecurringJobManager recurringJobManager, SystemSettingsDto s, ILogger logger)
+    {
         try
         {
             var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.DriveGuardIntervalMinutes, defaultMinutes: 50);
@@ -227,34 +237,233 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
             var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.EmailCleanupIntervalHours, defaultHours: 12);
             var calCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.CalendarExtractorIntervalHours, defaultHours: 2);
 
-            _recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(
+            recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(
                 "drive-guard-audit",
                 job => job.RunAuditAsync(CancellationToken.None),
                 driveCron);
 
-            _recurringJobManager.AddOrUpdate<BankTelemetryBackgroundJob>(
+            recurringJobManager.AddOrUpdate<BankTelemetryBackgroundJob>(
                 "bank-telemetry",
                 job => job.RunTelemetryAsync(CancellationToken.None),
                 bankCron);
 
-            _recurringJobManager.AddOrUpdate<EmailCleanupBackgroundJob>(
+            recurringJobManager.AddOrUpdate<EmailCleanupBackgroundJob>(
                 "email-cleanup",
                 job => job.RunAutoCleanupAsync(CancellationToken.None),
                 emailCron);
 
-            _recurringJobManager.AddOrUpdate<CalendarScheduleBackgroundJob>(
+            recurringJobManager.AddOrUpdate<CalendarScheduleBackgroundJob>(
                 "calendar-extractor",
                 job => job.RunScheduleExtractionAsync(CancellationToken.None),
                 calCron);
 
-            _logger.LogInformation("Successfully rescheduled all Hangfire background jobs with new intervals.");
+            logger.LogInformation("Successfully rescheduled all Hangfire background jobs with new intervals.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to reschedule Hangfire jobs.");
+            logger.LogError(ex, "Failed to reschedule Hangfire jobs.");
+        }
+    }
+}
+
+public record UpdateSettingsSectionCommand(string Section, SystemSettingsDto Settings) : ICommand<bool>;
+
+public class UpdateSettingsSectionCommandHandler : ICommandHandler<UpdateSettingsSectionCommand, bool>
+{
+    private readonly IRepository<AppConfiguration> _configRepo;
+    private readonly IRecurringJobManager _recurringJobManager;
+    private readonly ILogger<UpdateSettingsSectionCommandHandler> _logger;
+
+    public UpdateSettingsSectionCommandHandler(
+        IRepository<AppConfiguration> configRepo,
+        IRecurringJobManager recurringJobManager,
+        ILogger<UpdateSettingsSectionCommandHandler> logger)
+    {
+        _configRepo = configRepo;
+        _recurringJobManager = recurringJobManager;
+        _logger = logger;
+    }
+
+    public async Task<bool> HandleAsync(UpdateSettingsSectionCommand command, CancellationToken ct = default)
+    {
+        var s = command.Settings;
+        var section = (command.Section ?? string.Empty).Trim().ToLowerInvariant();
+
+        var keyValues = new Dictionary<string, string>();
+
+        switch (section)
+        {
+            case "jobs":
+            case "intervals":
+                keyValues["DriveGuardIntervalMinutes"] = s.DriveGuardIntervalMinutes.ToString();
+                keyValues["DriveGuardInterval"] = s.DriveGuardIntervalMinutes.ToString();
+                keyValues["BankTelemetryIntervalMinutes"] = s.BankTelemetryIntervalMinutes.ToString();
+                keyValues["EmailCleanupIntervalHours"] = s.EmailCleanupIntervalHours.ToString();
+                keyValues["CalendarExtractorIntervalHours"] = s.CalendarExtractorIntervalHours.ToString();
+                keyValues["BulkDeleteThreshold"] = s.BulkDeleteThreshold.ToString();
+                break;
+
+            case "alerts":
+            case "alerting":
+                keyValues["EnableTelegram"] = s.EnableTelegram.ToString();
+                keyValues["TelegramBotToken"] = s.TelegramBotToken ?? string.Empty;
+                keyValues["TelegramChatId"] = s.TelegramChatId ?? string.Empty;
+                keyValues["EnableDiscord"] = s.EnableDiscord.ToString();
+                keyValues["DiscordWebhookUrl"] = s.DiscordWebhookUrl ?? string.Empty;
+                break;
+
+            case "ai":
+                keyValues["GeminiModel"] = string.IsNullOrWhiteSpace(s.GeminiModel) ? "gemini-3.5-flash-lite" : s.GeminiModel.Trim();
+                keyValues["DefaultLanguage"] = s.DefaultLanguage ?? "vi";
+                keyValues["DefaultTone"] = s.DefaultTone ?? "polite";
+                keyValues["AiMonthlyTokenQuota"] = s.AiMonthlyTokenQuota.ToString();
+                keyValues["AiWarningTokenThreshold"] = s.AiWarningTokenThreshold.ToString();
+                break;
+
+            case "storage":
+                keyValues["Finance_FolderId"] = s.FinanceFolderId ?? string.Empty;
+                keyValues["Finance_SpreadsheetId"] = s.FinanceSpreadsheetId ?? string.Empty;
+                keyValues["Finance_FileNamePattern"] = string.IsNullOrWhiteSpace(s.FinanceFileNamePattern) ? "BaoCaoTaiChinh_{yyyy_MM}" : s.FinanceFileNamePattern;
+                keyValues["EmailWhitelistDomains"] = JsonSerializer.Serialize(s.EmailWhitelistDomains ?? new());
+                break;
+
+            case "keepalive":
+                keyValues["KeepAliveKey"] = s.KeepAliveKey ?? string.Empty;
+                break;
+
+            default:
+                throw new ArgumentException($"Section không hợp lệ: '{command.Section}'. Các giá trị hợp lệ: jobs, alerts, ai, storage, keepalive.");
+        }
+
+        foreach (var (key, value) in keyValues)
+        {
+            var existing = await _configRepo.FindOneAsync(c => c.Key == key, ct);
+            if (existing != null)
+            {
+                existing.Value = value;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _configRepo.UpdateAsync(existing, ct);
+            }
+            else
+            {
+                await _configRepo.CreateAsync(new AppConfiguration
+                {
+                    Key = key,
+                    Value = value,
+                    UpdatedAt = DateTime.UtcNow
+                }, ct);
+            }
+        }
+
+        // CHỈ cập nhật Hangfire khi thay đổi section jobs/intervals!
+        if (section == "jobs" || section == "intervals")
+        {
+            HangfireJobRescheduler.RescheduleJobs(_recurringJobManager, s, _logger);
         }
 
         return true;
+    }
+}
+
+public record TestGeminiModelCommand(string Model) : ICommand<TestGeminiModelResult>;
+
+public class TestGeminiModelResult
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public long ResponseTimeMs { get; set; }
+}
+
+public class TestGeminiModelCommandHandler : ICommandHandler<TestGeminiModelCommand, TestGeminiModelResult>
+{
+    private readonly IConfiguration _configuration;
+    private readonly HttpClient _httpClient;
+
+    public TestGeminiModelCommandHandler(IConfiguration configuration, HttpClient? httpClient = null)
+    {
+        _configuration = configuration;
+        _httpClient = httpClient ?? new HttpClient();
+    }
+
+    public async Task<TestGeminiModelResult> HandleAsync(TestGeminiModelCommand command, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(command.Model))
+            throw new ArgumentException("Tên model không được để trống.");
+
+        var modelName = command.Model.Trim();
+        var apiKey = _configuration["Gemini:ApiKey"] ?? _configuration["GEMINI_API_KEY"];
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return new TestGeminiModelResult
+            {
+                Success = false,
+                Message = "Chưa cấu hình Gemini API Key trên hệ thống (biến GEMINI_API_KEY)."
+            };
+        }
+
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
+        var requestBody = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new[]
+                    {
+                        new { text = "ping" }
+                    }
+                }
+            }
+        };
+
+        var json = JsonSerializer.Serialize(requestBody);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var response = await _httpClient.PostAsync(url, content, ct);
+            stopwatch.Stop();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new TestGeminiModelResult
+                {
+                    Success = false,
+                    Message = $"Mô hình '{modelName}' không tồn tại hoặc đã bị Google khai tử/chưa mở quyền truy cập (Lỗi HTTP 404). Vui lòng kiểm tra lại chính tả tên model.",
+                    ResponseTimeMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                return new TestGeminiModelResult
+                {
+                    Success = false,
+                    Message = $"Google AI trả về mã lỗi HTTP {(int)response.StatusCode} ({response.StatusCode}): {errorBody}",
+                    ResponseTimeMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+
+            return new TestGeminiModelResult
+            {
+                Success = true,
+                Message = $"Kết nối thành công tới mô hình '{modelName}' (Thời gian phản hồi: {stopwatch.ElapsedMilliseconds}ms)!",
+                ResponseTimeMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            return new TestGeminiModelResult
+            {
+                Success = false,
+                Message = $"Lỗi kết nối khi gọi thử nghiệm tới model '{modelName}': {ex.Message}",
+                ResponseTimeMs = stopwatch.ElapsedMilliseconds
+            };
+        }
     }
 }
 

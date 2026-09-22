@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -10,11 +12,12 @@ public class GeminiAIService : IAIService
 {
     private readonly HttpClient _httpClient;
     private readonly string? _apiKey;
-    private readonly string _model;
+    private readonly string _defaultModel;
     private readonly ILogger<GeminiAIService> _logger;
     private readonly GeminiRateLimiter _rateLimiter;
     private readonly IAiUsageTracker _usageTracker;
     private readonly INotificationService? _notificationService;
+    private readonly IRepository<AppConfiguration>? _configRepo;
 
     public GeminiAIService(
         IConfiguration configuration,
@@ -22,15 +25,17 @@ public class GeminiAIService : IAIService
         GeminiRateLimiter rateLimiter,
         IAiUsageTracker usageTracker,
         INotificationService? notificationService = null,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        IRepository<AppConfiguration>? configRepo = null)
     {
         _httpClient = httpClient ?? new HttpClient();
         _apiKey = configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"];
-        _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
+        _defaultModel = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.5-flash-lite";
         _logger = logger;
         _rateLimiter = rateLimiter;
         _usageTracker = usageTracker;
         _notificationService = notificationService;
+        _configRepo = configRepo;
     }
 
     public async Task<AIReplyResult> GenerateEmailReplyAsync(string emailContent, string language = "vi", string? templateHint = null, CancellationToken ct = default)
@@ -256,6 +261,26 @@ Chỉ trả về JSON array hợp lệ.";
         return await CallGeminiApiAsync(prompt, featureName: "ExecutiveReport", isBackground: false, ct: ct);
     }
 
+    private async Task<string> GetActiveModelAsync(CancellationToken ct)
+    {
+        if (_configRepo != null)
+        {
+            try
+            {
+                var dbConfig = await _configRepo.FindOneAsync(c => c.Key == "GeminiModel", ct);
+                if (!string.IsNullOrWhiteSpace(dbConfig?.Value))
+                {
+                    return dbConfig.Value.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read GeminiModel from AppConfiguration repository. Falling back to default model.");
+            }
+        }
+        return _defaultModel;
+    }
+
     private async Task<string> CallGeminiApiAsync(
         string prompt,
         string featureName = "General",
@@ -272,7 +297,8 @@ Chỉ trả về JSON array hợp lệ.";
         long estimatedInputTokens = (long)(prompt.Length / 3.5);
         await _rateLimiter.WaitForSlotAsync(estimatedInputTokens, ct);
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
+        var activeModel = await GetActiveModelAsync(ct);
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{activeModel}:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
