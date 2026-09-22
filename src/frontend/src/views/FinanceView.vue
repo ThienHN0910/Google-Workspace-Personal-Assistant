@@ -1,13 +1,21 @@
 <template>
   <div class="finance-page">
     <header class="page-header">
-      <div class="header-left">
-        <h1>💳 Telemetry Tài chính (UC04)</h1>
-        <p>Báo cáo biến động số dư & Tự động đồng bộ Google Sheets</p>
+      <div class="title-group">
+        <div class="title-icon-badge">
+          <i class="pi pi-credit-card"></i>
+        </div>
+        <div class="title-text">
+          <div class="title-row">
+            <h1>Telemetry Tài Chính & Biến Động Số Dư</h1>
+            <span class="version-tag">UC04 Finance</span>
+          </div>
+          <p class="subtitle">Báo cáo thu/chi tự động, trích xuất email ngân hàng & Đồng bộ Google Sheets</p>
+        </div>
       </div>
       <div class="header-actions">
         <button class="btn-config" @click="showConfigPanel = !showConfigPanel">
-          ⚙️ Cấu hình Drive & Sheets
+          <i class="pi pi-cog"></i> Cấu hình Drive & Sheets
         </button>
         <div class="sync-controls">
           <select v-model="selectedBank" class="bank-select" :disabled="syncState.isSyncing">
@@ -24,7 +32,7 @@
     </header>
 
     <!-- Custom Bank Input Bar -->
-    <div v-if="selectedBank === 'CUSTOM'" class="custom-bank-bar card">
+    <div v-if="selectedBank === 'CUSTOM'" class="custom-bank-bar cyber-card">
       <div class="custom-bank-inputs">
         <input v-model="customDomain" placeholder="Domain gửi thư (vd: custombank.com.vn)..." />
         <input v-model="customBankName" placeholder="Tên ngân hàng (vd: MyBank)..." />
@@ -33,8 +41,13 @@
     </div>
 
     <!-- Config Panel -->
-    <div v-if="showConfigPanel" class="config-panel card">
-      <h3>⚙️ Cấu hình Xuất File Google Drive & Sheets</h3>
+    <div v-if="showConfigPanel" class="config-panel cyber-card">
+      <div class="config-header">
+        <h3><i class="pi pi-sliders-h"></i> Cấu hình Xuất File Google Drive & Sheets</h3>
+        <button class="close-config-btn" @click="showConfigPanel = false">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
       <p class="config-desc">
         Tùy chỉnh thư mục lưu file trên Google Drive, định dạng tên file tự động theo tháng, hoặc chỉ định mã Spreadsheet cố định.
       </p>
@@ -73,37 +86,52 @@
 
       <div class="config-actions">
         <button class="btn-save-config" @click="saveConfig" :disabled="savingConfig">
-          <span v-if="!savingConfig">💾 Lưu Cấu Hình</span>
-          <span v-else>⏳ Đang lưu...</span>
+          <span v-if="!savingConfig"><i class="pi pi-save"></i> Lưu Cấu Hình</span>
+          <span v-else><i class="pi pi-spin pi-spinner"></i> Đang lưu...</span>
         </button>
         <span v-if="configStatusMsg" class="config-msg">{{ configStatusMsg }}</span>
       </div>
     </div>
 
+    <!-- Sync Banner -->
     <div v-if="syncState.isSyncing" class="sync-banner">
-      Hệ thống đang nén tất cả email chưa đọc và gửi cho AI xử lý trong 1 lần. Vui lòng đợi vài giây...
+      <div class="banner-pulse"></div>
+      <i class="pi pi-spin pi-spinner"></i>
+      <span>Hệ thống đang nén tất cả email chưa đọc và gửi cho AI xử lý trong 1 lần. Vui lòng đợi vài giây...</span>
     </div>
 
+    <!-- Summary KPI Bento Grid -->
     <div class="summary-cards">
-      <div class="card income">
-        <i class="pi pi-arrow-up-right"></i>
-        <div>
-          <span>Tổng Thu (Tháng này)</span>
-          <h3>{{ formatCurrency(monthlySummary.totalIncome) }}</h3>
+      <div class="summary-card income">
+        <div class="card-icon">
+          <i class="pi pi-arrow-up-right"></i>
+        </div>
+        <div class="card-body">
+          <span class="card-label">Tổng Thu (Tháng này)</span>
+          <h3 class="card-value">{{ formatCurrency(monthlySummary.totalIncome) }}</h3>
         </div>
       </div>
-      <div class="card expense">
-        <i class="pi pi-arrow-down-right"></i>
-        <div>
-          <span>Tổng Chi (Tháng này)</span>
-          <h3>{{ formatCurrency(monthlySummary.totalExpense) }}</h3>
+      <div class="summary-card expense">
+        <div class="card-icon">
+          <i class="pi pi-arrow-down-right"></i>
+        </div>
+        <div class="card-body">
+          <span class="card-label">Tổng Chi (Tháng này)</span>
+          <h3 class="card-value">{{ formatCurrency(monthlySummary.totalExpense) }}</h3>
         </div>
       </div>
-      <div class="card balance">
-        <i class="pi pi-wallet"></i>
-        <div>
-          <span>Số dư ròng (Net)</span>
-          <h3 :class="{ positive: monthlySummary.netBalance >= 0, negative: monthlySummary.netBalance < 0 }">
+      <div class="summary-card balance">
+        <div class="card-icon">
+          <i class="pi pi-wallet"></i>
+        </div>
+        <div class="card-body">
+          <div class="card-label-row">
+            <span class="card-label">Số dư ròng (Net)</span>
+            <span class="balance-pill" :class="monthlySummary.netBalance >= 0 ? 'positive' : 'negative'">
+              {{ monthlySummary.netBalance >= 0 ? '+ Thặng dư' : '- Thâm hụt' }}
+            </span>
+          </div>
+          <h3 class="card-value" :class="{ positive: monthlySummary.netBalance >= 0, negative: monthlySummary.netBalance < 0 }">
             {{ formatCurrency(monthlySummary.netBalance) }}
           </h3>
         </div>
@@ -112,7 +140,14 @@
 
     <LoadingSpinner v-if="loading && transactions.length === 0" text="Đang tải giao dịch..." />
 
-    <div v-else class="transaction-table">
+    <!-- Transactions Cyber Table -->
+    <div v-else class="transaction-table cyber-card">
+      <div class="table-toolbar">
+        <div class="table-title">
+          <i class="pi pi-list"></i>
+          <span>Nhật Ký Biến Động Số Dư ({{ transactions.length }} bản ghi)</span>
+        </div>
+      </div>
       <div class="table-responsive">
         <table>
           <thead>
@@ -134,21 +169,22 @@
             <tr v-for="t in transactions" :key="t.id">
               <td class="code-col"><code>{{ t.transactionCode || '—' }}</code></td>
               <td class="time-col">{{ formatDate(t.transactionDate) }}</td>
-              <td><strong>{{ t.bankName }}</strong></td>
+              <td><span class="bank-tag">{{ t.bankName }}</span></td>
               <td>
                 <span class="type-tag" :class="t.transactionType === 0 ? 'credit' : 'debit'">
-                  {{ t.transactionType === 0 ? '+ Nhận' : '- Chi' }}
+                  <i :class="t.transactionType === 0 ? 'pi pi-arrow-down-left' : 'pi pi-arrow-up-right'"></i>
+                  {{ t.transactionType === 0 ? 'Nhận' : 'Chi' }}
                 </span>
               </td>
               <td class="amount" :class="t.transactionType === 0 ? 'credit' : 'debit'">
-                {{ formatCurrency(t.amount) }}
+                {{ t.transactionType === 0 ? '+' : '-' }}{{ formatCurrency(t.amount) }}
               </td>
               <td class="fee-col">{{ t.feeAmount ? formatCurrency(t.feeAmount) : '0 ₫' }}</td>
-              <td class="account-col">{{ t.sourceAccount || '—' }}</td>
-              <td class="account-col">{{ t.targetAccount || '—' }}</td>
+              <td class="account-col"><code>{{ t.sourceAccount || '—' }}</code></td>
+              <td class="account-col"><code>{{ t.targetAccount || '—' }}</code></td>
               <td class="beneficiary-col"><strong>{{ t.beneficiaryName || '—' }}</strong></td>
               <td><span class="category-chip">{{ t.category }}</span></td>
-              <td class="desc">{{ t.description }}</td>
+              <td class="desc" :title="t.description">{{ t.description }}</td>
             </tr>
           </tbody>
         </table>
@@ -159,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, defineAsyncComponent } from 'vue';
+import { ref, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import { showToast } from '@/services/notification.service';
@@ -375,18 +411,106 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+.finance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ============================================================
+   PAGE HEADER
+   ============================================================ */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding-bottom: 0.5rem;
+
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+
+    .title-icon-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(99, 102, 241, 0.2) 100%);
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #22d3ee;
+      font-size: 1.35rem;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
+      flex-shrink: 0;
+    }
+
+    .title-text {
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+
+        h1 {
+          font-size: 1.45rem;
+          font-weight: 800;
+          color: #f8fafc;
+          letter-spacing: -0.02em;
+          margin: 0;
+        }
+
+        .version-tag {
+          font-size: 0.7rem;
+          font-weight: 700;
+          padding: 0.15rem 0.55rem;
+          border-radius: 9999px;
+          background: rgba(6, 182, 212, 0.15);
+          border: 1px solid rgba(6, 182, 212, 0.35);
+          color: #67e8f9;
+        }
+      }
+
+      .subtitle {
+        color: #94a3b8;
+        font-size: 0.85rem;
+        margin: 0.2rem 0 0;
+      }
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
 }
 
-.header-actions {
-  display: flex;
-  gap: 0.75rem;
+.btn-config {
+  height: 38px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.825rem;
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 0.45rem;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translate3d(0, -1px, 0);
+  }
 }
 
 .sync-controls {
@@ -395,101 +519,135 @@ onMounted(() => {
   align-items: center;
 
   .bank-select {
-    background: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    height: 38px;
+    background: #0b1120;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     color: #f8fafc;
-    padding: 0.7rem 0.85rem;
+    padding: 0 0.85rem;
     border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.825rem;
+    font-weight: 600;
     cursor: pointer;
     outline: none;
+    transition: border-color 0.15s ease;
 
     &:focus {
-      border-color: #6366f1;
+      border-color: #38bdf8;
+    }
+  }
+
+  .btn-sync {
+    height: 38px;
+    background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+    color: #fff;
+    border: 1px solid rgba(6, 182, 212, 0.4);
+    padding: 0 1.15rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.825rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 10px rgba(6, 182, 212, 0.25);
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translate3d(0, -1px, 0);
+      box-shadow: 0 4px 16px rgba(6, 182, 212, 0.4);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
     }
   }
 }
 
+/* ============================================================
+   CUSTOM BANK BAR
+   ============================================================ */
 .custom-bank-bar {
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.25rem;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px dashed rgba(99, 102, 241, 0.3);
+  padding: 1.1rem 1.25rem;
+  background: rgba(11, 17, 32, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px dashed rgba(6, 182, 212, 0.4);
   border-radius: 0.75rem;
 
   .custom-bank-inputs {
     display: flex;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
+    gap: 0.85rem;
+    margin-bottom: 0.4rem;
 
     input {
       flex: 1;
-      background: #0f172a;
+      height: 38px;
+      background: #070b14;
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 0.5rem;
-      padding: 0.6rem 0.85rem;
+      padding: 0 0.85rem;
       color: #f8fafc;
       font-size: 0.85rem;
-      &:focus { outline: none; border-color: #6366f1; }
+      &:focus { outline: none; border-color: #38bdf8; }
     }
   }
-}
 
-.positive { color: #34d399; }
-.negative { color: #f87171; }
-
-.btn-config {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  padding: 0.75rem 1.25rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.15);
+  .field-hint {
+    font-size: 0.75rem;
+    color: #64748b;
   }
 }
 
-.btn-sync {
-  background: #6366f1;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-
-  &:hover:not(:disabled) { background: #4f46e5; }
-  &:disabled { opacity: 0.6; cursor: not-allowed; }
-}
-
+/* ============================================================
+   CONFIG PANEL
+   ============================================================ */
 .config-panel {
-  background: #1e293b;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(11, 17, 32, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(99, 102, 241, 0.35);
   border-radius: 1rem;
   padding: 1.5rem;
-  margin-bottom: 2rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 
-  h3 {
-    margin: 0 0 0.5rem 0;
-    color: #f8fafc;
-    font-size: 1.2rem;
+  .config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+
+    h3 {
+      margin: 0;
+      color: #f8fafc;
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      i { color: #818cf8; }
+    }
+
+    .close-config-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 0.25rem;
+      &:hover { color: #fff; }
+    }
   }
 
   .config-desc {
     color: #94a3b8;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     margin-bottom: 1.25rem;
   }
 
   .config-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.25rem;
     margin-bottom: 1.25rem;
   }
@@ -500,18 +658,19 @@ onMounted(() => {
     gap: 0.4rem;
 
     label {
-      font-size: 0.85rem;
+      font-size: 0.825rem;
       font-weight: 600;
       color: #cbd5e1;
     }
 
     input {
-      background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      height: 38px;
+      background: #070b14;
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 0.5rem;
-      padding: 0.65rem 0.85rem;
-      color: white;
-      font-size: 0.9rem;
+      padding: 0 0.85rem;
+      color: #f8fafc;
+      font-size: 0.85rem;
 
       &:focus {
         outline: none;
@@ -520,14 +679,14 @@ onMounted(() => {
     }
 
     .field-hint {
-      font-size: 0.75rem;
+      font-size: 0.725rem;
       color: #64748b;
       line-height: 1.3;
 
       code {
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.4);
         padding: 0.1rem 0.3rem;
-        border-radius: 0.2rem;
+        border-radius: 0.25rem;
         color: #818cf8;
       }
     }
@@ -539,77 +698,225 @@ onMounted(() => {
     gap: 1rem;
 
     .btn-save-config {
-      background: #10b981;
+      height: 38px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       color: white;
-      border: none;
-      padding: 0.65rem 1.25rem;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      padding: 0 1.25rem;
       border-radius: 0.5rem;
       font-weight: 600;
+      font-size: 0.825rem;
       cursor: pointer;
-      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
 
-      &:hover {
-        background: #059669;
+      &:hover:not(:disabled) {
+        filter: brightness(1.1);
+        transform: translate3d(0, -1px, 0);
+        box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
       }
+
+      &:disabled { opacity: 0.6; cursor: not-allowed; }
     }
 
     .config-msg {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       font-weight: 600;
+      color: #34d399;
     }
   }
 }
 
+/* ============================================================
+   SYNC BANNER
+   ============================================================ */
 .sync-banner {
-  background: rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.12);
   color: #fbbf24;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  margin-bottom: 1.5rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.6rem;
   font-weight: 500;
-  text-align: center;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
   border: 1px solid rgba(245, 158, 11, 0.3);
+
+  .banner-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    box-shadow: 0 0 10px #f59e0b;
+    animation: neonPulse 1.5s infinite;
+  }
 }
 
+/* ============================================================
+   SUMMARY CARDS (BENTO KPI TELEMETRY)
+   ============================================================ */
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  
-  .card {
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 1.25rem;
+
+  .summary-card {
+    background: rgba(11, 17, 32, 0.75);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 1rem;
-    padding: 1.5rem;
+    padding: 1.35rem;
     display: flex;
     align-items: center;
     gap: 1.25rem;
+    transition: transform 0.15s ease, border-color 0.15s ease;
 
-    i {
-      font-size: 2.5rem;
-      padding: 1rem;
-      border-radius: 0.75rem;
+    &:hover {
+      transform: translate3d(0, -2px, 0);
     }
-    
-    span { color: #94a3b8; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; }
-    h3 { margin: 0.25rem 0 0 0; font-size: 1.5rem; color: #f8fafc; }
 
-    &.income i { background: rgba(16, 185, 129, 0.1); color: #34d399; }
-    &.expense i { background: rgba(239, 68, 68, 0.1); color: #fca5a5; }
-    &.balance i { background: rgba(99, 102, 241, 0.1); color: #818cf8; }
+    .card-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .card-body {
+      flex: 1;
+      min-width: 0;
+
+      .card-label {
+        color: #94a3b8;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .card-label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+
+        .balance-pill {
+          font-size: 0.675rem;
+          font-weight: 700;
+          padding: 0.1rem 0.45rem;
+          border-radius: 9999px;
+
+          &.positive {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+          }
+
+          &.negative {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+          }
+        }
+      }
+
+      .card-value {
+        margin: 0.35rem 0 0 0;
+        font-size: 1.45rem;
+        font-weight: 800;
+        color: #f8fafc;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        &.positive { color: #34d399; text-shadow: 0 0 16px rgba(52, 211, 153, 0.25); }
+        &.negative { color: #f87171; text-shadow: 0 0 16px rgba(248, 113, 113, 0.25); }
+      }
+    }
+
+    &.income {
+      border-left: 3px solid #10b981;
+      .card-icon {
+        background: rgba(16, 185, 129, 0.15);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        color: #34d399;
+      }
+      &:hover { border-color: rgba(16, 185, 129, 0.4); }
+    }
+
+    &.expense {
+      border-left: 3px solid #ef4444;
+      .card-icon {
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+      }
+      &:hover { border-color: rgba(239, 68, 68, 0.4); }
+    }
+
+    &.balance {
+      border-left: 3px solid #6366f1;
+      .card-icon {
+        background: rgba(99, 102, 241, 0.15);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        color: #818cf8;
+      }
+      &:hover { border-color: rgba(99, 102, 241, 0.4); }
+    }
   }
 }
 
+/* ============================================================
+   TRANSACTIONS TABLE
+   ============================================================ */
 .transaction-table {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
   overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+
+  .table-toolbar {
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.5);
+
+    .table-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      i { color: #38bdf8; }
+    }
+  }
 
   .table-responsive {
     overflow-x: auto;
     width: 100%;
+
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+      &:hover { background: rgba(255, 255, 255, 0.25); }
+    }
   }
 
   table {
@@ -617,7 +924,7 @@ onMounted(() => {
     min-width: 1100px;
     border-collapse: collapse;
     text-align: left;
-    font-size: 0.85rem;
+    font-size: 0.825rem;
   }
 
   th, td {
@@ -627,30 +934,51 @@ onMounted(() => {
   }
 
   th {
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(15, 23, 42, 0.6);
     color: #94a3b8;
     font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  tbody tr {
+    transition: background 0.12s ease;
+    &:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
   }
 }
 
 .code-col code {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 0.2rem 0.4rem;
-  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.3rem;
   color: #60a5fa;
   font-family: monospace;
+  font-size: 0.775rem;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.time-col {
+  color: #cbd5e1;
   font-size: 0.8rem;
+}
+
+.bank-tag {
+  font-weight: 700;
+  color: #f1f5f9;
 }
 
 .fee-col {
   color: #94a3b8;
-  font-size: 0.8rem;
+  font-size: 0.775rem;
 }
 
-.account-col {
-  color: #cbd5e1;
+.account-col code {
+  color: #94a3b8;
   font-family: monospace;
-  font-size: 0.8rem;
+  font-size: 0.775rem;
 }
 
 .beneficiary-col {
@@ -658,34 +986,100 @@ onMounted(() => {
 }
 
 .type-tag {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.25rem;
+  font-size: 0.725rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.35rem;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 
-  &.credit { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-  &.debit { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+  &.credit {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+  &.debit {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
 }
 
 .amount {
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+
   &.credit { color: #34d399; }
-  &.debit { color: #fca5a5; }
+  &.debit { color: #f87171; }
 }
 
 .category-chip {
   background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
-  padding: 0.2rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #c7d2fe;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
 }
 
 .desc {
   color: #94a3b8;
-  max-width: 250px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ============================================================
+   RESPONSIVENESS
+   ============================================================ */
+@media (max-width: 1024px) {
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+    .summary-card.balance {
+      grid-column: span 2;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+
+    .header-actions {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+
+      .btn-config, .sync-controls {
+        width: 100%;
+      }
+
+      .sync-controls {
+        flex-direction: column;
+
+        .bank-select, .btn-sync {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    }
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
+    .summary-card.balance {
+      grid-column: span 1;
+    }
+  }
+
+  .custom-bank-bar {
+    .custom-bank-inputs {
+      flex-direction: column;
+    }
+  }
 }
 </style>
