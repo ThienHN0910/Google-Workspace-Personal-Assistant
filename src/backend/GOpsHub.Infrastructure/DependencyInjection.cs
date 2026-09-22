@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<IAiUsageTracker, AiUsageTracker>();
         services.AddScoped<IAIService, GeminiAIService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddHostedService<TelegramBotPollingService>();
         services.AddScoped<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>();
         services.AddScoped<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>();
         services.AddScoped<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>();

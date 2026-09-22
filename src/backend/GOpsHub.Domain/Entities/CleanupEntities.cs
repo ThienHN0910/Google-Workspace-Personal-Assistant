@@ -74,6 +74,9 @@ public class CleanupLog : BaseEntity
 
     [BsonElement("details")]
     public string? Details { get; set; }
+
+    [BsonElement("sessionId")]
+    public string? SessionId { get; set; }
 }
 
 /// <summary>
@@ -98,6 +101,9 @@ public class EmailActionLog : BaseEntity
 
     [BsonElement("reason")]
     public string Reason { get; set; } = string.Empty;
+
+    [BsonElement("sessionId")]
+    public string? SessionId { get; set; }
 
     [BsonElement("executedAt")]
     public DateTime ExecutedAt { get; set; } = DateTime.UtcNow;

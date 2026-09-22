@@ -61,6 +61,7 @@ public class EmailCleanupBackgroundJob
         var existingPendingLogs = await _actionLogRepo.FindAsync(x => x.Action == "PendingApproval", ct);
         var pendingEmailIds = existingPendingLogs.Select(x => x.EmailId).ToHashSet();
 
+        var sessionId = Guid.NewGuid().ToString("N")[..8];
         var processedEmailIds = new HashSet<string>();
         int totalTrashed = 0;
         int totalArchived = 0;
@@ -102,6 +103,7 @@ public class EmailCleanupBackgroundJob
                         Sender = email.From,
                         Action = rule.Action == CleanupAction.Trash ? "Trashed" : "Archived",
                         SourceJob = "EmailCleanup",
+                        SessionId = sessionId,
                         Reason = $"RegexMatched: Rule '{rule.RuleName}' (SubjectRegex: '{rule.SubjectRegex}', SenderRegex: '{rule.SenderRegex}')"
                     }, ct);
 
@@ -203,6 +205,7 @@ public class EmailCleanupBackgroundJob
                                         Sender = targetEmail.From,
                                         Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? "Archived" : "Trashed",
                                         SourceJob = "EmailCleanup",
+                                        SessionId = sessionId,
                                         Reason = $"AiPatternMatched ({suggestion.ConfidenceScore:P0}): Category '{suggestion.Category}' - {suggestion.Reason}"
                                     }, ct);
                                 }
@@ -228,6 +231,7 @@ public class EmailCleanupBackgroundJob
                                         Sender = targetEmail.From,
                                         Action = "PendingApproval",
                                         SourceJob = "EmailCleanup",
+                                        SessionId = sessionId,
                                         Reason = $"AiUncertain ({suggestion.ConfidenceScore:P0}): Nhóm '{suggestion.Category}' - {suggestion.Reason}"
                                     }, ct);
                                     pendingCount++;
@@ -255,9 +259,25 @@ public class EmailCleanupBackgroundJob
         // Bắn thông báo tóm tắt nếu có dọn dẹp
         if (totalTrashed > 0 || totalArchived > 0)
         {
+            int totalAiCleaned = Math.Max(0, (totalTrashed + totalArchived) - totalRegexCleaned);
+
+            await _logRepo.CreateAsync(new CleanupLog
+            {
+                RuleName = "AutoCleanupBackgroundJob",
+                SessionId = sessionId,
+                ExecutedAt = DateTime.UtcNow,
+                TotalProcessed = processedEmailIds.Count,
+                TotalTrashed = totalTrashed,
+                TotalArchived = totalArchived,
+                TotalSkipped = Math.Max(0, candidateEmails.Count - processedEmailIds.Count),
+                Details = $"{totalTrashed} trashed, {totalArchived} archived ({totalRegexCleaned} regex, {totalAiCleaned} AI)"
+            }, ct);
+
+            var summaryMsg = $"• Đã xóa: <b>{totalTrashed}</b> email\n• Đã lưu trữ: <b>{totalArchived}</b> email\n(<i>{totalRegexCleaned} Regex, {totalAiCleaned} AI</i>)\n\n👉 Chat <code>/readmore</code> để xem danh sách chi tiết.";
+
             await _notificationService.SendNotificationAsync(
-                "🧹 Báo cáo tự động dọn dẹp Inbox",
-                $"Đã quét và xử lý thành công: {totalTrashed} thư vào Thùng rác, {totalArchived} thư Lưu trữ (Trong đó {totalRegexCleaned} thư được dọn sạch bằng Regex).",
+                "🧹 Dọn dẹp Inbox hoàn tất",
+                summaryMsg,
                 "info",
                 ct);
         }

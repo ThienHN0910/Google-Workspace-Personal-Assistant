@@ -86,6 +86,7 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
     public async Task<CleanupLogResult> HandleAsync(RunCleanupCommand command, CancellationToken ct = default)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sessionId = Guid.NewGuid().ToString("N")[..8];
         var rules = string.IsNullOrEmpty(command.RuleId)
             ? await _ruleRepo.FindAsync(r => r.IsActive, ct)
             : await _ruleRepo.FindAsync(r => r.Id == command.RuleId && r.IsActive, ct);
@@ -141,6 +142,7 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                         Sender = email.From,
                         Action = "Trashed",
                         SourceJob = "ManualCleanup",
+                        SessionId = sessionId,
                         Reason = $"ManualRule: {rule.RuleName}"
                     }, ct);
                 }
@@ -155,6 +157,7 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                         Sender = email.From,
                         Action = "Archived",
                         SourceJob = "ManualCleanup",
+                        SessionId = sessionId,
                         Reason = $"ManualRule: {rule.RuleName}"
                     }, ct);
                 }
@@ -166,6 +169,7 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
                 {
                     RuleId = rule.Id,
                     RuleName = rule.RuleName,
+                    SessionId = sessionId,
                     ExecutedAt = DateTime.UtcNow,
                     TotalProcessed = emails.Count,
                     TotalTrashed = trashed,
