@@ -203,4 +203,96 @@ public class EmailSafetyRulesTests
         var emptyRule = new CleanupRule();
         EmailSafetyRules.IsEmailMatchingRegex(email, emptyRule).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(@"(?i).*(sale|giảm giá).*", true)]
+    [InlineData(@"^\[Quảng cáo\]", true)]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData(@"[unclosed bracket", false)]
+    [InlineData(@"((unclosed group", false)]
+    public void IsValidRegex_ShouldValidateSyntaxProperly(string? pattern, bool expected)
+    {
+        EmailSafetyRules.IsValidRegex(pattern).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("(?i).*grab.*", "(?i).*grabfood.*", true)] // short brand subset
+    [InlineData("(?i).*tiki.*", "(?i).*(tiki|tikinow).*", true)] // brand in OR branch
+    [InlineData("deals@lazada.vn", "deals@lazada.vn", true)] // exact
+    [InlineData("deals@lazada.vn", "deals@shopee.vn", false)] // different brands
+    public void AreRegexPatternsSimilar_ShouldDetectDuplicatesProperly(string p1, string p2, bool expected)
+    {
+        EmailSafetyRules.AreRegexPatternsSimilar(p1, p2).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsDuplicateRule_CrossField_DoesNotConfuseSenderAndSubject()
+    {
+        var existingRules = new List<CleanupRule>
+        {
+            new()
+            {
+                RuleName = "Block Lazada Sender",
+                SenderRegex = @"(?i).*@lazada\.vn.*",
+                SubjectRegex = null,
+                IsActive = true
+            }
+        };
+
+        // New suggestion is for Subject "Lazada", not Sender "Lazada"
+        // It should NOT be flagged as duplicate
+        var isDuplicate = EmailSafetyRules.IsDuplicateRule(
+            subjectRegex: @"(?i).*lazada.*",
+            senderRegex: null,
+            existingRules);
+
+        isDuplicate.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDuplicateRule_WhenSenderCoveredByBroaderExistingRule_ReturnsTrue()
+    {
+        var existingRules = new List<CleanupRule>
+        {
+            new()
+            {
+                RuleName = "Block All Shopee",
+                SenderRegex = @"(?i).*@shopee\.vn.*",
+                SubjectRegex = null,
+                IsActive = true
+            }
+        };
+
+        // New rule targets Shopee with a specific subject "Khuyến mãi"
+        // Since all Shopee emails are already cleaned, this rule is redundant
+        var isDuplicate = EmailSafetyRules.IsDuplicateRule(
+            subjectRegex: @"(?i).*khuyến mãi.*",
+            senderRegex: @"(?i).*@shopee\.vn.*",
+            existingRules);
+
+        isDuplicate.Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsDuplicateRule_WhenIdenticalRuleExists_ReturnsTrue()
+    {
+        var existingRules = new List<CleanupRule>
+        {
+            new()
+            {
+                RuleName = "Grab Food Deals",
+                SenderRegex = @"(?i).*@grab\.com.*",
+                SubjectRegex = @"(?i).*khuyến mãi.*",
+                IsActive = true
+            }
+        };
+
+        var isDuplicate = EmailSafetyRules.IsDuplicateRule(
+            subjectRegex: @"(?i).*khuyến mãi.*",
+            senderRegex: @"(?i).*@grab\.com.*",
+            existingRules);
+
+        isDuplicate.Should().BeTrue();
+    }
 }

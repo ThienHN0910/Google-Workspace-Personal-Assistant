@@ -113,11 +113,26 @@ public class TelegramBotPollingService : BackgroundService
         {
             await ProcessReadMoreCommandAsync(botToken, chatId, ct);
         }
+        else if (text.StartsWith("/rules", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessRulesCommandAsync(botToken, chatId, ct);
+        }
+        else if (text.StartsWith("/enable_rule", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessToggleRuleCommandAsync(botToken, chatId, text, enable: true, ct);
+        }
+        else if (text.StartsWith("/disable_rule", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessToggleRuleCommandAsync(botToken, chatId, text, enable: false, ct);
+        }
         else if (text.StartsWith("/start", StringComparison.OrdinalIgnoreCase) || text.StartsWith("/help", StringComparison.OrdinalIgnoreCase))
         {
             var helpMsg = "🤖 <b>G-Ops Hub Assistant Bot</b>\n\n" +
                           "Các lệnh khả dụng:\n" +
                           "• <code>/readmore</code> — Xem chi tiết phiên dọn dẹp email gần nhất\n" +
+                          "• <code>/rules</code> — Xem danh sách các quy tắc dọn dẹp\n" +
+                          "• <code>/enable_rule &lt;id&gt;</code> — Bật quy tắc dọn dẹp\n" +
+                          "• <code>/disable_rule &lt;id&gt;</code> — Tắt quy tắc dọn dẹp\n" +
                           "• <code>/status</code> — Kiểm tra trạng thái hệ thống";
             await SendTelegramMessageAsync(botToken, chatId, helpMsg, ct);
         }
@@ -224,6 +239,91 @@ public class TelegramBotPollingService : BackgroundService
         {
             sb.AppendLine();
             sb.AppendLine($"<i>... và <b>{logs.Count - maxDisplay}</b> email khác đã được xử lý.</i>");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private async Task ProcessRulesCommandAsync(string botToken, string chatId, CancellationToken ct)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var ruleRepo = scope.ServiceProvider.GetRequiredService<IRepository<CleanupRule>>();
+
+        var rules = (await ruleRepo.GetAllAsync(ct))
+            .OrderByDescending(r => r.IsAutoLearned)
+            .ThenByDescending(r => r.IsActive)
+            .ToList();
+
+        var responseText = FormatRulesResponse(rules);
+        await SendTelegramMessageAsync(botToken, chatId, responseText, ct);
+    }
+
+    private async Task ProcessToggleRuleCommandAsync(string botToken, string chatId, string text, bool enable, CancellationToken ct)
+    {
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            var cmdName = enable ? "/enable_rule" : "/disable_rule";
+            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Vui lòng cung cấp ID quy tắc.\nVí dụ: <code>{cmdName} 65fa1234abcd</code>", ct);
+            return;
+        }
+
+        var ruleId = parts[1].Trim();
+        using var scope = _serviceProvider.CreateScope();
+        var ruleRepo = scope.ServiceProvider.GetRequiredService<IRepository<CleanupRule>>();
+
+        var rule = await ruleRepo.GetByIdAsync(ruleId, ct);
+        if (rule == null)
+        {
+            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Không tìm thấy quy tắc nào có ID <code>{EscapeTelegramHtml(ruleId)}</code>.", ct);
+            return;
+        }
+
+        rule.IsActive = enable;
+        await ruleRepo.UpdateAsync(rule, ct);
+
+        var statusText = enable
+            ? $"✅ Đã kích hoạt quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b>!\nTừ các phiên dọn dẹp tiếp theo, quy tắc này sẽ được áp dụng tự động."
+            : $"⏸️ Đã tạm dừng quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b>.";
+
+        await SendTelegramMessageAsync(botToken, chatId, statusText, ct);
+    }
+
+    public static string FormatRulesResponse(IReadOnlyList<CleanupRule> rules)
+    {
+        if (rules == null || rules.Count == 0)
+        {
+            return "ℹ️ Hiện chưa có quy tắc dọn dẹp nào được cấu hình.";
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("📜 <b>Danh sách Quy tắc Dọn dẹp Email:</b>");
+        sb.AppendLine();
+
+        int index = 1;
+        const int maxDisplay = 15;
+        var displayRules = rules.Take(maxDisplay).ToList();
+
+        foreach (var rule in displayRules)
+        {
+            var statusIcon = rule.IsActive ? "✅ Bật" : "⏸️ Tắt";
+            var actionText = rule.Action == Domain.Enums.CleanupAction.Trash ? "Xóa" : "Lưu trữ";
+            var learnedTag = rule.IsAutoLearned ? " [AI Học]" : "";
+            sb.AppendLine($"{index++}. <b>{EscapeTelegramHtml(rule.RuleName)}</b>{learnedTag}");
+            sb.AppendLine($"   • Trạng thái: <b>{statusIcon}</b> | Hành động: <b>{actionText}</b>");
+            if (!string.IsNullOrWhiteSpace(rule.SubjectRegex))
+                sb.AppendLine($"   • Regex Tiêu đề: <code>{EscapeTelegramHtml(rule.SubjectRegex)}</code>");
+            if (!string.IsNullOrWhiteSpace(rule.SenderRegex))
+                sb.AppendLine($"   • Regex Người gửi: <code>{EscapeTelegramHtml(rule.SenderRegex)}</code>");
+            sb.AppendLine($"   • ID: <code>{rule.Id}</code>");
+            if (!rule.IsActive)
+                sb.AppendLine($"   👉 <i>Bật nhanh:</i> <code>/enable_rule {rule.Id}</code>");
+            sb.AppendLine();
+        }
+
+        if (rules.Count > maxDisplay)
+        {
+            sb.AppendLine($"<i>... và còn {rules.Count - maxDisplay} quy tắc khác trên Dashboard.</i>");
         }
 
         return sb.ToString().TrimEnd();

@@ -161,4 +161,133 @@ public static class EmailSafetyRules
 
         return "in:inbox is:unread -is:starred";
     }
+
+    /// <summary>
+    /// Validates whether a given regex string compiles cleanly without syntax errors or unsafe patterns.
+    /// </summary>
+    public static bool IsValidRegex(string? pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return true;
+        try
+        {
+            _ = new Regex(pattern, RegexOptions.None, RegexTimeout);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Compares two regex patterns to detect substantial overlap, equivalence, or containment.
+    /// Supports short keywords (e.g. grab, tiki) and OR branches (e.g. sale|deal).
+    /// </summary>
+    public static bool AreRegexPatternsSimilar(string? p1, string? p2)
+    {
+        if (string.IsNullOrWhiteSpace(p1) && string.IsNullOrWhiteSpace(p2)) return true;
+        if (string.IsNullOrWhiteSpace(p1) || string.IsNullOrWhiteSpace(p2)) return false;
+
+        string Clean(string p) =>
+            Regex.Replace(p.ToLowerInvariant().Replace("(?i)", "").Replace("(?-i)", "").Trim(), @"[\s\(\)\[\]\\\|\^\$\.\*\+\?]", "");
+
+        var c1 = Clean(p1);
+        var c2 = Clean(p2);
+
+        if (string.IsNullOrEmpty(c1) || string.IsNullOrEmpty(c2)) return false;
+        if (c1.Equals(c2, StringComparison.OrdinalIgnoreCase)) return true;
+
+        // Substring check for keywords of length >= 3
+        if (c1.Length >= 3 && c2.Length >= 3)
+        {
+            if (c1.Contains(c2, StringComparison.OrdinalIgnoreCase) || c2.Contains(c1, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        // Branch-level comparison for OR constructs
+        var branches1 = p1.Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Clean)
+            .Where(b => b.Length >= 3)
+            .ToList();
+        var branches2 = p2.Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Clean)
+            .Where(b => b.Length >= 3)
+            .ToList();
+
+        if (branches1.Count > 0 && branches2.Count > 0)
+        {
+            if (branches1.Any(b1 => branches2.Any(b2 =>
+                b1.Equals(b2, StringComparison.OrdinalIgnoreCase) ||
+                (b1.Length >= 3 && b2.Length >= 3 && (b1.Contains(b2, StringComparison.OrdinalIgnoreCase) || b2.Contains(b1, StringComparison.OrdinalIgnoreCase))))))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Evaluates if a newly suggested rule is redundant or duplicates an existing active CleanupRule.
+    /// Checks Subject-to-Subject and Sender-to-Sender independently.
+    /// </summary>
+    public static bool IsDuplicateRule(string? subjectRegex, string? senderRegex, IEnumerable<CleanupRule> existingRules)
+    {
+        bool hasSubject = !string.IsNullOrWhiteSpace(subjectRegex);
+        bool hasSender = !string.IsNullOrWhiteSpace(senderRegex);
+
+        if (!hasSubject && !hasSender) return true;
+
+        foreach (var rule in existingRules)
+        {
+            if (!rule.IsActive) continue;
+
+            bool ruleHasSubject = !string.IsNullOrWhiteSpace(rule.SubjectRegex);
+            bool ruleHasSender = !string.IsNullOrWhiteSpace(rule.SenderRegex);
+
+            // Case 1: New rule only specifies Subject
+            if (hasSubject && !hasSender)
+            {
+                if (ruleHasSubject && !ruleHasSender && AreRegexPatternsSimilar(subjectRegex, rule.SubjectRegex))
+                {
+                    return true;
+                }
+            }
+            // Case 2: New rule only specifies Sender
+            else if (!hasSubject && hasSender)
+            {
+                if (ruleHasSender && !ruleHasSubject && AreRegexPatternsSimilar(senderRegex, rule.SenderRegex))
+                {
+                    return true;
+                }
+            }
+            // Case 3: New rule specifies BOTH Subject and Sender
+            else if (hasSubject && hasSender)
+            {
+                // If existing rule already matches this sender (without subject restriction), new rule is redundant
+                if (ruleHasSender && !ruleHasSubject && AreRegexPatternsSimilar(senderRegex, rule.SenderRegex))
+                {
+                    return true;
+                }
+
+                // If existing rule already matches this subject (without sender restriction), new rule is redundant
+                if (ruleHasSubject && !ruleHasSender && AreRegexPatternsSimilar(subjectRegex, rule.SubjectRegex))
+                {
+                    return true;
+                }
+
+                // If existing rule matches both similar sender AND similar subject
+                if (ruleHasSender && ruleHasSubject &&
+                    AreRegexPatternsSimilar(senderRegex, rule.SenderRegex) &&
+                    AreRegexPatternsSimilar(subjectRegex, rule.SubjectRegex))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }

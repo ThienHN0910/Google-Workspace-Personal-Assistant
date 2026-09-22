@@ -145,38 +145,54 @@ public class EmailCleanupBackgroundJob
                     // Phân nhánh theo độ tin cậy của AI:
                     if (suggestion.ConfidenceScore >= 0.85)
                     {
-                        // 1. Độ tin cậy cao: Tự động học quy tắc và tự động dọn dẹp
-                        var existingPatterns = allActiveRules
-                            .SelectMany(r => new[] { r.SubjectRegex, r.SenderRegex, r.BodyRegex })
-                            .Where(p => !string.IsNullOrEmpty(p))
-                            .Select(p => p!)
-                            .ToList();
+                        // 1. Độ tin cậy cao: Tự động học quy tắc và dọn dẹp an toàn
+                        bool isValidSubject = EmailSafetyRules.IsValidRegex(suggestion.SuggestedSubjectRegex);
+                        bool isValidSender = EmailSafetyRules.IsValidRegex(suggestion.SuggestedSenderRegex);
 
-                        var patternToCheck = suggestion.SuggestedSubjectRegex ?? suggestion.SuggestedSenderRegex!;
-                        bool isDuplicate = IsRegexSimilarOrDuplicate(patternToCheck, existingPatterns);
-
-                        if (!isDuplicate)
+                        if (!isValidSubject || !isValidSender)
                         {
-                            var newRule = new CleanupRule
+                            _logger.LogWarning("AI gợi ý biểu thức Regex không hợp lệ cú pháp. Bỏ qua tạo quy tắc. Subject: '{Subject}', Sender: '{Sender}'",
+                                suggestion.SuggestedSubjectRegex, suggestion.SuggestedSenderRegex);
+                        }
+                        else
+                        {
+                            bool isDuplicate = EmailSafetyRules.IsDuplicateRule(
+                                suggestion.SuggestedSubjectRegex,
+                                suggestion.SuggestedSenderRegex,
+                                allActiveRules);
+
+                            if (!isDuplicate)
                             {
-                                RuleName = $"Tự động học: {suggestion.Category}",
-                                Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? CleanupAction.Archive : CleanupAction.Trash,
-                                SubjectRegex = suggestion.SuggestedSubjectRegex,
-                                SenderRegex = suggestion.SuggestedSenderRegex,
-                                IsActive = true,
-                                IsAutoLearned = true,
-                                UseAI = false
-                            };
+                                var newRule = new CleanupRule
+                                {
+                                    RuleName = $"Tự động học: {suggestion.Category}",
+                                    Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? CleanupAction.Archive : CleanupAction.Trash,
+                                    SubjectRegex = suggestion.SuggestedSubjectRegex,
+                                    SenderRegex = suggestion.SuggestedSenderRegex,
+                                    IsActive = false, // An toàn: Mặc định TẮT để người dùng chủ động duyệt trước khi áp dụng vĩnh viễn
+                                    IsAutoLearned = true,
+                                    UseAI = false
+                                };
 
-                            await _ruleRepo.CreateAsync(newRule, ct);
-                            _logger.LogInformation("Tạo thành công CleanupRule tự động: {RuleName}", newRule.RuleName);
+                                await _ruleRepo.CreateAsync(newRule, ct);
+                                _logger.LogInformation("Tạo thành công CleanupRule tự động (Chờ kích hoạt): {RuleName} (ID: {RuleId})", newRule.RuleName, newRule.Id);
 
-                            // Thông báo Telegram
-                            await _notificationService.SendNotificationAsync(
-                                "🤖 AI vừa học Quy tắc Dọn dẹp mới!",
-                                $"Đã phân tích và tạo quy tắc tự động: <b>{newRule.RuleName}</b>\n• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\nTừ các lần sau, hệ thống sẽ tự động dọn dẹp nhóm này bằng Regex!",
-                                "info",
-                                ct);
+                                // Thông báo Telegram kèm cú pháp kích hoạt nhanh
+                                await _notificationService.SendNotificationAsync(
+                                    "🤖 AI vừa học Quy tắc Dọn dẹp mới (Đang chờ kích hoạt)",
+                                    $"Đã phân tích và đề xuất quy tắc: <b>{newRule.RuleName}</b>\n" +
+                                    $"• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n" +
+                                    $"• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\n" +
+                                    $"• Hành động: <b>{(newRule.Action == CleanupAction.Trash ? "Xóa (Trash)" : "Lưu trữ (Archive)")}</b>\n\n" +
+                                    $"🛡️ <i>Quy tắc đang ở trạng thái <b>TẮT</b> để đảm bảo an toàn tuyệt đối.</i>\n" +
+                                    $"👉 Để kích hoạt, bạn có thể gửi lệnh: <code>/enable_rule {newRule.Id}</code> hoặc bật tại Web Dashboard.",
+                                    "info",
+                                    ct);
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Quy tắc do AI gợi ý tương đồng hoặc đã bị bao phủ bởi quy tắc hiện có. Bỏ qua tạo mới.");
+                            }
                         }
 
                         // Dọn dẹp các email mục tiêu được AI chỉ định
@@ -283,34 +299,5 @@ public class EmailCleanupBackgroundJob
         }
 
         _logger.LogInformation("Hoàn tất Email Cleanup: Trashed={Trashed}, Archived={Archived}, RegexCount={Regex}", totalTrashed, totalArchived, totalRegexCleaned);
-    }
-
-    private static bool IsRegexSimilarOrDuplicate(string newPattern, IEnumerable<string> existingPatterns)
-    {
-        if (string.IsNullOrWhiteSpace(newPattern)) return false;
-
-        string Normalize(string p) =>
-            Regex.Replace(p.ToLowerInvariant().Replace("(?i)", "").Trim(), @"[\s\(\)\[\]\\\|\^\$\.\*\+\?]", "");
-
-        var normNew = Normalize(newPattern);
-        if (string.IsNullOrEmpty(normNew)) return false;
-
-        foreach (var exist in existingPatterns)
-        {
-            if (string.IsNullOrWhiteSpace(exist)) continue;
-            var normExist = Normalize(exist);
-            if (string.IsNullOrEmpty(normExist)) continue;
-
-            if (normNew.Equals(normExist, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (normNew.Length > 6 && normExist.Length > 6)
-            {
-                if (normNew.Contains(normExist) || normExist.Contains(normNew))
-                    return true;
-            }
-        }
-
-        return false;
     }
 }

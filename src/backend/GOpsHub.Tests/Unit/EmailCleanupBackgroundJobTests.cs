@@ -149,4 +149,166 @@ public class EmailCleanupBackgroundJobTests
             "warning",
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAutoCleanupAsync_WhenAIHighConfidence_ShouldCreateInactiveRuleAndNotifyTelegram()
+    {
+        // Arrange
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+
+        var unreadEmail = new EmailMessage
+        {
+            Id = "email-3",
+            From = "newsletter@spammybrand.com",
+            Subject = "Flash Sale 70% Off Today",
+            Snippet = "Big deals for you today..."
+        };
+
+        _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { unreadEmail });
+
+        _actionLogRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailActionLog>());
+
+        _usageTracker.CanRunBackgroundAiAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        _aiService.AnalyzeSpamPatternsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new AIRegexRuleSuggestion
+            {
+                HasPattern = true,
+                Category = "Flash Sale",
+                SuggestedSubjectRegex = @"(?i).*flash\s+sale.*",
+                SuggestedSenderRegex = @"(?i).*@spammybrand\.com.*",
+                Action = "Trash",
+                TargetEmailIds = new List<string> { "email-3" },
+                Reason = "Repetitive flash sales",
+                ConfidenceScore = 0.92 // >= 0.85
+            });
+
+        var job = CreateJob();
+
+        // Act
+        await job.RunAutoCleanupAsync();
+
+        // Assert: Rule must be created with IsActive = false (Safe default)
+        await _ruleRepo.Received(1).CreateAsync(
+            Arg.Is<CleanupRule>(r =>
+                r.RuleName.Contains("Flash Sale") &&
+                r.IsActive == false && // Crucial safety assertion
+                r.IsAutoLearned == true &&
+                r.SubjectRegex == @"(?i).*flash\s+sale.*" &&
+                r.SenderRegex == @"(?i).*@spammybrand\.com.*" &&
+                r.Action == CleanupAction.Trash),
+            Arg.Any<CancellationToken>());
+
+        // Assert: Target email should be cleaned
+        await _gmailService.Received(1).TrashEmailAsync("email-3", Arg.Any<CancellationToken>());
+
+        // Assert: Notification sent with activation instruction
+        await _notificationService.Received(1).SendNotificationAsync(
+            Arg.Is<string>(t => t.Contains("chờ kích hoạt")),
+            Arg.Is<string>(m => m.Contains("/enable_rule")),
+            "info",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAutoCleanupAsync_WhenAIRegexMalformed_ShouldNotCreateRule()
+    {
+        // Arrange
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+
+        var unreadEmail = new EmailMessage
+        {
+            Id = "email-4",
+            From = "malformed@spammer.com",
+            Subject = "Spam test",
+            Snippet = "Test snippet"
+        };
+
+        _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { unreadEmail });
+
+        _actionLogRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailActionLog>());
+
+        _usageTracker.CanRunBackgroundAiAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        _aiService.AnalyzeSpamPatternsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new AIRegexRuleSuggestion
+            {
+                HasPattern = true,
+                Category = "Broken Regex",
+                SuggestedSubjectRegex = @"[unclosed bracket", // Malformed
+                SuggestedSenderRegex = null,
+                Action = "Trash",
+                TargetEmailIds = new List<string> { "email-4" },
+                Reason = "Malformed regex test",
+                ConfidenceScore = 0.95
+            });
+
+        var job = CreateJob();
+
+        // Act
+        await job.RunAutoCleanupAsync();
+
+        // Assert: Should NOT create rule due to malformed regex
+        await _ruleRepo.DidNotReceive().CreateAsync(Arg.Any<CleanupRule>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAutoCleanupAsync_WhenAIRuleDuplicate_ShouldNotCreateRule()
+    {
+        // Arrange
+        var existingRule = new CleanupRule
+        {
+            Id = "rule-existing",
+            RuleName = "Block All Shopee",
+            SenderRegex = @"(?i).*@shopee\.vn.*",
+            IsActive = true
+        };
+
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule> { existingRule });
+
+        var unreadEmail = new EmailMessage
+        {
+            Id = "email-5",
+            From = "deals@shopee.vn",
+            Subject = "Flash Sale Shopee",
+            Snippet = "Shopee deal"
+        };
+
+        _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { unreadEmail });
+
+        _actionLogRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailActionLog>());
+
+        _usageTracker.CanRunBackgroundAiAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        // AI suggests rule for Shopee sender that's already covered by existingRule
+        _aiService.AnalyzeSpamPatternsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new AIRegexRuleSuggestion
+            {
+                HasPattern = true,
+                Category = "Shopee Deals",
+                SuggestedSubjectRegex = null,
+                SuggestedSenderRegex = @"(?i).*@shopee\.vn.*",
+                Action = "Trash",
+                TargetEmailIds = new List<string> { "email-5" },
+                Reason = "Shopee sender",
+                ConfidenceScore = 0.95
+            });
+
+        var job = CreateJob();
+
+        // Act
+        await job.RunAutoCleanupAsync();
+
+        // Assert: Duplicate detected => no new rule inserted
+        await _ruleRepo.DidNotReceive().CreateAsync(Arg.Any<CleanupRule>(), Arg.Any<CancellationToken>());
+    }
 }
