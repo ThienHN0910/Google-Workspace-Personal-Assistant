@@ -1,17 +1,56 @@
-/* Design System - G-Ops Hub */
+/* ============================================================
+   DESIGN SYSTEM - G-OPS HUB (CYBER-COCKPIT ARCHITECTURE)
+   ============================================================ */
+
 :root {
-  --primary-color: #4f46e5;
-  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  --bg-dark: #0f172a;
-  --bg-card: #1e293b;
-  --bg-card-hover: #334155;
-  --border-color: rgba(255, 255, 255, 0.1);
+  /* Color Palette - Cyber Dark & Obsidian */
+  --cyber-bg: #070b14;
+  --cyber-bg-surface: #0b1120;
+  --cyber-card: rgba(15, 23, 42, 0.72);
+  --cyber-card-solid: #0f172a;
+  --cyber-card-hover: rgba(30, 41, 59, 0.85);
+
+  /* Borders & Glass Highlights */
+  --cyber-border: rgba(148, 163, 184, 0.12);
+  --cyber-border-highlight: rgba(255, 255, 255, 0.15);
+  --cyber-border-glow: rgba(99, 102, 241, 0.35);
+
+  /* High-Tech Neon Accents */
+  --neon-indigo: #6366f1;
+  --neon-cyan: #06b6d4;
+  --neon-emerald: #10b981;
+  --neon-violet: #8b5cf6;
+  --neon-amber: #f59e0b;
+  --neon-rose: #f43f5e;
+  --neon-blue: #3b82f6;
+
+  /* Typography Colors */
   --text-main: #f8fafc;
+  --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
-  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --text-dim: #64748b;
+
+  /* Typography & Density */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --control-height: 38px;
+  --control-radius: 0.5rem;
+
+  /* Shadows & Ambient Glows */
+  --shadow-cyber-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-cyber-md: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.08);
+  --shadow-cyber-lg: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 30px rgba(6, 182, 212, 0.12);
+
+  /* Legacy aliases for backward compatibility */
+  --primary-color: var(--neon-indigo);
+  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  --bg-dark: var(--cyber-bg);
+  --bg-card: var(--cyber-card-solid);
+  --bg-card-hover: var(--cyber-card-hover);
+  --border-color: var(--cyber-border);
+  --accent-success: var(--neon-emerald);
+  --accent-warning: var(--neon-amber);
+  --accent-danger: var(--neon-rose);
 }
 
 * {
@@ -20,37 +59,201 @@
   padding: 0;
 }
 
-body {
-  font-family: var(--font-sans);
-  background-color: var(--bg-dark);
+html, body {
+  background-color: var(--cyber-bg);
   color: var(--text-main);
+  font-family: var(--font-sans);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
+/* ============================================================
+   CUSTOM SLIM SCROLLBAR (CYBERNETIC)
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(11, 17, 32, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* ============================================================
+   HARDWARE-ACCELERATED KEYFRAMES (60FPS RULE)
+   ============================================================ */
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes modal-spring {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes cyber-shimmer {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(200%, 0, 0);
+  }
+}
+
+/* ============================================================
+   REUSABLE CYBERNETIC UTILITY CLASSES
+   ============================================================ */
+.ambient-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 380px;
+  background: radial-gradient(circle 500px at 50% -80px, rgba(99, 102, 241, 0.12), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-glow-cyan {
+  background: radial-gradient(circle 500px at 50% -80px, rgba(6, 182, 212, 0.12), transparent 70%);
+}
+
+.ambient-glow-emerald {
+  background: radial-gradient(circle 500px at 50% -80px, rgba(16, 185, 129, 0.12), transparent 70%);
+}
+
+/* Bento & Cyber Card Architecture */
+.cyber-card {
+  background: var(--cyber-card);
+  border: 1px solid var(--cyber-border);
+  border-top: 1px solid var(--cyber-border-highlight);
+  border-radius: 0.95rem;
+  padding: 1.25rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-cyber-sm);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.cyber-card-interactive {
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(99, 102, 241, 0.35);
+    box-shadow: var(--shadow-cyber-md);
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Legacy Bento Grid Compatibility with Cyber Density */
 .bento-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
 }
 
 .bento-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 1rem;
-  padding: 1.5rem;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  background: var(--cyber-card);
+  border: 1px solid var(--cyber-border);
+  border-top: 1px solid var(--cyber-border-highlight);
+  border-radius: 0.85rem;
+  padding: 1.15rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-cyber-sm);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
-    border-color: rgba(99, 102, 241, 0.4);
-    transform: translateY(-2px);
+    border-color: rgba(99, 102, 241, 0.35);
+    box-shadow: var(--shadow-cyber-md);
+    transform: translate3d(0, -2px, 0);
   }
 }
 
 .stat-val {
-  font-size: 2rem;
+  font-size: 1.85rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+  line-height: 1.15;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Cyber Badge System */
+.cyber-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text-secondary);
+
+  &.cyan {
+    background: rgba(6, 182, 212, 0.12);
+    border-color: rgba(6, 182, 212, 0.3);
+    color: #22d3ee;
+  }
+
+  &.emerald {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+
+  &.violet {
+    background: rgba(139, 92, 246, 0.12);
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #a78bfa;
+  }
+
+  &.amber {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+  }
+
+  &.rose {
+    background: rgba(244, 63, 94, 0.12);
+    border-color: rgba(244, 63, 94, 0.3);
+    color: #fb7185;
+  }
+}
+
+/* Control Elements */
+button, input, select, textarea {
+  font-family: inherit;
 }
