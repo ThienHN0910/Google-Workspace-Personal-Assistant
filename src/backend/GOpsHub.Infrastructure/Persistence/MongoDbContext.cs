@@ -42,6 +42,7 @@ public class MongoDbContext
             nameof(Notification) => "notifications",
             nameof(BackupRecord) => "backup_records",
             nameof(EmailActionLog) => "email_action_logs",
+            nameof(AppConfiguration) => "appconfigurations",
             _ => typeName.ToLowerInvariant() + "s"
         };
     }

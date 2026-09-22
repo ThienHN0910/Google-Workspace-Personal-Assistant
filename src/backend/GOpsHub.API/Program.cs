@@ -118,44 +118,49 @@ app.UseHangfireDashboard("/hangfire");
 
 using (var scope = app.Services.CreateScope())
 {
-    var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-    var configRepo = scope.ServiceProvider.GetRequiredService<GOpsHub.Domain.Interfaces.IRepository<GOpsHub.Domain.Entities.AppConfiguration>>();
-    var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult()
-        ?? configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
-    var driveInterval = config != null && int.TryParse(config.Value, out int min) ? min : 50;
+    try
+    {
+        var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        var configRepo = scope.ServiceProvider.GetRequiredService<GOpsHub.Domain.Interfaces.IRepository<GOpsHub.Domain.Entities.AppConfiguration>>();
+        
+        var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult()
+            ?? configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
+        var driveInterval = config != null && int.TryParse(config.Value, out int min) ? min : 50;
 
-    var bankConfig = configRepo.FindOneAsync(c => c.Key == "BankTelemetryIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult();
-    var bankInterval = bankConfig != null && int.TryParse(bankConfig.Value, out int bMin) ? bMin : 30;
+        var bankConfig = configRepo.FindOneAsync(c => c.Key == "BankTelemetryIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult();
+        var bankInterval = bankConfig != null && int.TryParse(bankConfig.Value, out int bMin) ? bMin : 30;
 
-    var emailConfig = configRepo.FindOneAsync(c => c.Key == "EmailCleanupIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
-    var emailInterval = emailConfig != null && int.TryParse(emailConfig.Value, out int eHr) ? eHr : 12;
+        var emailConfig = configRepo.FindOneAsync(c => c.Key == "EmailCleanupIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
+        var emailInterval = emailConfig != null && int.TryParse(emailConfig.Value, out int eHr) ? eHr : 12;
 
-    var calConfig = configRepo.FindOneAsync(c => c.Key == "CalendarExtractorIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
-    var calInterval = calConfig != null && int.TryParse(calConfig.Value, out int cHr) ? cHr : 2;
-    
-    // 1. Drive Guard Audit Job (UC05 & UC06)
-    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
-        "drive-guard-audit", 
-        job => job.RunAuditAsync(CancellationToken.None), 
-        $"*/{driveInterval} * * * *");
+        var calConfig = configRepo.FindOneAsync(c => c.Key == "CalendarExtractorIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
+        var calInterval = calConfig != null && int.TryParse(calConfig.Value, out int cHr) ? cHr : 2;
 
-    // 2. Automated Inbox Zero Cleanup Job (UC01 - Default: Every 12 hours)
-    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>(
-        "email-cleanup",
-        job => job.RunAutoCleanupAsync(CancellationToken.None),
-        $"0 */{emailInterval} * * *");
+        var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(driveInterval, defaultMinutes: 50);
+        var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(bankInterval, defaultMinutes: 30);
+        var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(emailInterval, defaultHours: 12);
+        var calCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(calInterval, defaultHours: 2);
 
-    // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Default: Every 30 minutes)
-    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>(
-        "bank-telemetry",
-        job => job.RunTelemetryAsync(CancellationToken.None),
-        $"*/{bankInterval} * * * *");
+        // 1. Drive Guard Audit Job (UC05 & UC06)
+        SafeAddOrUpdateJob<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
+            recurringJobManager, "drive-guard-audit", job => job.RunAuditAsync(CancellationToken.None), driveCron, "*/50 * * * *");
 
-    // 4. Smart Calendar Schedule Extractor Job (UC03 - Default: Every 2 hours)
-    recurringJobManager.AddOrUpdate<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>(
-        "calendar-extractor",
-        job => job.RunScheduleExtractionAsync(CancellationToken.None),
-        $"0 */{calInterval} * * *");
+        // 2. Automated Inbox Zero Cleanup Job (UC01 - Default: Every 12 hours)
+        SafeAddOrUpdateJob<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>(
+            recurringJobManager, "email-cleanup", job => job.RunAutoCleanupAsync(CancellationToken.None), emailCron, "0 */12 * * *");
+
+        // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Default: Every 30 minutes)
+        SafeAddOrUpdateJob<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>(
+            recurringJobManager, "bank-telemetry", job => job.RunTelemetryAsync(CancellationToken.None), bankCron, "*/30 * * * *");
+
+        // 4. Smart Calendar Schedule Extractor Job (UC03 - Default: Every 2 hours)
+        SafeAddOrUpdateJob<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>(
+            recurringJobManager, "calendar-extractor", job => job.RunScheduleExtractionAsync(CancellationToken.None), calCron, "0 */2 * * *");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[HangfireStartup] Non-fatal error configuring recurring jobs: {ex.Message}");
+    }
 }
 
 app.MapControllers();
@@ -198,3 +203,24 @@ static void LoadDotEnvFile()
 
     Console.WriteLine($"[LoadDotEnvFile] WARNING: No .env file found. Searched: {string.Join(", ", possibleEnvPaths.Select(Path.GetFullPath))}");
 }
+
+static void SafeAddOrUpdateJob<T>(IRecurringJobManager manager, string jobId, System.Linq.Expressions.Expression<Func<T, Task>> methodCall, string cronExpression, string fallbackCron)
+{
+    try
+    {
+        manager.AddOrUpdate<T>(jobId, methodCall, cronExpression);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[HangfireStartup] Warning: Failed to register job '{jobId}' with cron '{cronExpression}': {ex.Message}. Falling back to '{fallbackCron}'.");
+        try
+        {
+            manager.AddOrUpdate<T>(jobId, methodCall, fallbackCron);
+        }
+        catch (Exception fallbackEx)
+        {
+            Console.WriteLine($"[HangfireStartup] Error: Fallback registration also failed for job '{jobId}': {fallbackEx.Message}");
+        }
+    }
+}
+
