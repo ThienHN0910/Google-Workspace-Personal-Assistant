@@ -95,4 +95,50 @@ public class TelegramBotPollingServiceTests
         result.Should().Contain("&lt;alert&gt;");
         result.Should().NotContain("<bot@vercel.com>");
     }
+
+    [Fact]
+    public void FormatRulesResponse_WhenNoRules_ShouldReturnEmptyMessage()
+    {
+        var rules = new List<CleanupRule>();
+        var result = TelegramBotPollingService.FormatRulesResponse(rules);
+
+        result.Should().Contain("Hiện chưa có quy tắc dọn dẹp nào");
+    }
+
+    [Fact]
+    public void FormatRulesResponse_WithActiveAndInactiveRules_ShouldFormatProperly()
+    {
+        var rules = new List<CleanupRule>
+        {
+            new()
+            {
+                Id = "rule-1",
+                RuleName = "Shopee Promo",
+                SubjectRegex = "(?i).*khuyến mãi.*",
+                Action = GOpsHub.Domain.Enums.CleanupAction.Trash,
+                IsActive = true,
+                IsAutoLearned = false
+            },
+            new()
+            {
+                Id = "rule-2",
+                RuleName = "Tự động học: Lazada",
+                SenderRegex = "(?i).*@lazada\\.vn.*",
+                Action = GOpsHub.Domain.Enums.CleanupAction.Archive,
+                IsActive = false,
+                IsAutoLearned = true
+            }
+        };
+
+        var result = TelegramBotPollingService.FormatRulesResponse(rules);
+
+        result.Should().Contain("Danh sách Quy tắc Dọn dẹp Email:");
+        result.Should().Contain("1. <b>Shopee Promo</b>");
+        result.Should().Contain("✅ Bật");
+        result.Should().Contain("Xóa");
+        result.Should().Contain("2. <b>Tự động học: Lazada</b> [AI Học]");
+        result.Should().Contain("⏸️ Tắt");
+        result.Should().Contain("Lưu trữ");
+        result.Should().Contain("/enable_rule rule-2");
+    }
 }
