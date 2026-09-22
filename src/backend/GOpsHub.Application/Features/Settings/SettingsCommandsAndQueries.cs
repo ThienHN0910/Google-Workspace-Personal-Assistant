@@ -222,25 +222,30 @@ public class UpdateSystemSettingsCommandHandler : ICommandHandler<UpdateSystemSe
         // Dynamic Hangfire Rescheduling (Không cần restart server!)
         try
         {
+            var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.DriveGuardIntervalMinutes, defaultMinutes: 50);
+            var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.BankTelemetryIntervalMinutes, defaultMinutes: 30);
+            var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.EmailCleanupIntervalHours, defaultHours: 12);
+            var calCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.CalendarExtractorIntervalHours, defaultHours: 2);
+
             _recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(
                 "drive-guard-audit",
                 job => job.RunAuditAsync(CancellationToken.None),
-                $"*/{Math.Max(1, s.DriveGuardIntervalMinutes)} * * * *");
+                driveCron);
 
             _recurringJobManager.AddOrUpdate<BankTelemetryBackgroundJob>(
                 "bank-telemetry",
                 job => job.RunTelemetryAsync(CancellationToken.None),
-                $"*/{Math.Max(1, s.BankTelemetryIntervalMinutes)} * * * *");
+                bankCron);
 
             _recurringJobManager.AddOrUpdate<EmailCleanupBackgroundJob>(
                 "email-cleanup",
                 job => job.RunAutoCleanupAsync(CancellationToken.None),
-                $"0 */{Math.Max(1, s.EmailCleanupIntervalHours)} * * *");
+                emailCron);
 
             _recurringJobManager.AddOrUpdate<CalendarScheduleBackgroundJob>(
                 "calendar-extractor",
                 job => job.RunScheduleExtractionAsync(CancellationToken.None),
-                $"0 */{Math.Max(1, s.CalendarExtractorIntervalHours)} * * *");
+                calCron);
 
             _logger.LogInformation("Successfully rescheduled all Hangfire background jobs with new intervals.");
         }

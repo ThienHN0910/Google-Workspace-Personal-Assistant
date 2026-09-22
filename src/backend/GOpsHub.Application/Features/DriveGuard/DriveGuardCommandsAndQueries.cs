@@ -226,10 +226,11 @@ public class UpdateDriveGuardIntervalCommandHandler : ICommandHandler<UpdateDriv
             await _configRepo.UpdateAsync(config, ct);
         }
 
+        var cronExpr = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(command.Minutes, defaultMinutes: 50);
         _recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(
             "drive-guard-audit",
             job => job.RunAuditAsync(CancellationToken.None),
-            $"*/{command.Minutes} * * * *");
+            cronExpr);
 
         return command.Minutes;
     }
