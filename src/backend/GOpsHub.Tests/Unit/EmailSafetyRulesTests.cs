@@ -127,4 +127,80 @@ public class EmailSafetyRulesTests
         action.Should().NotThrow();
         action().Should().BeFalse();
     }
+
+    [Fact]
+    public void IsEmailMatchingRegex_WhenSenderMatches_ButSubjectDoesNot_ShouldReturnFalse_PreventingAccidentalDeletion()
+    {
+        // Scenario: Rule targets Vercel deploy bot notifications from GitHub, but email is an important PR notification
+        var email = new EmailMessage
+        {
+            Id = "6",
+            Subject = "Re: [ThienHN0910/ACVIS] fix: critical security patch (PR #208)",
+            From = "notifications@github.com"
+        };
+
+        var vercelDeployRule = new CleanupRule
+        {
+            RuleName = "Vercel Deploy Bot",
+            SenderRegex = @"(?i)notifications@github\.com",
+            SubjectRegex = @"(?i).*(vercel\[bot\]|Deployment\s+Ready).*"
+        };
+
+        // Strict AND logic must protect this email from being deleted!
+        EmailSafetyRules.IsEmailMatchingRegex(email, vercelDeployRule).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsEmailMatchingRegex_WhenSubjectMatches_ButSenderDoesNot_ShouldReturnFalse()
+    {
+        var email = new EmailMessage
+        {
+            Id = "7",
+            Subject = "[QC] Weekly Special Offer",
+            From = "boss@company.com"
+        };
+
+        var promoRule = new CleanupRule
+        {
+            RuleName = "Marketing Promo",
+            SenderRegex = @"(?i)promo@spammer\.com",
+            SubjectRegex = @"(?i).*\[QC\].*"
+        };
+
+        EmailSafetyRules.IsEmailMatchingRegex(email, promoRule).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsEmailMatchingRegex_WhenBothSenderAndSubjectMatch_ShouldReturnTrue()
+    {
+        var email = new EmailMessage
+        {
+            Id = "8",
+            Subject = "[vercel] Deployment Completed on ThienHN0910/app",
+            From = "notifications@github.com"
+        };
+
+        var vercelDeployRule = new CleanupRule
+        {
+            RuleName = "Vercel Deploy Bot",
+            SenderRegex = @"(?i)notifications@github\.com",
+            SubjectRegex = @"(?i).*(vercel\[bot\]|\[vercel\]|Deployment\s+Completed).*"
+        };
+
+        EmailSafetyRules.IsEmailMatchingRegex(email, vercelDeployRule).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsEmailMatchingRegex_WhenNoRegexIsConfigured_ShouldReturnFalse()
+    {
+        var email = new EmailMessage
+        {
+            Id = "9",
+            Subject = "Test",
+            From = "user@example.com"
+        };
+
+        var emptyRule = new CleanupRule();
+        EmailSafetyRules.IsEmailMatchingRegex(email, emptyRule).Should().BeFalse();
+    }
 }
