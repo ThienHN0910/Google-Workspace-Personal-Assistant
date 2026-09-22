@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Interfaces;
 using GOpsHub.Infrastructure.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,6 +17,7 @@ public class GeminiAIServiceTests
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpResponseMessage _response;
+        public HttpRequestMessage? LastRequest { get; private set; }
 
         public MockHttpMessageHandler(HttpResponseMessage response)
         {
@@ -23,6 +26,7 @@ public class GeminiAIServiceTests
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastRequest = request;
             return Task.FromResult(_response);
         }
     }
@@ -34,7 +38,7 @@ public class GeminiAIServiceTests
         var inMemorySettings = new Dictionary<string, string?>
         {
             ["Gemini:ApiKey"] = "fake-api-key",
-            ["Gemini:Model"] = "gemini-3.1-flash-lite"
+            ["Gemini:Model"] = "gemini-3.5-flash-lite"
         };
         var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
         var logger = Substitute.For<ILogger<GeminiAIService>>();
@@ -69,7 +73,7 @@ public class GeminiAIServiceTests
         var inMemorySettings = new Dictionary<string, string?>
         {
             ["Gemini:ApiKey"] = "fake-api-key",
-            ["Gemini:Model"] = "gemini-3.1-flash-lite"
+            ["Gemini:Model"] = "gemini-3.5-flash-lite"
         };
         var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
         var logger = Substitute.For<ILogger<GeminiAIService>>();
@@ -117,7 +121,7 @@ public class GeminiAIServiceTests
         var inMemorySettings = new Dictionary<string, string?>
         {
             ["Gemini:ApiKey"] = "fake-api-key",
-            ["Gemini:Model"] = "gemini-3.1-flash-lite"
+            ["Gemini:Model"] = "gemini-3.5-flash-lite"
         };
         var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
         var logger = Substitute.For<ILogger<GeminiAIService>>();
@@ -157,4 +161,48 @@ public class GeminiAIServiceTests
             default!,
             default);
     }
+
+    [Fact]
+    public async Task CallGeminiApiAsync_WhenDatabaseHasCustomModel_ShouldUseDatabaseModel()
+    {
+        // Arrange
+        var inMemorySettings = new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "fake-api-key",
+            ["Gemini:Model"] = "gemini-3.5-flash-lite"
+        };
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
+        var logger = Substitute.For<ILogger<GeminiAIService>>();
+        var rateLimiter = new GeminiRateLimiter();
+        var usageTracker = Substitute.For<IAiUsageTracker>();
+        var notificationService = Substitute.For<INotificationService>();
+        var configRepo = Substitute.For<IRepository<AppConfiguration>>();
+
+        configRepo.FindOneAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<AppConfiguration, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new AppConfiguration { Key = "GeminiModel", Value = "gemini-custom-pro" });
+
+        var validResponseBody = @"{
+            ""candidates"": [{
+                ""content"": {
+                    ""parts"": [{ ""text"": ""<p>Phản hồi từ model động</p>"" }]
+                }
+            }]
+        }";
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(validResponseBody, Encoding.UTF8, "application/json")
+        };
+        var mockHandler = new MockHttpMessageHandler(httpResponse);
+        var httpClient = new HttpClient(mockHandler);
+
+        var service = new GeminiAIService(config, logger, rateLimiter, usageTracker, notificationService, httpClient, configRepo);
+
+        // Act
+        var result = await service.GenerateEmailReplyAsync("Prompt kiểm tra model động");
+
+        // Assert
+        result.DraftContent.Should().Contain("Phản hồi từ model động");
+        mockHandler.LastRequest?.RequestUri?.ToString().Should().Contain("/models/gemini-custom-pro:generateContent");
+    }
 }
+

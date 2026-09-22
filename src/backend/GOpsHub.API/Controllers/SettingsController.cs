@@ -42,6 +42,26 @@ public class SettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Update settings for a specific section (jobs, alerts, ai, storage, keepalive)
+    /// </summary>
+    [HttpPut("section/{section}")]
+    public async Task<ActionResult<ApiResponse<bool>>> UpdateSettingsSection(string section, [FromBody] SystemSettingsDto settings)
+    {
+        var result = await _dispatcher.SendAsync(new UpdateSettingsSectionCommand(section, settings));
+        return Ok(ApiResponse<bool>.Ok(result, $"Đã cập nhật mục '{section}' thành công."));
+    }
+
+    /// <summary>
+    /// Test Gemini Model connectivity and validate model existence
+    /// </summary>
+    [HttpPost("test-gemini-model")]
+    public async Task<ActionResult<ApiResponse<TestGeminiModelResult>>> TestGeminiModel([FromBody] TestGeminiModelRequest request)
+    {
+        var result = await _dispatcher.SendAsync(new TestGeminiModelCommand(request.Model));
+        return Ok(ApiResponse<TestGeminiModelResult>.Ok(result, result.Message));
+    }
+
+    /// <summary>
     /// Test Telegram bot connection
     /// </summary>
     [HttpPost("test-telegram")]
@@ -88,6 +108,11 @@ public class TestTelegramRequest
 {
     public string BotToken { get; set; } = string.Empty;
     public string ChatId { get; set; } = string.Empty;
+}
+
+public class TestGeminiModelRequest
+{
+    public string Model { get; set; } = string.Empty;
 }
 
 public class AiUsageDto

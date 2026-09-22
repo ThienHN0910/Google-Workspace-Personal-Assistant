@@ -6,29 +6,42 @@
         <p class="subtitle">Quản lý toàn diện chu kỳ tác vụ chạy ngầm, thông báo đa kênh, trợ lý AI và lưu trữ Drive</p>
       </div>
       <div class="top-actions">
-        <button class="btn-reset" @click="fetchSettings" :disabled="loading || saving">
+        <button class="btn-reset" @click="fetchSettings" :disabled="loading || saving || savingCurrentSection">
           <i class="pi pi-refresh"></i> Tải lại
         </button>
-        <button class="btn-save" @click="saveSettings" :disabled="loading || saving">
+        <button
+          class="btn-save-section"
+          @click="saveCurrentSection"
+          :disabled="loading || saving || savingCurrentSection || !isCurrentTabDirty"
+          :title="isCurrentTabDirty ? 'Lưu ngay các thay đổi trong mục hiện tại' : 'Chưa có thay đổi nào trong mục này'"
+        >
+          <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-check'"></i>
+          {{ savingCurrentSection ? 'Đang lưu mục...' : 'Lưu mục này' }}
+        </button>
+        <button class="btn-save" @click="saveSettings" :disabled="loading || saving || savingCurrentSection">
           <i class="pi" :class="saving ? 'pi-spin pi-spinner' : 'pi-save'"></i>
-          {{ saving ? 'Đang lưu...' : 'Lưu cài đặt' }}
+          {{ saving ? 'Đang lưu tất cả...' : 'Lưu tất cả' }}
         </button>
       </div>
     </div>
 
     <!-- Tab Bar Navigation -->
     <div class="tabs-nav">
-      <button :class="{ active: activeTab === 'jobs' }" @click="activeTab = 'jobs'">
+      <button :class="{ active: activeTab === 'jobs' }" @click="requestTabSwitch('jobs')">
         <i class="pi pi-clock"></i> Tác vụ & Chu kỳ quét
+        <span v-if="isSectionDirty('jobs')" class="dirty-badge" title="Mục này có thay đổi chưa lưu">●</span>
       </button>
-      <button :class="{ active: activeTab === 'alerts' }" @click="activeTab = 'alerts'">
+      <button :class="{ active: activeTab === 'alerts' }" @click="requestTabSwitch('alerts')">
         <i class="pi pi-bell"></i> Kênh Thông báo (Telegram / Discord)
+        <span v-if="isSectionDirty('alerts')" class="dirty-badge" title="Mục này có thay đổi chưa lưu">●</span>
       </button>
-      <button :class="{ active: activeTab === 'ai' }" @click="activeTab = 'ai'">
+      <button :class="{ active: activeTab === 'ai' }" @click="requestTabSwitch('ai')">
         <i class="pi pi-sparkles"></i> Trí tuệ AI & Quota
+        <span v-if="isSectionDirty('ai')" class="dirty-badge" title="Mục này có thay đổi chưa lưu">●</span>
       </button>
-      <button :class="{ active: activeTab === 'storage' }" @click="activeTab = 'storage'">
+      <button :class="{ active: activeTab === 'storage' }" @click="requestTabSwitch('storage')">
         <i class="pi pi-folder"></i> Lưu trữ Drive & Whitelist Email
+        <span v-if="isSectionDirty('storage')" class="dirty-badge" title="Mục này có thay đổi chưa lưu">●</span>
       </button>
     </div>
 
@@ -146,6 +159,20 @@
             </div>
           </div>
         </div>
+
+        <div class="section-footer-actions">
+          <span v-if="isSectionDirty('jobs')" class="dirty-notice">
+            <i class="pi pi-exclamation-circle"></i> Chu kỳ quét hoặc cấu hình Keep-Alive có thay đổi chưa lưu.
+          </span>
+          <button
+            class="btn-save-section-bottom"
+            @click="saveCurrentSection"
+            :disabled="savingCurrentSection || !isSectionDirty('jobs')"
+          >
+            <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-sync'"></i>
+            {{ savingCurrentSection ? 'Đang lưu chu kỳ...' : 'Lưu chu kỳ tác vụ ngầm & Cập nhật Hangfire' }}
+          </button>
+        </div>
       </div>
 
       <!-- TAB 2: Multi-Channel Alerting -->
@@ -215,6 +242,20 @@
             </div>
           </div>
         </div>
+
+        <div class="section-footer-actions">
+          <span v-if="isSectionDirty('alerts')" class="dirty-notice">
+            <i class="pi pi-exclamation-circle"></i> Kênh thông báo có thay đổi chưa lưu.
+          </span>
+          <button
+            class="btn-save-section-bottom"
+            @click="saveCurrentSection"
+            :disabled="savingCurrentSection || !isSectionDirty('alerts')"
+          >
+            <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-save'"></i>
+            {{ savingCurrentSection ? 'Đang lưu...' : 'Lưu cấu hình Kênh Thông báo' }}
+          </button>
+        </div>
       </div>
 
       <!-- TAB 3: AI Assistant & Quota Guard -->
@@ -232,13 +273,26 @@
             <div class="setting-item">
               <label>
                 <span>Mô hình Gemini (Model)</span>
-                <span class="field-hint">Mô hình AI được sử dụng cho toàn bộ dự án</span>
+                <span class="field-hint">Điền trực tiếp tên model (VD: gemini-3.5-flash-lite, gemini-2.5-flash...)</span>
               </label>
-              <select v-model="form.geminiModel">
-                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Tốc độ cao, tối ưu quota)</option>
-                <option value="gemini-1.5-flash">gemini-1.5-flash (Cân bằng hiệu năng)</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro (Suy luận sâu sắc)</option>
-              </select>
+              <div class="model-input-row">
+                <input
+                  type="text"
+                  v-model="form.geminiModel"
+                  placeholder="gemini-3.5-flash-lite"
+                  required
+                />
+                <button
+                  type="button"
+                  class="btn-test-model"
+                  @click="testGeminiModel"
+                  :disabled="testingModel || !form.geminiModel?.trim()"
+                  title="Kiểm tra kết nối và độ tồn tại của model trên Google AI"
+                >
+                  <i class="pi" :class="testingModel ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
+                  {{ testingModel ? 'Đang test...' : 'Kiểm tra Model' }}
+                </button>
+              </div>
             </div>
 
             <div class="setting-item">
@@ -384,6 +438,20 @@
             </div>
           </div>
         </div>
+
+        <div class="section-footer-actions">
+          <span v-if="isSectionDirty('ai')" class="dirty-notice">
+            <i class="pi pi-exclamation-circle"></i> Cấu hình Trí tuệ AI có thay đổi chưa lưu.
+          </span>
+          <button
+            class="btn-save-section-bottom"
+            @click="saveCurrentSection"
+            :disabled="savingCurrentSection || !isSectionDirty('ai')"
+          >
+            <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-save'"></i>
+            {{ savingCurrentSection ? 'Đang lưu...' : 'Lưu cấu hình Trợ lý AI' }}
+          </button>
+        </div>
       </div>
 
       <!-- TAB 4: Storage & Email Whitelist -->
@@ -456,8 +524,66 @@
             </div>
           </div>
         </div>
+
+        <div class="section-footer-actions">
+          <span v-if="isSectionDirty('storage')" class="dirty-notice">
+            <i class="pi pi-exclamation-circle"></i> Cấu hình Drive & Whitelist có thay đổi chưa lưu.
+          </span>
+          <button
+            class="btn-save-section-bottom"
+            @click="saveCurrentSection"
+            :disabled="savingCurrentSection || !isSectionDirty('storage')"
+          >
+            <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-save'"></i>
+            {{ savingCurrentSection ? 'Đang lưu...' : 'Lưu cấu hình Drive & Whitelist' }}
+          </button>
+        </div>
       </div>
     </div>
+
+    <!-- Popup Modal Cảnh báo Thay đổi Chưa Lưu khi Chuyển Tab -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showUnsavedModal" class="unsaved-modal-overlay" @click.self="showUnsavedModal = false">
+          <div class="unsaved-modal-dialog">
+            <div class="unsaved-modal-header">
+              <div class="header-title">
+                <i class="pi pi-exclamation-triangle warning-icon"></i>
+                <h3>Cảnh báo: Thay đổi chưa được lưu!</h3>
+              </div>
+              <button type="button" class="btn-close-modal" @click="showUnsavedModal = false" title="Đóng">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+            <div class="unsaved-modal-body">
+              <p>
+                Bạn vừa chỉnh sửa cấu hình trong mục <strong>{{ getSectionTitle(activeTab) }}</strong> nhưng chưa bấm lưu.
+              </p>
+              <p class="sub-desc">
+                Bạn có muốn lưu các thay đổi này trước khi chuyển sang mục <strong>{{ getSectionTitle(pendingTargetTab) }}</strong> không?
+              </p>
+            </div>
+            <div class="unsaved-modal-footer">
+              <button type="button" class="btn-modal-cancel" @click="showUnsavedModal = false">
+                Ở lại trang
+              </button>
+              <button type="button" class="btn-modal-discard" @click="confirmDiscardAndSwitch">
+                <i class="pi pi-trash"></i> Bỏ qua thay đổi
+              </button>
+              <button
+                type="button"
+                class="btn-modal-save"
+                @click="confirmSaveAndSwitch"
+                :disabled="savingCurrentSection"
+              >
+                <i class="pi" :class="savingCurrentSection ? 'pi-spin pi-spinner' : 'pi-check'"></i>
+                {{ savingCurrentSection ? 'Đang lưu...' : 'Lưu & Chuyển tiếp' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -471,10 +597,16 @@ const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/Lo
 const activeTab = ref('jobs');
 const loading = ref(false);
 const saving = ref(false);
+const savingCurrentSection = ref(false);
 const testingTelegram = ref(false);
+const testingModel = ref(false);
 const testingPing = ref(false);
 const newWhitelistDomain = ref('');
 const loadingAiUsage = ref(false);
+
+const originalForm = ref<any>(null);
+const showUnsavedModal = ref(false);
+const pendingTargetTab = ref('');
 
 const form = ref({
   // Jobs
@@ -492,7 +624,7 @@ const form = ref({
   discordWebhookUrl: '',
 
   // AI
-  geminiModel: 'gemini-3.1-flash-lite',
+  geminiModel: 'gemini-3.5-flash-lite',
   defaultLanguage: 'vi',
   defaultTone: 'polite',
   maxRequestsPerMinute: 15,
@@ -509,6 +641,166 @@ const form = ref({
   // Anti-Sleep Keep-Alive
   keepAliveKey: '',
 });
+
+const sectionFields: Record<string, string[]> = {
+  jobs: ['driveGuardIntervalMinutes', 'bankTelemetryIntervalMinutes', 'emailCleanupIntervalHours', 'calendarExtractorIntervalHours', 'bulkDeleteThreshold', 'keepAliveKey'],
+  alerts: ['enableTelegram', 'telegramBotToken', 'telegramChatId', 'enableDiscord', 'discordWebhookUrl'],
+  ai: ['geminiModel', 'defaultLanguage', 'defaultTone', 'maxRequestsPerMinute', 'maxRequestsPerDay', 'aiMonthlyTokenQuota', 'aiWarningTokenThreshold'],
+  storage: ['financeFolderId', 'financeSpreadsheetId', 'financeFileNamePattern', 'emailWhitelistDomains'],
+};
+
+const getSectionTitle = (tabKey: string) => {
+  switch (tabKey) {
+    case 'jobs': return 'Tác vụ & Chu kỳ quét';
+    case 'alerts': return 'Kênh Thông báo';
+    case 'ai': return 'Trí tuệ AI & Quota';
+    case 'storage': return 'Lưu trữ Drive & Whitelist';
+    default: return tabKey;
+  }
+};
+
+const isSectionDirty = (sectionKey: string): boolean => {
+  if (!originalForm.value) return false;
+  const fields = sectionFields[sectionKey];
+  if (!fields) return false;
+
+  return fields.some((key) => {
+    const currentVal = (form.value as any)[key];
+    const origVal = (originalForm.value as any)[key];
+    if (Array.isArray(currentVal) && Array.isArray(origVal)) {
+      return JSON.stringify(currentVal) !== JSON.stringify(origVal);
+    }
+    return currentVal !== origVal;
+  });
+};
+
+const isCurrentTabDirty = computed(() => isSectionDirty(activeTab.value));
+
+const requestTabSwitch = (targetTab: string) => {
+  if (targetTab === activeTab.value) return;
+  if (isSectionDirty(activeTab.value)) {
+    pendingTargetTab.value = targetTab;
+    showUnsavedModal.value = true;
+  } else {
+    activeTab.value = targetTab;
+  }
+};
+
+const confirmDiscardAndSwitch = () => {
+  const fields = sectionFields[activeTab.value] || [];
+  for (const f of fields) {
+    if (originalForm.value && f in originalForm.value) {
+      (form.value as any)[f] = JSON.parse(JSON.stringify((originalForm.value as any)[f]));
+    }
+  }
+  showUnsavedModal.value = false;
+  if (pendingTargetTab.value) {
+    activeTab.value = pendingTargetTab.value;
+    pendingTargetTab.value = '';
+  }
+};
+
+const saveSection = async (sectionKey: string): Promise<boolean> => {
+  savingCurrentSection.value = true;
+  try {
+    const res: any = await api.put(`/settings/section/${sectionKey}`, form.value);
+    if (res.success) {
+      const fields = sectionFields[sectionKey] || [];
+      if (!originalForm.value) originalForm.value = {};
+      for (const f of fields) {
+        originalForm.value[f] = JSON.parse(JSON.stringify((form.value as any)[f]));
+      }
+
+      showToast({
+        severity: 'success',
+        summary: 'Đã lưu cài đặt',
+        detail: sectionKey === 'jobs'
+          ? 'Đã cập nhật chu kỳ và làm mới lịch chạy Hangfire thành công!'
+          : `Đã lưu cấu hình ${getSectionTitle(sectionKey)} thành công.`,
+      });
+      return true;
+    } else {
+      showToast({
+        severity: 'error',
+        summary: 'Lưu thất bại',
+        detail: res.message || 'Không thể lưu cài đặt.',
+      });
+      return false;
+    }
+  } catch (e: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: e.message || 'Có lỗi xảy ra khi lưu cấu hình.',
+    });
+    return false;
+  } finally {
+    savingCurrentSection.value = false;
+  }
+};
+
+const saveCurrentSection = async () => {
+  await saveSection(activeTab.value);
+};
+
+const confirmSaveAndSwitch = async () => {
+  const success = await saveSection(activeTab.value);
+  if (success) {
+    showUnsavedModal.value = false;
+    if (pendingTargetTab.value) {
+      activeTab.value = pendingTargetTab.value;
+      pendingTargetTab.value = '';
+    }
+  }
+};
+
+const testGeminiModel = async () => {
+  if (!form.value.geminiModel || !form.value.geminiModel.trim()) {
+    showToast({
+      severity: 'warn',
+      summary: 'Thiếu thông tin',
+      detail: 'Vui lòng nhập tên model trước khi kiểm tra.',
+    });
+    return;
+  }
+
+  testingModel.value = true;
+  try {
+    const res: any = await api.post('/settings/test-gemini-model', {
+      model: form.value.geminiModel.trim(),
+    });
+
+    if (res.success && res.data) {
+      if (res.data.success) {
+        showToast({
+          severity: 'success',
+          summary: 'Kết nối thành công',
+          detail: res.data.message || `Model '${form.value.geminiModel}' hoạt động tốt!`,
+        });
+      } else {
+        showToast({
+          severity: 'error',
+          summary: 'Model không khả dụng',
+          detail: res.data.message || 'Không thể kết nối tới model này.',
+        });
+      }
+    } else {
+      showToast({
+        severity: 'error',
+        summary: 'Lỗi kiểm tra',
+        detail: res.message || 'Không thể kiểm tra model.',
+      });
+    }
+  } catch (e: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi kiểm tra model',
+      detail: e.message || 'Không thể kết nối đến máy chủ.',
+    });
+  } finally {
+    testingModel.value = false;
+  }
+};
 
 const aiUsage = ref({
   yearMonth: '',
@@ -578,6 +870,7 @@ const fetchSettings = async () => {
         ...form.value,
         ...res.data,
       };
+      originalForm.value = JSON.parse(JSON.stringify(form.value));
     }
   } catch (e: any) {
     showToast({
@@ -595,9 +888,10 @@ const saveSettings = async () => {
   try {
     const res: any = await api.put('/settings', form.value);
     if (res.success) {
+      originalForm.value = JSON.parse(JSON.stringify(form.value));
       showToast({
         severity: 'success',
-        summary: 'Đã lưu cài đặt',
+        summary: 'Đã lưu tất cả cài đặt',
         detail: 'Cấu hình hệ thống và lịch chạy ngầm đã được cập nhật thành công.',
       });
     } else {
@@ -793,6 +1087,22 @@ onMounted(() => {
       &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
     }
 
+    .btn-save-section {
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+      &:hover:not(:disabled) {
+        background: #10b981;
+        color: #fff;
+        transform: translateY(-1px);
+      }
+      &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+    }
+
     .btn-save {
       background: linear-gradient(135deg, #6366f1, #818cf8);
       border: none;
@@ -832,6 +1142,17 @@ onMounted(() => {
 
     i { font-size: 1rem; }
 
+    .dirty-badge {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #f59e0b;
+      margin-left: 2px;
+      box-shadow: 0 0 6px #f59e0b;
+      animation: pulse-dot 2s infinite ease-in-out;
+    }
+
     &:hover {
       color: #f8fafc;
       background: rgba(255, 255, 255, 0.04);
@@ -843,6 +1164,11 @@ onMounted(() => {
       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
     }
   }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.25); }
 }
 
 .card-box {
@@ -1407,6 +1733,230 @@ onMounted(() => {
     &:hover:not(:disabled) { background: #10b981; color: #fff; }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
+}
+
+.model-input-row {
+  display: flex;
+  gap: 0.5rem;
+
+  input {
+    flex: 1;
+  }
+
+  .btn-test-model {
+    padding: 0.65rem 1.15rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    background: rgba(129, 140, 248, 0.15);
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    color: #a5b4fc;
+    transition: all 0.2s;
+
+    &:hover:not(:disabled) {
+      background: #6366f1;
+      color: #fff;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.section-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+
+  .dirty-notice {
+    font-size: 0.85rem;
+    color: #fbbf24;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-weight: 500;
+
+    i { font-size: 1rem; }
+  }
+
+  .btn-save-section-bottom {
+    margin-left: auto;
+    padding: 0.65rem 1.4rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    transition: all 0.2s;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: #334155;
+      box-shadow: none;
+    }
+  }
+}
+
+/* Unsaved Changes Modal */
+.unsaved-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.unsaved-modal-dialog {
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1rem;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: modal-pop 0.2s ease-out;
+
+  .unsaved-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+
+      .warning-icon {
+        font-size: 1.25rem;
+        color: #f59e0b;
+      }
+
+      h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #f8fafc;
+      }
+    }
+
+    .btn-close-modal {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.25rem;
+      &:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+    }
+  }
+
+  .unsaved-modal-body {
+    padding: 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.925rem;
+    line-height: 1.55;
+
+    p { margin: 0 0 0.5rem 0; }
+    strong { color: #f8fafc; }
+    .sub-desc { font-size: 0.85rem; color: #94a3b8; margin: 0; }
+  }
+
+  .unsaved-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1rem 1.25rem;
+    background: rgba(15, 23, 42, 0.4);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: wrap;
+
+    button {
+      padding: 0.55rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+
+    .btn-modal-cancel {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      &:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+    }
+
+    .btn-modal-discard {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      &:hover { background: #ef4444; color: #fff; }
+    }
+
+    .btn-modal-save {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+      &:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+  }
+}
+
+@keyframes modal-pop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 768px) {
