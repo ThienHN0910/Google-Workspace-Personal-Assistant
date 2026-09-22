@@ -142,7 +142,11 @@ public class NotificationService : INotificationService
                     _ => "ℹ️"
                 };
 
-                var telegramText = $"{icon} <b>{System.Net.WebUtility.HtmlEncode(title)}</b>\n\n{System.Net.WebUtility.HtmlEncode(message)}\n\n<i>G-Ops Hub • {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</i>";
+                var formattedMessage = message.Contains("<b>") || message.Contains("<i>") || message.Contains("<code>")
+                    ? message
+                    : System.Net.WebUtility.HtmlEncode(message);
+
+                var telegramText = $"{icon} <b>{System.Net.WebUtility.HtmlEncode(title)}</b>\n\n{formattedMessage}\n\n<i>G-Ops Hub • {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</i>";
 
                 var payload = new
                 {

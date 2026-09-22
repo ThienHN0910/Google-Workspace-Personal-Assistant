@@ -218,6 +218,29 @@ public class EmailOpsController : ControllerBase
     }
 
     /// <summary>
+    /// Get all pending uncertain email actions awaiting human confirmation
+    /// </summary>
+    [HttpGet("action-logs/pending")]
+    public async Task<ActionResult<ApiResponse<PagedResult<EmailActionLog>>>> GetPendingEmailActionLogs(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null)
+    {
+        var logs = await _dispatcher.QueryAsync(new GetEmailActionLogsQuery(page, pageSize, "PendingApproval", null, search));
+        return Ok(ApiResponse<PagedResult<EmailActionLog>>.Ok(logs));
+    }
+
+    /// <summary>
+    /// Batch approve or dismiss uncertain email actions awaiting human confirmation
+    /// </summary>
+    [HttpPost("action-logs/pending/batch-action")]
+    public async Task<ActionResult<ApiResponse<BatchPendingEmailActionResult>>> BatchPendingEmailActions([FromBody] BatchPendingEmailActionCommand command)
+    {
+        var result = await _dispatcher.SendAsync(command);
+        return Ok(ApiResponse<BatchPendingEmailActionResult>.Ok(result, $"Đã xử lý {result.SuccessCount}/{result.TotalRequested} email chờ duyệt."));
+    }
+
+    /// <summary>
     /// Get pending AI drafts awaiting human approval (UC02)
     /// </summary>
     [HttpGet("drafts/pending")]

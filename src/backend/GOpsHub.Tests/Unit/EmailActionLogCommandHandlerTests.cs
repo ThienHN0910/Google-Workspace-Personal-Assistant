@@ -80,4 +80,27 @@ public class EmailActionLogCommandHandlerTests
         result.Reason.Should().Contain("[Người dùng bỏ qua]");
         await _actionLogRepo.Received(1).UpdateAsync(existingLog, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task BatchPendingEmailActionCommand_ShouldProcessMultipleLogs_WithTrash()
+    {
+        var log1 = new EmailActionLog { Id = "l-1", EmailId = "g-1", Action = "PendingApproval" };
+        var log2 = new EmailActionLog { Id = "l-2", EmailId = "g-2", Action = "PendingApproval" };
+
+        _actionLogRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailActionLog> { log1, log2 });
+
+        var logger = Substitute.For<ILogger<BatchPendingEmailActionCommandHandler>>();
+        var handler = new BatchPendingEmailActionCommandHandler(_actionLogRepo, _gmailService, logger);
+
+        var result = await handler.HandleAsync(new BatchPendingEmailActionCommand(new List<string> { "l-1", "l-2" }, "Trash"));
+
+        result.TotalRequested.Should().Be(2);
+        result.SuccessCount.Should().Be(2);
+        result.FailedCount.Should().Be(0);
+        log1.Action.Should().Be("Trashed");
+        log2.Action.Should().Be("Trashed");
+        await _gmailService.Received(1).TrashEmailAsync("g-1", Arg.Any<CancellationToken>());
+        await _gmailService.Received(1).TrashEmailAsync("g-2", Arg.Any<CancellationToken>());
+    }
 }

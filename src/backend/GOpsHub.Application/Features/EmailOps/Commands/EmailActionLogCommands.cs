@@ -158,3 +158,87 @@ public class DismissEmailActionCommandHandler : ICommandHandler<DismissEmailActi
         return log;
     }
 }
+
+public record BatchPendingEmailActionCommand(List<string> LogIds, string TargetAction = "Trash") : ICommand<BatchPendingEmailActionResult>;
+
+public class BatchPendingEmailActionResult
+{
+    public int TotalRequested { get; set; }
+    public int ProcessedCount { get; set; }
+    public int SuccessCount { get; set; }
+    public int FailedCount { get; set; }
+    public List<string> ProcessedLogIds { get; set; } = new();
+}
+
+public class BatchPendingEmailActionCommandHandler : ICommandHandler<BatchPendingEmailActionCommand, BatchPendingEmailActionResult>
+{
+    private readonly IRepository<EmailActionLog> _actionLogRepo;
+    private readonly IGmailService _gmailService;
+    private readonly ILogger<BatchPendingEmailActionCommandHandler> _logger;
+
+    public BatchPendingEmailActionCommandHandler(
+        IRepository<EmailActionLog> actionLogRepo,
+        IGmailService gmailService,
+        ILogger<BatchPendingEmailActionCommandHandler> logger)
+    {
+        _actionLogRepo = actionLogRepo;
+        _gmailService = gmailService;
+        _logger = logger;
+    }
+
+    public async Task<BatchPendingEmailActionResult> HandleAsync(BatchPendingEmailActionCommand command, CancellationToken ct = default)
+    {
+        var result = new BatchPendingEmailActionResult
+        {
+            TotalRequested = command.LogIds?.Count ?? 0
+        };
+
+        if (command.LogIds == null || !command.LogIds.Any())
+            return result;
+
+        var logIdsSet = command.LogIds.ToHashSet();
+        var logs = await _actionLogRepo.FindAsync(x => logIdsSet.Contains(x.Id), ct);
+
+        foreach (var log in logs)
+        {
+            try
+            {
+                if (command.TargetAction.Equals("Archive", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _gmailService.ArchiveEmailAsync(log.EmailId, ct);
+                    log.Action = "Archived";
+                    log.Reason = $"[Duyệt hàng loạt - Lưu trữ] {log.Reason}";
+                }
+                else if (command.TargetAction.Equals("Dismiss", StringComparison.OrdinalIgnoreCase) || 
+                         command.TargetAction.Equals("Reject", StringComparison.OrdinalIgnoreCase))
+                {
+                    log.Action = "Dismissed";
+                    log.Reason = $"[Duyệt hàng loạt - Bỏ qua] {log.Reason}";
+                }
+                else
+                {
+                    await _gmailService.TrashEmailAsync(log.EmailId, ct);
+                    log.Action = "Trashed";
+                    log.Reason = $"[Duyệt hàng loạt - Thùng rác] {log.Reason}";
+                }
+
+                log.ExecutedAt = DateTime.UtcNow;
+                await _actionLogRepo.UpdateAsync(log, ct);
+                result.SuccessCount++;
+                result.ProcessedLogIds.Add(log.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi khi xử lý hàng loạt action log {LogId} cho email {EmailId}", log.Id, log.EmailId);
+                result.FailedCount++;
+            }
+            finally
+            {
+                result.ProcessedCount++;
+            }
+        }
+
+        return result;
+    }
+}
+

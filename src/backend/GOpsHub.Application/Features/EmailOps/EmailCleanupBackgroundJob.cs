@@ -19,15 +19,6 @@ public class EmailCleanupBackgroundJob
     private readonly INotificationService _notificationService;
     private readonly ILogger<EmailCleanupBackgroundJob> _logger;
 
-    private static readonly HashSet<string> ProtectedBankDomains = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "vpb.com.vn",
-        "vietcombank.com.vn",
-        "techcombank.com.vn",
-        "mbbank.com.vn",
-        "momo.vn"
-    };
-
     public EmailCleanupBackgroundJob(
         IRepository<CleanupRule> ruleRepo,
         IRepository<CleanupLog> logRepo,
@@ -70,6 +61,7 @@ public class EmailCleanupBackgroundJob
         var existingPendingLogs = await _actionLogRepo.FindAsync(x => x.Action == "PendingApproval", ct);
         var pendingEmailIds = existingPendingLogs.Select(x => x.EmailId).ToHashSet();
 
+        var sessionId = Guid.NewGuid().ToString("N")[..8];
         var processedEmailIds = new HashSet<string>();
         int totalTrashed = 0;
         int totalArchived = 0;
@@ -80,17 +72,14 @@ public class EmailCleanupBackgroundJob
         // ==========================================
         foreach (var email in candidateEmails)
         {
-            if (email.IsStarred) continue;
-
-            // Bảo vệ các domain ngân hàng và domain whitelist
-            if (IsProtectedSender(email.From, allActiveRules.SelectMany(r => r.WhitelistDomains)))
+            if (!EmailSafetyRules.IsSafeToClean(email, allActiveRules.SelectMany(r => r.WhitelistDomains)))
             {
                 continue;
             }
 
             foreach (var rule in regexRules)
             {
-                if (IsEmailMatchingRegex(email, rule))
+                if (EmailSafetyRules.IsEmailMatchingRegex(email, rule))
                 {
                     if (rule.Action == CleanupAction.Trash)
                     {
@@ -114,6 +103,7 @@ public class EmailCleanupBackgroundJob
                         Sender = email.From,
                         Action = rule.Action == CleanupAction.Trash ? "Trashed" : "Archived",
                         SourceJob = "EmailCleanup",
+                        SessionId = sessionId,
                         Reason = $"RegexMatched: Rule '{rule.RuleName}' (SubjectRegex: '{rule.SubjectRegex}', SenderRegex: '{rule.SenderRegex}')"
                     }, ct);
 
@@ -130,8 +120,7 @@ public class EmailCleanupBackgroundJob
         var remainingEmails = candidateEmails
             .Where(e => !processedEmailIds.Contains(e.Id) 
                      && !pendingEmailIds.Contains(e.Id) 
-                     && !e.IsStarred 
-                     && !IsProtectedSender(e.From, allActiveRules.SelectMany(r => r.WhitelistDomains)))
+                     && EmailSafetyRules.IsSafeToClean(e, allActiveRules.SelectMany(r => r.WhitelistDomains)))
             .Take(15)
             .ToList();
 
@@ -216,6 +205,7 @@ public class EmailCleanupBackgroundJob
                                         Sender = targetEmail.From,
                                         Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? "Archived" : "Trashed",
                                         SourceJob = "EmailCleanup",
+                                        SessionId = sessionId,
                                         Reason = $"AiPatternMatched ({suggestion.ConfidenceScore:P0}): Category '{suggestion.Category}' - {suggestion.Reason}"
                                     }, ct);
                                 }
@@ -241,6 +231,7 @@ public class EmailCleanupBackgroundJob
                                         Sender = targetEmail.From,
                                         Action = "PendingApproval",
                                         SourceJob = "EmailCleanup",
+                                        SessionId = sessionId,
                                         Reason = $"AiUncertain ({suggestion.ConfidenceScore:P0}): Nhóm '{suggestion.Category}' - {suggestion.Reason}"
                                     }, ct);
                                     pendingCount++;
@@ -268,66 +259,30 @@ public class EmailCleanupBackgroundJob
         // Bắn thông báo tóm tắt nếu có dọn dẹp
         if (totalTrashed > 0 || totalArchived > 0)
         {
+            int totalAiCleaned = Math.Max(0, (totalTrashed + totalArchived) - totalRegexCleaned);
+
+            await _logRepo.CreateAsync(new CleanupLog
+            {
+                RuleName = "AutoCleanupBackgroundJob",
+                SessionId = sessionId,
+                ExecutedAt = DateTime.UtcNow,
+                TotalProcessed = processedEmailIds.Count,
+                TotalTrashed = totalTrashed,
+                TotalArchived = totalArchived,
+                TotalSkipped = Math.Max(0, candidateEmails.Count - processedEmailIds.Count),
+                Details = $"{totalTrashed} trashed, {totalArchived} archived ({totalRegexCleaned} regex, {totalAiCleaned} AI)"
+            }, ct);
+
+            var summaryMsg = $"• Đã xóa: <b>{totalTrashed}</b> email\n• Đã lưu trữ: <b>{totalArchived}</b> email\n(<i>{totalRegexCleaned} Regex, {totalAiCleaned} AI</i>)\n\n👉 Chat <code>/readmore</code> để xem danh sách chi tiết.";
+
             await _notificationService.SendNotificationAsync(
-                "🧹 Báo cáo tự động dọn dẹp Inbox",
-                $"Đã quét và xử lý thành công: {totalTrashed} thư vào Thùng rác, {totalArchived} thư Lưu trữ (Trong đó {totalRegexCleaned} thư được dọn sạch bằng Regex).",
+                "🧹 Dọn dẹp Inbox hoàn tất",
+                summaryMsg,
                 "info",
                 ct);
         }
 
         _logger.LogInformation("Hoàn tất Email Cleanup: Trashed={Trashed}, Archived={Archived}, RegexCount={Regex}", totalTrashed, totalArchived, totalRegexCleaned);
-    }
-
-    private static bool IsProtectedSender(string? from, IEnumerable<string> whitelistDomains)
-    {
-        if (string.IsNullOrEmpty(from)) return false;
-
-        // Never touch bank notification emails
-        foreach (var bankDomain in ProtectedBankDomains)
-        {
-            if (from.Contains(bankDomain, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        // Check user custom whitelist
-        foreach (var domain in whitelistDomains)
-        {
-            if (!string.IsNullOrWhiteSpace(domain) && from.EndsWith(domain.Trim(), StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsEmailMatchingRegex(EmailMessage email, CleanupRule rule)
-    {
-        try
-        {
-            if (!string.IsNullOrEmpty(rule.SubjectRegex) && !string.IsNullOrEmpty(email.Subject))
-            {
-                if (Regex.IsMatch(email.Subject, rule.SubjectRegex, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500)))
-                    return true;
-            }
-
-            if (!string.IsNullOrEmpty(rule.SenderRegex) && !string.IsNullOrEmpty(email.From))
-            {
-                if (Regex.IsMatch(email.From, rule.SenderRegex, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500)))
-                    return true;
-            }
-
-            if (!string.IsNullOrEmpty(rule.BodyRegex))
-            {
-                var bodyToCheck = email.Snippet ?? email.Body ?? string.Empty;
-                if (Regex.IsMatch(bodyToCheck, rule.BodyRegex, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500)))
-                    return true;
-            }
-        }
-        catch
-        {
-            // Ignore malformed regex
-        }
-
-        return false;
     }
 
     private static bool IsRegexSimilarOrDuplicate(string newPattern, IEnumerable<string> existingPatterns)
