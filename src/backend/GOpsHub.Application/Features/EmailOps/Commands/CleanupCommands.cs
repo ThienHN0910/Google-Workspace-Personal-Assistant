@@ -101,34 +101,28 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
 
             foreach (var email in emails)
             {
-                // Whitelist check
-                if (rule.WhitelistDomains.Any(domain => email.From.Contains(domain, StringComparison.OrdinalIgnoreCase)))
+                // Unified safety check (Bank protection, starred protection, read-email retention, whitelist)
+                if (!EmailSafetyRules.IsSafeToClean(email, rule.WhitelistDomains))
                 {
                     skipped++;
                     continue;
                 }
 
-                // Regex matching
-                if (!string.IsNullOrEmpty(rule.SubjectRegex) && !System.Text.RegularExpressions.Regex.IsMatch(email.Subject, rule.SubjectRegex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                {
-                    skipped++;
-                    continue;
-                }
-                
-                if (!string.IsNullOrEmpty(rule.BodyRegex) && !string.IsNullOrEmpty(email.Body) && !System.Text.RegularExpressions.Regex.IsMatch(email.Body, rule.BodyRegex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                // ReDoS-protected regex matching
+                bool hasRegex = !string.IsNullOrEmpty(rule.SubjectRegex) ||
+                                !string.IsNullOrEmpty(rule.SenderRegex) ||
+                                !string.IsNullOrEmpty(rule.BodyRegex);
+
+                if (hasRegex && !EmailSafetyRules.IsEmailMatchingRegex(email, rule))
                 {
                     skipped++;
                     continue;
                 }
 
-                // AI matching (Rate limited to 10 calls / min => 6s delay)
+                // AI matching (protected by underlying GeminiRateLimiter)
                 if (rule.UseAI && !string.IsNullOrEmpty(rule.AIPrompt))
                 {
                     var isMatch = await _aiService.CheckCleanupConditionAsync(email.Snippet ?? email.Body ?? "", rule.AIPrompt, ct);
-                    
-                    // Delay 6 seconds to avoid exceeding Gemini API rate limit
-                    await Task.Delay(6000, ct);
-                    
                     if (!isMatch)
                     {
                         skipped++;
@@ -198,9 +192,6 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
 
     private static string BuildGmailQuery(CleanupRule rule)
     {
-        if (!string.IsNullOrEmpty(rule.CustomQuery))
-            return rule.CustomQuery;
-
-        return "in:inbox is:unread";
+        return EmailSafetyRules.BuildDefaultQuery(rule.CustomQuery);
     }
 }
