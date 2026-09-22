@@ -72,17 +72,17 @@
         <div v-else class="card-footer">UC06 File Guard</div>
       </div>
 
-      <!-- AI Token Quota Mini-card -->
-      <div class="bento-card has-action" :class="{ 'alert-critical': aiUsage.quotaExceeded }">
+      <!-- AI Token Usage Mini-card -->
+      <div class="bento-card">
         <div class="card-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">
           <i class="pi pi-bolt"></i>
         </div>
         <div class="card-title">Token AI tháng này</div>
-        <div class="stat-val" :class="{ warning: aiUsage.usagePercentage >= 80 && !aiUsage.quotaExceeded, negative: aiUsage.quotaExceeded }">
+        <div class="stat-val">
           {{ formatTokens(aiUsage.totalTokens) }}
         </div>
         <router-link to="/settings" class="card-footer link">
-          Quota: {{ formatTokens(aiUsage.monthlyQuotaLimit) }} ({{ aiUsage.usagePercentage }}%) ➔
+          Giám sát: 14 RPM / 498 RPD ➔
         </router-link>
       </div>
     </div>

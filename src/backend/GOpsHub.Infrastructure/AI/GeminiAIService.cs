@@ -14,19 +14,23 @@ public class GeminiAIService : IAIService
     private readonly ILogger<GeminiAIService> _logger;
     private readonly GeminiRateLimiter _rateLimiter;
     private readonly IAiUsageTracker _usageTracker;
+    private readonly INotificationService? _notificationService;
 
     public GeminiAIService(
         IConfiguration configuration,
         ILogger<GeminiAIService> logger,
         GeminiRateLimiter rateLimiter,
-        IAiUsageTracker usageTracker)
+        IAiUsageTracker usageTracker,
+        INotificationService? notificationService = null,
+        HttpClient? httpClient = null)
     {
-        _httpClient = new HttpClient();
+        _httpClient = httpClient ?? new HttpClient();
         _apiKey = configuration["Gemini:ApiKey"] ?? configuration["GEMINI_API_KEY"];
         _model = configuration["Gemini:Model"] ?? configuration["GEMINI_MODEL"] ?? "gemini-3.1-flash-lite";
         _logger = logger;
         _rateLimiter = rateLimiter;
         _usageTracker = usageTracker;
+        _notificationService = notificationService;
     }
 
     public async Task<AIReplyResult> GenerateEmailReplyAsync(string emailContent, string language = "vi", string? templateHint = null, CancellationToken ct = default)
@@ -258,19 +262,15 @@ Chỉ trả về JSON array hợp lệ.";
         bool isBackground = false,
         CancellationToken ct = default)
     {
-        if (isBackground && !await _usageTracker.CanRunBackgroundAiAsync(ct))
-        {
-            _logger.LogWarning("Background AI call blocked: monthly quota (250,000 tokens) reached.");
-            throw new InvalidOperationException("Hạn ngạch AI hàng tháng (250,000 token) đã chạm ngưỡng. Các tác vụ chạy ngầm tạm dừng cho đến đầu tháng sau.");
-        }
-
         if (string.IsNullOrEmpty(_apiKey))
         {
             _logger.LogWarning("Gemini API key is not configured. Returning fallback response.");
             return "Cảm ơn bạn đã gửi email. Tôi đã nhận được thông tin và sẽ phản hồi sớm nhất.";
         }
 
-        await _rateLimiter.WaitForSlotAsync(ct);
+        // Ước tính input tokens trước khi gửi để tránh vượt quá 240k TPM
+        long estimatedInputTokens = (long)(prompt.Length / 3.5);
+        await _rateLimiter.WaitForSlotAsync(estimatedInputTokens, ct);
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
 
@@ -297,6 +297,24 @@ Chỉ trả về JSON array hợp lệ.";
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError("Gemini API Error: {StatusCode} - {Body}", response.StatusCode, body);
+
+            // Cảnh báo thời gian thực khi bị lỗi HTTP 429 Too Many Requests
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && _notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendNotificationAsync(
+                        "🚨 Cảnh báo Gemini AI: Chạm ngưỡng Rate Limit (HTTP 429)",
+                        $"Google AI vừa từ chối yêu cầu cho tính năng <b>{featureName}</b> do chạm ngưỡng tần suất gọi (HTTP 429 Too Many Requests).\nHệ thống đang tự động kích hoạt cơ chế giãn cách chờ slot khả dụng.",
+                        "critical",
+                        ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send HTTP 429 rate limit notification to Telegram.");
+                }
+            }
+
             throw new Exception($"Gemini API Error: {response.StatusCode} - {body}");
         }
 
@@ -304,7 +322,7 @@ Chỉ trả về JSON array hợp lệ.";
         {
             using var doc = JsonDocument.Parse(body);
 
-            // Record token usage if present
+            // Ghi nhận token tiêu thụ và kiểm tra ngưỡng tải input tokens
             if (doc.RootElement.TryGetProperty("usageMetadata", out var usageElem))
             {
                 long promptTokens = usageElem.TryGetProperty("promptTokenCount", out var pt) ? pt.GetInt64() : 0;
@@ -312,6 +330,25 @@ Chỉ trả về JSON array hợp lệ.";
                 long totalTokens = usageElem.TryGetProperty("totalTokenCount", out var tt) ? tt.GetInt64() : (promptTokens + candTokens);
 
                 await _usageTracker.RecordUsageAsync(featureName, promptTokens, candTokens, totalTokens, ct);
+
+                // Ghi nhận input token vào sliding window và cảnh báo nếu chạm đỉnh >= 200k TPM
+                bool isPeak = _rateLimiter.RecordInputTokens(promptTokens);
+                if (isPeak && _notificationService != null)
+                {
+                    var (_, currentTpm, _, _) = _rateLimiter.GetStatus();
+                    try
+                    {
+                        await _notificationService.SendNotificationAsync(
+                            "⚠️ Cảnh báo Tải Input Token Gemini AI tăng cao",
+                            $"Lượng input token trong 1 phút vừa qua đã đạt đỉnh <b>{currentTpm:N0} / 240,000 TPM</b> (vượt ngưỡng cảnh báo 200k TPM).\nHệ thống đang tự động điều tiết tốc độ để phòng ngừa lỗi 429.",
+                            "warning",
+                            ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send input token peak warning notification to Telegram.");
+                    }
+                }
             }
 
             var text = doc.RootElement

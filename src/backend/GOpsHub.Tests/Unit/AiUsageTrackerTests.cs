@@ -50,15 +50,14 @@ public class AiUsageTrackerTests
     }
 
     [Fact]
-    public async Task CanRunBackgroundAiAsync_ShouldReturnFalse_WhenQuotaExceeded()
+    public async Task CanRunBackgroundAiAsync_ShouldAlwaysReturnTrue_AsMonthlyQuotaIsRemoved()
     {
-        // Arrange
+        // Arrange: even if tokens exceed previous 250k limit
         var record = new AiTokenUsageMonthly
         {
             YearMonth = DateTime.UtcNow.ToString("yyyy-MM"),
-            TotalTokens = 250_001,
-            MonthlyQuotaLimit = 250_000,
-            WarningThreshold = 200_000
+            TotalTokens = 999_999,
+            MonthlyQuotaLimit = 250_000
         };
 
         _usageRepo.FindOneAsync(Arg.Any<Expression<Func<AiTokenUsageMonthly, bool>>>(), Arg.Any<CancellationToken>())
@@ -69,12 +68,12 @@ public class AiUsageTrackerTests
         // Act
         var canRun = await tracker.CanRunBackgroundAiAsync();
 
-        // Assert
-        canRun.Should().BeFalse();
+        // Assert: Never blocked by monthly token count
+        canRun.Should().BeTrue();
     }
 
     [Fact]
-    public async Task RecordUsageAsync_ShouldTriggerWarning_WhenReaching200kTokens()
+    public async Task RecordUsageAsync_ShouldNotTriggerMonthlyQuotaWarningNotification()
     {
         // Arrange
         var record = new AiTokenUsageMonthly
@@ -96,43 +95,11 @@ public class AiUsageTrackerTests
 
         // Assert
         result.TotalTokens.Should().Be(201_000);
-        result.WarningSent.Should().BeTrue();
-        await _notificationService.Received(1).SendNotificationAsync(
-            Arg.Is<string>(t => t.Contains("200k")),
-            Arg.Any<string>(),
-            "warning",
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RecordUsageAsync_ShouldTriggerQuotaExceeded_WhenReaching250kTokens()
-    {
-        // Arrange
-        var record = new AiTokenUsageMonthly
-        {
-            YearMonth = DateTime.UtcNow.ToString("yyyy-MM"),
-            TotalTokens = 249_000,
-            MonthlyQuotaLimit = 250_000,
-            WarningThreshold = 200_000,
-            WarningSent = true,
-            QuotaExceededSent = false
-        };
-
-        _usageRepo.FindOneAsync(Arg.Any<Expression<Func<AiTokenUsageMonthly, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(record);
-
-        var tracker = new AiUsageTracker(_usageRepo, _notificationService, _logger, _configRepo);
-
-        // Act
-        var result = await tracker.RecordUsageAsync("EmailCleanup", 1000, 500, 1500);
-
-        // Assert
-        result.TotalTokens.Should().Be(250_500);
-        result.QuotaExceededSent.Should().BeTrue();
-        await _notificationService.Received(1).SendNotificationAsync(
-            Arg.Is<string>(t => t.Contains("250k")),
-            Arg.Any<string>(),
-            "critical",
-            Arg.Any<CancellationToken>());
+        // Monthly warning alerts are removed; no notification should be sent from monthly tracker
+        await _notificationService.DidNotReceiveWithAnyArgs().SendNotificationAsync(
+            default!,
+            default!,
+            default!,
+            default);
     }
 }

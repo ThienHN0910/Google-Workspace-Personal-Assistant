@@ -222,7 +222,7 @@
         <div class="card-box">
           <div class="box-header">
             <h3><i class="pi pi-sparkles"></i> Trí tuệ Nhân tạo Gemini AI</h3>
-            <span class="badge-safe">🛡️ Tự động bảo vệ Quota 15 RPM / 500 RPD</span>
+            <span class="badge-safe">🛡️ Tự động bảo vệ Quota 14 RPM / 498 RPD / 240k TPM</span>
           </div>
           <p class="box-desc">
             Cấu hình mô hình xử lý sinh bản nháp email, bóc tách hóa đơn ngân hàng và trích xuất lịch hẹn.
@@ -271,8 +271,9 @@
               <strong>Hàng rào kiểm soát hạn mức GeminiRateLimiter:</strong>
             </div>
             <ul>
-              <li><strong>Tối đa 15 yêu cầu / phút (15 RPM)</strong>: Các tác vụ chạy ngầm tự động điều phối hàng đợi, không bao giờ gây lỗi <code>429 Too Many Requests</code>.</li>
-              <li><strong>Tối đa 500 yêu cầu / ngày (500 RPD)</strong>: Ngăn chặn vượt hạn mức gói miễn phí của Google AI.</li>
+              <li><strong>Tối đa 14 yêu cầu / phút (14 RPM)</strong>: Điều phối hàng đợi trượt, tạo khoảng đệm an toàn phòng ngừa lỗi <code>429 Too Many Requests</code>.</li>
+              <li><strong>Tối đa 240.000 Input Token / phút (240K TPM)</strong>: Kiểm soát kích thước prompt trượt 60 giây, cảnh báo Telegram khi tải chạm đỉnh &ge; 200k TPM.</li>
+              <li><strong>Tối đa 498 yêu cầu / ngày (498 RPD)</strong>: Duy trì trần an toàn dưới 500 RPD của gói miễn phí Google AI.</li>
             </ul>
           </div>
         </div>
@@ -280,13 +281,13 @@
         <!-- Token AI Quota Monitoring -->
         <div class="card-box mt-3">
           <div class="box-header">
-            <h3><i class="pi pi-chart-bar"></i> Token AI Quota — Theo dõi hạn mức tháng</h3>
+            <h3><i class="pi pi-chart-bar"></i> Token AI — Thống kê & Giám sát Tải</h3>
             <button class="btn-refresh-usage" @click="fetchAiUsage" :disabled="loadingAiUsage">
               <i class="pi" :class="loadingAiUsage ? 'pi-spin pi-spinner' : 'pi-refresh'"></i>
             </button>
           </div>
           <p class="box-desc">
-            Theo dõi lượng token Gemini AI đã sử dụng trong tháng. Cảnh báo Telegram khi đạt 200K, khóa tác vụ AI chạy ngầm khi đạt 250K.
+            Theo dõi tổng lượng token Gemini AI đã sử dụng trong tháng. Tự động cảnh báo Telegram khi có lỗi HTTP 429 hoặc khi input token trong 1 phút đạt đỉnh &ge; 200K. Không áp dụng giới hạn chặn tháng.
           </p>
 
           <div v-if="loadingAiUsage" class="usage-loading">
@@ -297,29 +298,24 @@
             <div class="usage-progress-container">
               <div class="usage-labels">
                 <span class="usage-month">📅 {{ aiUsage.yearMonth || 'N/A' }}</span>
-                <span class="usage-count">{{ formatTokens(aiUsage.totalTokens) }} / {{ formatTokens(aiUsage.monthlyQuotaLimit) }} tokens</span>
+                <span class="usage-count">{{ formatTokens(aiUsage.totalTokens) }} tokens tháng này</span>
               </div>
               <div class="progress-bar-track">
                 <div
-                  class="progress-bar-fill"
-                  :class="usageBarClass"
-                  :style="{ width: Math.min(aiUsage.usagePercentage, 100) + '%' }"
+                  class="progress-bar-fill bg-indigo"
+                  style="width: 100%"
                 ></div>
-                <div class="progress-marker warning-marker" :style="{ left: warningPercentage + '%' }" title="Ngưỡng cảnh báo 200K"></div>
               </div>
               <div class="usage-stats-row">
-                <span :class="['usage-pct', usageBarClass]">{{ aiUsage.usagePercentage }}%</span>
-                <span class="usage-remaining">Còn lại: {{ formatTokens(aiUsage.remainingTokens) }} tokens</span>
+                <span class="usage-pct text-indigo">{{ aiUsage.callCount }} cuộc gọi AI</span>
+                <span class="usage-remaining">Prompt: {{ formatTokens(aiUsage.promptTokens) }} | Candidates: {{ formatTokens(aiUsage.candidatesTokens) }}</span>
               </div>
             </div>
 
             <!-- Status Badges -->
             <div class="usage-badges">
-              <span v-if="aiUsage.quotaExceeded" class="badge-danger">🚫 Đã vượt quota — AI ngầm bị khóa</span>
-              <span v-else-if="aiUsage.warningSent" class="badge-warning">⚠️ Đã cảnh báo — Gần đạt giới hạn</span>
-              <span v-else class="badge-ok">✅ Trong giới hạn an toàn</span>
-              <span v-if="!aiUsage.canRunBackgroundAi" class="badge-danger">🔒 Background AI: Đã khóa</span>
-              <span v-else class="badge-ok">🟢 Background AI: Hoạt động</span>
+              <span class="badge-ok">🟢 Background AI: Hoạt động liên tục (Không giới hạn tháng)</span>
+              <span class="badge-safe">🛡️ Cảnh báo Real-time: HTTP 429 &amp; Peak &ge; 200k TPM</span>
             </div>
 
             <!-- Feature Breakdown -->

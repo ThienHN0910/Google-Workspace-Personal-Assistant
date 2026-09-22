@@ -78,15 +78,16 @@ public class AiUsageTracker : IAiUsageTracker
         return record;
     }
 
-    public async Task<bool> CanRunBackgroundAiAsync(CancellationToken ct = default)
+    public Task<bool> CanRunBackgroundAiAsync(CancellationToken ct = default)
     {
-        var current = await GetCurrentMonthlyUsageAsync(ct);
-        return current.TotalTokens < current.MonthlyQuotaLimit;
+        // Theo dõi hạn mức tháng không còn giới hạn token hàng tháng; tác vụ ngầm chạy bình thường
+        return Task.FromResult(true);
     }
 
     public async Task<long> GetRemainingTokensAsync(CancellationToken ct = default)
     {
         var current = await GetCurrentMonthlyUsageAsync(ct);
+        if (current.MonthlyQuotaLimit <= 0) return long.MaxValue;
         return Math.Max(0, current.MonthlyQuotaLimit - current.TotalTokens);
     }
 
@@ -111,42 +112,6 @@ public class AiUsageTracker : IAiUsageTracker
             current.FeatureBreakdown[feature] = 0;
         }
         current.FeatureBreakdown[feature] += totalTokens;
-
-        // Check Warning Threshold (200,000)
-        if (current.TotalTokens >= current.WarningThreshold && !current.WarningSent)
-        {
-            current.WarningSent = true;
-            try
-            {
-                await _notificationService.SendNotificationAsync(
-                    "⚠️ Cảnh báo Hạn mức Token AI (200k)",
-                    $"Bạn đã sử dụng {current.TotalTokens:N0} / {current.MonthlyQuotaLimit:N0} token trong tháng {current.YearMonth} ({(double)current.TotalTokens / current.MonthlyQuotaLimit * 100:F1}%). Hệ thống sẽ tự động tạm khóa các tác vụ AI chạy ngầm khi chạm 250k token.",
-                    "warning",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send AI token warning notification.");
-            }
-        }
-
-        // Check Exceeded Quota Limit (250,000)
-        if (current.TotalTokens >= current.MonthlyQuotaLimit && !current.QuotaExceededSent)
-        {
-            current.QuotaExceededSent = true;
-            try
-            {
-                await _notificationService.SendNotificationAsync(
-                    "🚨 Đã khóa Tác vụ AI Chạy ngầm (250k Tokens)",
-                    $"Tổng token sử dụng trong tháng {current.YearMonth} đã chạm {current.TotalTokens:N0} / {current.MonthlyQuotaLimit:N0} token. Các tác vụ AI chạy ngầm (AI Clean, Lịch hẹn) được tạm khóa cho đến đầu tháng sau. Dọn dẹp bằng Regex vẫn chạy bình thường.",
-                    "critical",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send AI quota exceeded notification.");
-            }
-        }
 
         await _usageRepo.UpdateAsync(current, ct);
         return current;
