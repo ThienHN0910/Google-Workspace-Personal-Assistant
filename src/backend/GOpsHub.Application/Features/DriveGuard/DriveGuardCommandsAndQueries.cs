@@ -277,3 +277,23 @@ public class ResolveSecurityAlertCommandHandler : ICommandHandler<ResolveSecurit
         return true;
     }
 }
+
+public record GetFolderContentsQuery(string FolderId) : IQuery<IReadOnlyList<DriveFileInfo>>;
+
+public class GetFolderContentsQueryHandler : IQueryHandler<GetFolderContentsQuery, IReadOnlyList<DriveFileInfo>>
+{
+    private readonly IDriveService _driveService;
+
+    public GetFolderContentsQueryHandler(IDriveService driveService)
+    {
+        _driveService = driveService;
+    }
+
+    public async Task<IReadOnlyList<DriveFileInfo>> HandleAsync(GetFolderContentsQuery query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query.FolderId))
+            return Array.Empty<DriveFileInfo>();
+
+        return await _driveService.ListFilesInFolderAsync(query.FolderId, ct);
+    }
+}

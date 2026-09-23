@@ -1,4 +1,5 @@
 using GOpsHub.Application.Common.CQRS;
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Common.Models;
 using GOpsHub.Application.Features.DriveGuard;
 using GOpsHub.Domain.Entities;
@@ -47,6 +48,16 @@ public class DriveGuardController : ControllerBase
     {
         var folders = await _dispatcher.QueryAsync(new GetMonitoredFoldersQuery());
         return Ok(ApiResponse<IReadOnlyList<MonitoredFolder>>.Ok(folders));
+    }
+
+    /// <summary>
+    /// List files and subfolders inside a specific Google Drive folder (UC05 Explorer)
+    /// </summary>
+    [HttpGet("folders/{folderId}/contents")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<DriveFileInfo>>>> GetFolderContents(string folderId)
+    {
+        var items = await _dispatcher.QueryAsync(new GetFolderContentsQuery(folderId));
+        return Ok(ApiResponse<IReadOnlyList<DriveFileInfo>>.Ok(items));
     }
 
     /// <summary>
