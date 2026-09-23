@@ -188,8 +188,17 @@ public static class EmailSafetyRules
         if (string.IsNullOrWhiteSpace(p1) && string.IsNullOrWhiteSpace(p2)) return true;
         if (string.IsNullOrWhiteSpace(p1) || string.IsNullOrWhiteSpace(p2)) return false;
 
-        string Clean(string p) =>
-            Regex.Replace(p.ToLowerInvariant().Replace("(?i)", "").Replace("(?-i)", "").Trim(), @"[\s\(\)\[\]\\\|\^\$\.\*\+\?]", "");
+        string Clean(string p)
+        {
+            var s = p.ToLowerInvariant().Replace("(?i)", "").Replace("(?-i)", "").Trim();
+            // 1. Replace regex escape sequences like \s, \d, \w, \b, \t, etc. with space
+            s = Regex.Replace(s, @"\\[sSwWdDbBtrnvf]", " ");
+            // 2. Remove character class bracket contents like [\d,] or [a-z]
+            s = Regex.Replace(s, @"\[[^\]]+\]", " ");
+            // 3. Remove punctuation and regex special characters
+            s = Regex.Replace(s, @"[\s\(\)\[\]\\\|\^\$\.\*\+\?\{\},:;!#&%<>=/""'@\-_]", "");
+            return s.Trim();
+        }
 
         var c1 = Clean(p1);
         var c2 = Clean(p2);
