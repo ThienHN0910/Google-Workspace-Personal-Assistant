@@ -92,101 +92,119 @@ public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, Clean
             : await _ruleRepo.FindAsync(r => r.Id == command.RuleId && r.IsActive, ct);
 
         var result = new CleanupLogResult();
+        var processedEmailIds = new HashSet<string>();
 
-        foreach (var rule in rules)
+        // Batch rules by query to eliminate N+1 Gmail API calls
+        var ruleGroups = rules.GroupBy(BuildGmailQuery);
+
+        foreach (var group in ruleGroups)
         {
-            var query = BuildGmailQuery(rule);
-            var emails = await _gmailService.GetEmailsAsync(query, 100, ct);
+            var query = group.Key;
+            var emails = await _gmailService.GetEmailsAsync(query, 100, ct) ?? new List<EmailMessage>();
 
-            int trashed = 0, archived = 0, skipped = 0;
-
-            foreach (var email in emails)
+            foreach (var rule in group)
             {
-                // Unified safety check (Bank protection, starred protection, read-email retention, whitelist)
-                if (!EmailSafetyRules.IsSafeToClean(email, rule.WhitelistDomains))
-                {
-                    skipped++;
-                    continue;
-                }
+                int trashed = 0, archived = 0, skipped = 0;
+                int ruleProcessed = 0;
 
-                // ReDoS-protected regex matching
-                bool hasRegex = !string.IsNullOrEmpty(rule.SubjectRegex) ||
-                                !string.IsNullOrEmpty(rule.SenderRegex) ||
-                                !string.IsNullOrEmpty(rule.BodyRegex);
-
-                if (hasRegex && !EmailSafetyRules.IsEmailMatchingRegex(email, rule))
+                foreach (var email in emails)
                 {
-                    skipped++;
-                    continue;
-                }
+                    // Skip if already cleaned in this batch run by a previous rule
+                    if (processedEmailIds.Contains(email.Id))
+                    {
+                        continue;
+                    }
 
-                // AI matching (protected by underlying GeminiRateLimiter)
-                if (rule.UseAI && !string.IsNullOrEmpty(rule.AIPrompt))
-                {
-                    var isMatch = await _aiService.CheckCleanupConditionAsync(email.Snippet ?? email.Body ?? "", rule.AIPrompt, ct);
-                    if (!isMatch)
+                    ruleProcessed++;
+
+                    // Unified safety check (Bank protection, starred protection, read-email retention, whitelist)
+                    if (!EmailSafetyRules.IsSafeToClean(email, rule.WhitelistDomains))
                     {
                         skipped++;
                         continue;
                     }
-                }
 
-                if (rule.Action == CleanupAction.Trash)
-                {
-                    await _gmailService.TrashEmailAsync(email.Id, ct);
-                    trashed++;
-                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                    // ReDoS-protected regex matching
+                    bool hasRegex = !string.IsNullOrEmpty(rule.SubjectRegex) ||
+                                    !string.IsNullOrEmpty(rule.SenderRegex) ||
+                                    !string.IsNullOrEmpty(rule.BodyRegex);
+
+                    if (hasRegex && !EmailSafetyRules.IsEmailMatchingRegex(email, rule))
                     {
-                        EmailId = email.Id,
-                        Subject = email.Subject,
-                        Sender = email.From,
-                        Action = "Trashed",
-                        SourceJob = "ManualCleanup",
-                        SessionId = sessionId,
-                        Reason = $"ManualRule: {rule.RuleName}"
-                    }, ct);
-                }
-                else if (rule.Action == CleanupAction.Archive)
-                {
-                    await _gmailService.ArchiveEmailAsync(email.Id, ct);
-                    archived++;
-                    await _actionLogRepo.CreateAsync(new EmailActionLog
+                        skipped++;
+                        continue;
+                    }
+
+                    // AI matching (protected by underlying GeminiRateLimiter)
+                    if (rule.UseAI && !string.IsNullOrEmpty(rule.AIPrompt))
                     {
-                        EmailId = email.Id,
-                        Subject = email.Subject,
-                        Sender = email.From,
-                        Action = "Archived",
-                        SourceJob = "ManualCleanup",
-                        SessionId = sessionId,
-                        Reason = $"ManualRule: {rule.RuleName}"
-                    }, ct);
+                        var isMatch = await _aiService.CheckCleanupConditionAsync(email.Snippet ?? email.Body ?? "", rule.AIPrompt, ct);
+                        if (!isMatch)
+                        {
+                            skipped++;
+                            continue;
+                        }
+                    }
+
+                    if (rule.Action == CleanupAction.Trash)
+                    {
+                        await _gmailService.TrashEmailAsync(email.Id, ct);
+                        trashed++;
+                        processedEmailIds.Add(email.Id);
+                        await _actionLogRepo.CreateAsync(new EmailActionLog
+                        {
+                            EmailId = email.Id,
+                            Subject = email.Subject,
+                            Sender = email.From,
+                            Action = "Trashed",
+                            SourceJob = "ManualCleanup",
+                            SessionId = sessionId,
+                            Reason = $"ManualRule: {rule.RuleName}"
+                        }, ct);
+                    }
+                    else if (rule.Action == CleanupAction.Archive)
+                    {
+                        await _gmailService.ArchiveEmailAsync(email.Id, ct);
+                        archived++;
+                        processedEmailIds.Add(email.Id);
+                        await _actionLogRepo.CreateAsync(new EmailActionLog
+                        {
+                            EmailId = email.Id,
+                            Subject = email.Subject,
+                            Sender = email.From,
+                            Action = "Archived",
+                            SourceJob = "ManualCleanup",
+                            SessionId = sessionId,
+                            Reason = $"ManualRule: {rule.RuleName}"
+                        }, ct);
+                    }
                 }
-            }
 
-            if (trashed > 0 || archived > 0)
-            {
-                var log = new CleanupLog
+                if (trashed > 0 || archived > 0)
                 {
-                    RuleId = rule.Id,
-                    RuleName = rule.RuleName,
-                    SessionId = sessionId,
-                    ExecutedAt = DateTime.UtcNow,
-                    TotalProcessed = emails.Count,
-                    TotalTrashed = trashed,
-                    TotalArchived = archived,
-                    TotalSkipped = skipped,
-                    DurationMs = sw.ElapsedMilliseconds,
-                    Details = $"Executed rule '{rule.RuleName}' on {emails.Count} emails."
-                };
+                    var log = new CleanupLog
+                    {
+                        RuleId = rule.Id,
+                        RuleName = rule.RuleName,
+                        SessionId = sessionId,
+                        ExecutedAt = DateTime.UtcNow,
+                        TotalProcessed = ruleProcessed,
+                        TotalTrashed = trashed,
+                        TotalArchived = archived,
+                        TotalSkipped = skipped,
+                        DurationMs = sw.ElapsedMilliseconds,
+                        Details = $"Executed rule '{rule.RuleName}' on {ruleProcessed} emails."
+                    };
 
-                await _logRepo.CreateAsync(log, ct);
+                    await _logRepo.CreateAsync(log, ct);
+                }
+
+                result.RulesExecuted++;
+                result.TotalProcessed += ruleProcessed;
+                result.TotalTrashed += trashed;
+                result.TotalArchived += archived;
+                result.TotalSkipped += skipped;
             }
-
-            result.RulesExecuted++;
-            result.TotalProcessed += emails.Count;
-            result.TotalTrashed += trashed;
-            result.TotalArchived += archived;
-            result.TotalSkipped += skipped;
         }
 
         sw.Stop();

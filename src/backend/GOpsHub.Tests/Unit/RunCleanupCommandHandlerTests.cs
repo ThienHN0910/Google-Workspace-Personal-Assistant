@@ -133,4 +133,46 @@ public class RunCleanupCommandHandlerTests
         result.TotalSkipped.Should().Be(1);
         await _gmailService.DidNotReceive().TrashEmailAsync("read-1", Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task HandleAsync_WithMultipleRulesSharingQuery_ShouldBatchAndCallGetEmailsOnce()
+    {
+        var rule1 = new CleanupRule
+        {
+            Id = "r-batch-1",
+            RuleName = "Promo Rule 1",
+            SubjectRegex = "promo",
+            Action = CleanupAction.Trash,
+            IsActive = true
+        };
+        var rule2 = new CleanupRule
+        {
+            Id = "r-batch-2",
+            RuleName = "Promo Rule 2",
+            SubjectRegex = "discount",
+            Action = CleanupAction.Archive,
+            IsActive = true
+        };
+        var rule3 = new CleanupRule
+        {
+            Id = "r-batch-3",
+            RuleName = "Promo Rule 3",
+            SubjectRegex = "sale",
+            Action = CleanupAction.Trash,
+            IsActive = true
+        };
+
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule> { rule1, rule2, rule3 });
+
+        _gmailService.GetEmailsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage>());
+
+        var handler = CreateHandler();
+        var result = await handler.HandleAsync(new RunCleanupCommand());
+
+        result.RulesExecuted.Should().Be(3);
+        // Only 1 call to Gmail API for all 3 rules sharing default query
+        await _gmailService.Received(1).GetEmailsAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
 }

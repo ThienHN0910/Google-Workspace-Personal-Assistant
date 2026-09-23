@@ -221,6 +221,8 @@ public class EmailSafetyRulesTests
     [InlineData("(?i).*tiki.*", "(?i).*(tiki|tikinow).*", true)] // brand in OR branch
     [InlineData("deals@lazada.vn", "deals@lazada.vn", true)] // exact
     [InlineData("deals@lazada.vn", "deals@shopee.vn", false)] // different brands
+    [InlineData(@"(?i)You\s+appeared\s+in\s+[\d,]+\s+searches\s+this\s+week", @"(?i).*You appeared in \d+ search.*", true)] // escape sequences \s and \d
+    [InlineData(@"(?i).*jobalerts-noreply@linkedin\.com.*", @"(?i).*(jobs-noreply|jobalerts-noreply)@linkedin\.com", true)] // branch in parenthesized OR
     public void AreRegexPatternsSimilar_ShouldDetectDuplicatesProperly(string p1, string p2, bool expected)
     {
         EmailSafetyRules.AreRegexPatternsSimilar(p1, p2).Should().Be(expected);
