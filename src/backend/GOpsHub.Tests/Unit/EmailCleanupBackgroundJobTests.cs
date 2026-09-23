@@ -205,11 +205,12 @@ public class EmailCleanupBackgroundJobTests
         // Assert: Target email should be cleaned
         await _gmailService.Received(1).TrashEmailAsync("email-3", Arg.Any<CancellationToken>());
 
-        // Assert: Notification sent with activation instruction
+        // Assert: Notification sent with activation instruction and interactive buttons
         await _notificationService.Received(1).SendNotificationAsync(
             Arg.Is<string>(t => t.Contains("chờ kích hoạt")),
             Arg.Is<string>(m => m.Contains("/enable_rule")),
             "info",
+            Arg.Is<List<NotificationButtonRow>>(b => b != null && b.Count > 0),
             Arg.Any<CancellationToken>());
     }
 
