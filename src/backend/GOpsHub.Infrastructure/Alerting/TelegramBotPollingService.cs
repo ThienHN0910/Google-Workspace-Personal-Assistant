@@ -69,6 +69,21 @@ public class TelegramBotPollingService : BackgroundService
                     {
                         offset = update.update_id + 1;
 
+                        // 1. Handle interactive inline button clicks (CallbackQuery)
+                        if (update.callback_query != null)
+                        {
+                            var cbChatId = update.callback_query.message?.chat?.id.ToString();
+                            if (!string.IsNullOrEmpty(allowedChatId) && !string.Equals(cbChatId, allowedChatId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _logger.LogWarning("Received Telegram callback query from unauthorized chat_id: {ChatId}", cbChatId);
+                                continue;
+                            }
+
+                            await HandleCallbackQueryAsync(botToken, cbChatId ?? allowedChatId ?? "", update.callback_query, stoppingToken);
+                            continue;
+                        }
+
+                        // 2. Handle text commands
                         if (update.message?.chat == null || string.IsNullOrWhiteSpace(update.message.text))
                             continue;
 
@@ -125,15 +140,21 @@ public class TelegramBotPollingService : BackgroundService
         {
             await ProcessToggleRuleCommandAsync(botToken, chatId, text, enable: false, ct);
         }
+        else if (text.StartsWith("/delete_rule", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessDeleteRuleCommandAsync(botToken, chatId, text, ct);
+        }
         else if (text.StartsWith("/start", StringComparison.OrdinalIgnoreCase) || text.StartsWith("/help", StringComparison.OrdinalIgnoreCase))
         {
             var helpMsg = "🤖 <b>G-Ops Hub Assistant Bot</b>\n\n" +
                           "Các lệnh khả dụng:\n" +
                           "• <code>/readmore</code> — Xem chi tiết phiên dọn dẹp email gần nhất\n" +
                           "• <code>/rules</code> — Xem danh sách các quy tắc dọn dẹp\n" +
-                          "• <code>/enable_rule &lt;id&gt;</code> — Bật quy tắc dọn dẹp\n" +
-                          "• <code>/disable_rule &lt;id&gt;</code> — Tắt quy tắc dọn dẹp\n" +
-                          "• <code>/status</code> — Kiểm tra trạng thái hệ thống";
+                          "• <code>/enable_rule &lt;id&gt;</code> — Bật quy tắc dọn dẹp (hỗ trợ ID ngắn)\n" +
+                          "• <code>/disable_rule &lt;id&gt;</code> — Tắt quy tắc dọn dẹp (hỗ trợ ID ngắn)\n" +
+                          "• <code>/delete_rule &lt;id&gt;</code> — Xóa vĩnh viễn quy tắc dọn dẹp\n" +
+                          "• <code>/status</code> — Kiểm tra trạng thái hệ thống\n\n" +
+                          "💡 <i>Bạn có thể bấm trực tiếp nút phản hồi dưới các thông báo dọn dẹp mà không cần gõ lệnh.</i>";
             await SendTelegramMessageAsync(botToken, chatId, helpMsg, ct);
         }
         else if (text.StartsWith("/status", StringComparison.OrdinalIgnoreCase))
@@ -264,7 +285,7 @@ public class TelegramBotPollingService : BackgroundService
         if (parts.Length < 2)
         {
             var cmdName = enable ? "/enable_rule" : "/disable_rule";
-            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Vui lòng cung cấp ID quy tắc.\nVí dụ: <code>{cmdName} 65fa1234abcd</code>", ct);
+            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Vui lòng cung cấp ID quy tắc.\nVí dụ: <code>{cmdName} 6ab38717</code>", ct);
             return;
         }
 
@@ -272,21 +293,143 @@ public class TelegramBotPollingService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var ruleRepo = scope.ServiceProvider.GetRequiredService<IRepository<CleanupRule>>();
 
-        var rule = await ruleRepo.GetByIdAsync(ruleId, ct);
+        var rule = await FindRuleByIdOrPrefixAsync(ruleRepo, ruleId, ct);
         if (rule == null)
         {
-            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Không tìm thấy quy tắc nào có ID <code>{EscapeTelegramHtml(ruleId)}</code>.", ct);
+            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Không tìm thấy quy tắc nào khớp với ID <code>{EscapeTelegramHtml(ruleId)}</code>.", ct);
             return;
         }
 
         rule.IsActive = enable;
         await ruleRepo.UpdateAsync(rule, ct);
 
+        var shortId = rule.Id.Length >= 8 ? rule.Id[..8] : rule.Id;
         var statusText = enable
-            ? $"✅ Đã kích hoạt quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b>!\nTừ các phiên dọn dẹp tiếp theo, quy tắc này sẽ được áp dụng tự động."
-            : $"⏸️ Đã tạm dừng quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b>.";
+            ? $"✅ Đã kích hoạt quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b> (<code>{shortId}</code>)!\nTừ các phiên dọn dẹp tiếp theo, quy tắc này sẽ được áp dụng tự động."
+            : $"⏸️ Đã tạm dừng quy tắc <b>{EscapeTelegramHtml(rule.RuleName)}</b> (<code>{shortId}</code>).";
 
         await SendTelegramMessageAsync(botToken, chatId, statusText, ct);
+    }
+
+    private async Task ProcessDeleteRuleCommandAsync(string botToken, string chatId, string text, CancellationToken ct)
+    {
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            await SendTelegramMessageAsync(botToken, chatId, "⚠️ Vui lòng cung cấp ID quy tắc cần xóa.\nVí dụ: <code>/delete_rule 6ab38717</code>", ct);
+            return;
+        }
+
+        var ruleId = parts[1].Trim();
+        using var scope = _serviceProvider.CreateScope();
+        var ruleRepo = scope.ServiceProvider.GetRequiredService<IRepository<CleanupRule>>();
+
+        var rule = await FindRuleByIdOrPrefixAsync(ruleRepo, ruleId, ct);
+        if (rule == null)
+        {
+            await SendTelegramMessageAsync(botToken, chatId, $"⚠️ Không tìm thấy quy tắc nào khớp với ID <code>{EscapeTelegramHtml(ruleId)}</code>.", ct);
+            return;
+        }
+
+        await ruleRepo.DeleteAsync(rule.Id, ct);
+        var shortId = rule.Id.Length >= 8 ? rule.Id[..8] : rule.Id;
+        await SendTelegramMessageAsync(botToken, chatId, $"🗑️ <b>Đã xóa hoàn toàn quy tắc:</b> <code>{EscapeTelegramHtml(rule.RuleName)}</code> (Mã: <code>{shortId}</code>).", ct);
+    }
+
+    public async Task HandleCallbackQueryAsync(string botToken, string chatId, TelegramCallbackQuery callbackQuery, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(callbackQuery.data)) return;
+
+        var parts = callbackQuery.data.Split(':', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3 || !parts[0].Equals("rule", StringComparison.OrdinalIgnoreCase))
+        {
+            await AnswerCallbackQueryAsync(botToken, callbackQuery.id, "Thao tác không được hỗ trợ", ct);
+            return;
+        }
+
+        var action = parts[1].ToLowerInvariant(); // enable, disable, delete
+        var ruleKey = parts[2].Trim();
+
+        using var scope = _serviceProvider.CreateScope();
+        var ruleRepo = scope.ServiceProvider.GetRequiredService<IRepository<CleanupRule>>();
+
+        var rule = await FindRuleByIdOrPrefixAsync(ruleRepo, ruleKey, ct);
+        if (rule == null)
+        {
+            await AnswerCallbackQueryAsync(botToken, callbackQuery.id, $"Không tìm thấy quy tắc: {ruleKey}", ct);
+            return;
+        }
+
+        string alertText;
+        string confirmText;
+        var shortId = rule.Id.Length >= 8 ? rule.Id[..8] : rule.Id;
+
+        if (action == "enable")
+        {
+            rule.IsActive = true;
+            await ruleRepo.UpdateAsync(rule, ct);
+            alertText = $"Đã bật: {rule.RuleName}";
+            confirmText = $"✅ <b>Đã kích hoạt quy tắc:</b> <code>{EscapeTelegramHtml(rule.RuleName)}</code> (<code>{shortId}</code>)\nQuy tắc này sẽ tự động xóa email khớp điều kiện trong các phiên dọn dẹp tiếp theo.";
+        }
+        else if (action == "disable")
+        {
+            rule.IsActive = false;
+            await ruleRepo.UpdateAsync(rule, ct);
+            alertText = $"Đã tắt: {rule.RuleName}";
+            confirmText = $"⏸️ <b>Đã tạm dừng quy tắc:</b> <code>{EscapeTelegramHtml(rule.RuleName)}</code> (<code>{shortId}</code>).";
+        }
+        else if (action == "delete")
+        {
+            await ruleRepo.DeleteAsync(rule.Id, ct);
+            alertText = $"Đã xóa: {rule.RuleName}";
+            confirmText = $"🗑️ <b>Đã xóa vĩnh viễn quy tắc:</b> <code>{EscapeTelegramHtml(rule.RuleName)}</code> (<code>{shortId}</code>).";
+        }
+        else
+        {
+            await AnswerCallbackQueryAsync(botToken, callbackQuery.id, "Lệnh không hợp lệ", ct);
+            return;
+        }
+
+        await AnswerCallbackQueryAsync(botToken, callbackQuery.id, alertText, ct);
+        if (!string.IsNullOrEmpty(chatId))
+        {
+            await SendTelegramMessageAsync(botToken, chatId, confirmText, ct);
+        }
+    }
+
+    private async Task AnswerCallbackQueryAsync(string botToken, string callbackQueryId, string text, CancellationToken ct)
+    {
+        try
+        {
+            var payload = new
+            {
+                callback_query_id = callbackQueryId,
+                text = text,
+                show_alert = false
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var url = $"https://api.telegram.org/bot{botToken}/answerCallbackQuery";
+            await _httpClient.PostAsync(url, content, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to answer Telegram callback query {CallbackQueryId}.", callbackQueryId);
+        }
+    }
+
+    public static async Task<CleanupRule?> FindRuleByIdOrPrefixAsync(IRepository<CleanupRule> ruleRepo, string ruleKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(ruleKey)) return null;
+
+        // 1. Exact match
+        var rule = await ruleRepo.GetByIdAsync(ruleKey, ct);
+        if (rule != null) return rule;
+
+        // 2. Prefix match (for short IDs like 6ab38717)
+        var candidates = await ruleRepo.FindAsync(r => r.Id.StartsWith(ruleKey), ct);
+        return candidates.FirstOrDefault();
     }
 
     public static string FormatRulesResponse(IReadOnlyList<CleanupRule> rules)
@@ -309,15 +452,17 @@ public class TelegramBotPollingService : BackgroundService
             var statusIcon = rule.IsActive ? "✅ Bật" : "⏸️ Tắt";
             var actionText = rule.Action == Domain.Enums.CleanupAction.Trash ? "Xóa" : "Lưu trữ";
             var learnedTag = rule.IsAutoLearned ? " [AI Học]" : "";
+            var shortId = rule.Id.Length >= 8 ? rule.Id[..8] : rule.Id;
+
             sb.AppendLine($"{index++}. <b>{EscapeTelegramHtml(rule.RuleName)}</b>{learnedTag}");
             sb.AppendLine($"   • Trạng thái: <b>{statusIcon}</b> | Hành động: <b>{actionText}</b>");
             if (!string.IsNullOrWhiteSpace(rule.SubjectRegex))
                 sb.AppendLine($"   • Regex Tiêu đề: <code>{EscapeTelegramHtml(rule.SubjectRegex)}</code>");
             if (!string.IsNullOrWhiteSpace(rule.SenderRegex))
                 sb.AppendLine($"   • Regex Người gửi: <code>{EscapeTelegramHtml(rule.SenderRegex)}</code>");
-            sb.AppendLine($"   • ID: <code>{rule.Id}</code>");
+            sb.AppendLine($"   • ID: <code>{shortId}</code>");
             if (!rule.IsActive)
-                sb.AppendLine($"   👉 <i>Bật nhanh:</i> <code>/enable_rule {rule.Id}</code>");
+                sb.AppendLine($"   👉 <i>Bật nhanh:</i> <code>/enable_rule {shortId}</code>");
             sb.AppendLine();
         }
 
@@ -401,6 +546,15 @@ public class TelegramUpdate
 {
     public long update_id { get; set; }
     public TelegramMessage? message { get; set; }
+    public TelegramCallbackQuery? callback_query { get; set; }
+}
+
+public class TelegramCallbackQuery
+{
+    public string id { get; set; } = string.Empty;
+    public TelegramChat? from { get; set; }
+    public TelegramMessage? message { get; set; }
+    public string? data { get; set; }
 }
 
 public class TelegramMessage

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Infrastructure.Alerting;
+using NSubstitute;
 using Xunit;
 
 namespace GOpsHub.Tests.Unit;
@@ -112,7 +113,7 @@ public class TelegramBotPollingServiceTests
         {
             new()
             {
-                Id = "rule-1",
+                Id = "6ab38717857a16ad307239df",
                 RuleName = "Shopee Promo",
                 SubjectRegex = "(?i).*khuyến mãi.*",
                 Action = GOpsHub.Domain.Enums.CleanupAction.Trash,
@@ -121,10 +122,10 @@ public class TelegramBotPollingServiceTests
             },
             new()
             {
-                Id = "rule-2",
+                Id = "6ab31692ec3217f352afa7df",
                 RuleName = "Tự động học: Lazada",
                 SenderRegex = "(?i).*@lazada\\.vn.*",
-                Action = GOpsHub.Domain.Enums.CleanupAction.Archive,
+                Action = GOpsHub.Domain.Enums.CleanupAction.Trash,
                 IsActive = false,
                 IsAutoLearned = true
             }
@@ -138,7 +139,50 @@ public class TelegramBotPollingServiceTests
         result.Should().Contain("Xóa");
         result.Should().Contain("2. <b>Tự động học: Lazada</b> [AI Học]");
         result.Should().Contain("⏸️ Tắt");
-        result.Should().Contain("Lưu trữ");
-        result.Should().Contain("/enable_rule rule-2");
+        result.Should().Contain("ID: <code>6ab38717</code>");
+        result.Should().Contain("ID: <code>6ab31692</code>");
+        result.Should().Contain("/enable_rule 6ab31692");
+    }
+
+    [Fact]
+    public async Task FindRuleByIdOrPrefixAsync_WithExactId_ShouldReturnRule()
+    {
+        var ruleRepo = NSubstitute.Substitute.For<GOpsHub.Domain.Interfaces.IRepository<CleanupRule>>();
+        var rule = new CleanupRule { Id = "6ab38717857a16ad307239df", RuleName = "Rule 1" };
+        ruleRepo.GetByIdAsync("6ab38717857a16ad307239df", Arg.Any<CancellationToken>()).Returns(rule);
+
+        var result = await TelegramBotPollingService.FindRuleByIdOrPrefixAsync(ruleRepo, "6ab38717857a16ad307239df");
+
+        result.Should().NotBeNull();
+        result!.RuleName.Should().Be("Rule 1");
+    }
+
+    [Fact]
+    public async Task FindRuleByIdOrPrefixAsync_WithShortIdPrefix_ShouldReturnMatchingRule()
+    {
+        var ruleRepo = NSubstitute.Substitute.For<GOpsHub.Domain.Interfaces.IRepository<CleanupRule>>();
+        var rule = new CleanupRule { Id = "6ab38717857a16ad307239df", RuleName = "Rule 1" };
+        ruleRepo.GetByIdAsync("6ab38717", Arg.Any<CancellationToken>()).Returns((CleanupRule?)null);
+        ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule> { rule });
+
+        var result = await TelegramBotPollingService.FindRuleByIdOrPrefixAsync(ruleRepo, "6ab38717");
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be("6ab38717857a16ad307239df");
+        result.RuleName.Should().Be("Rule 1");
+    }
+
+    [Fact]
+    public async Task FindRuleByIdOrPrefixAsync_WhenNotFound_ShouldReturnNull()
+    {
+        var ruleRepo = NSubstitute.Substitute.For<GOpsHub.Domain.Interfaces.IRepository<CleanupRule>>();
+        ruleRepo.GetByIdAsync("notfound", Arg.Any<CancellationToken>()).Returns((CleanupRule?)null);
+        ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+
+        var result = await TelegramBotPollingService.FindRuleByIdOrPrefixAsync(ruleRepo, "notfound");
+
+        result.Should().BeNull();
     }
 }

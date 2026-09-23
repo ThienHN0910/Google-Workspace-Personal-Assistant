@@ -167,4 +167,17 @@ public interface ISheetsService
 public interface INotificationService
 {
     Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default);
+    Task SendNotificationAsync(string title, string message, string type, List<NotificationButtonRow>? buttons, CancellationToken ct = default);
+}
+
+public class NotificationButton
+{
+    public string Text { get; set; } = string.Empty;
+    public string CallbackData { get; set; } = string.Empty;
+}
+
+public class NotificationButtonRow : List<NotificationButton>
+{
+    public NotificationButtonRow() { }
+    public NotificationButtonRow(IEnumerable<NotificationButton> collection) : base(collection) { }
 }

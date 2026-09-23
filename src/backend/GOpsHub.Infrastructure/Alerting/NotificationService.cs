@@ -36,7 +36,12 @@ public class NotificationService : INotificationService
         _configRepo = configRepo;
     }
 
-    public async Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default)
+    public Task SendNotificationAsync(string title, string message, string type = "info", CancellationToken ct = default)
+    {
+        return SendNotificationAsync(title, message, type, null, ct);
+    }
+
+    public async Task SendNotificationAsync(string title, string message, string type, List<NotificationButtonRow>? buttons, CancellationToken ct = default)
     {
         _logger.LogInformation("Notification [{Type}]: {Title} - {Message}", type, title, message);
 
@@ -148,12 +153,35 @@ public class NotificationService : INotificationService
 
                 var telegramText = $"{icon} <b>{System.Net.WebUtility.HtmlEncode(title)}</b>\n\n{formattedMessage}\n\n<i>G-Ops Hub • {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</i>";
 
-                var payload = new
+                object payload;
+                if (buttons != null && buttons.Count > 0)
                 {
-                    chat_id = tgChatId,
-                    text = telegramText,
-                    parse_mode = "HTML"
-                };
+                    var inlineKeyboard = buttons.Select(row => row.Select(b => new
+                    {
+                        text = b.Text,
+                        callback_data = b.CallbackData
+                    }).ToList()).ToList();
+
+                    payload = new
+                    {
+                        chat_id = tgChatId,
+                        text = telegramText,
+                        parse_mode = "HTML",
+                        reply_markup = new
+                        {
+                            inline_keyboard = inlineKeyboard
+                        }
+                    };
+                }
+                else
+                {
+                    payload = new
+                    {
+                        chat_id = tgChatId,
+                        text = telegramText,
+                        parse_mode = "HTML"
+                    };
+                }
 
                 var json = JsonSerializer.Serialize(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");

@@ -166,7 +166,7 @@ public class EmailCleanupBackgroundJob
                                 var newRule = new CleanupRule
                                 {
                                     RuleName = $"Tự động học: {suggestion.Category}",
-                                    Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? CleanupAction.Archive : CleanupAction.Trash,
+                                    Action = CleanupAction.Trash, // Ưu tiên xóa vào thùng rác theo cấu hình người dùng
                                     SubjectRegex = suggestion.SuggestedSubjectRegex,
                                     SenderRegex = suggestion.SuggestedSenderRegex,
                                     IsActive = false, // An toàn: Mặc định TẮT để người dùng chủ động duyệt trước khi áp dụng vĩnh viễn
@@ -177,16 +177,28 @@ public class EmailCleanupBackgroundJob
                                 await _ruleRepo.CreateAsync(newRule, ct);
                                 _logger.LogInformation("Tạo thành công CleanupRule tự động (Chờ kích hoạt): {RuleName} (ID: {RuleId})", newRule.RuleName, newRule.Id);
 
-                                // Thông báo Telegram kèm cú pháp kích hoạt nhanh
+                                var shortId = newRule.Id.Length >= 8 ? newRule.Id[..8] : newRule.Id;
+                                var buttons = new List<NotificationButtonRow>
+                                {
+                                    new NotificationButtonRow
+                                    {
+                                        new NotificationButton { Text = "✅ Bật quy tắc ngay", CallbackData = $"rule:enable:{shortId}" },
+                                        new NotificationButton { Text = "🗑️ Xóa quy tắc", CallbackData = $"rule:delete:{shortId}" }
+                                    }
+                                };
+
+                                // Thông báo Telegram kèm nút phản hồi tương tác và ID ngắn
                                 await _notificationService.SendNotificationAsync(
                                     "🤖 AI vừa học Quy tắc Dọn dẹp mới (Đang chờ kích hoạt)",
                                     $"Đã phân tích và đề xuất quy tắc: <b>{newRule.RuleName}</b>\n" +
                                     $"• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n" +
                                     $"• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\n" +
-                                    $"• Hành động: <b>{(newRule.Action == CleanupAction.Trash ? "Xóa (Trash)" : "Lưu trữ (Archive)")}</b>\n\n" +
+                                    $"• Hành động: <b>Xóa (Trash)</b>\n" +
+                                    $"• Mã quy tắc: <code>{shortId}</code>\n\n" +
                                     $"🛡️ <i>Quy tắc đang ở trạng thái <b>TẮT</b> để đảm bảo an toàn tuyệt đối.</i>\n" +
-                                    $"👉 Để kích hoạt, bạn có thể gửi lệnh: <code>/enable_rule {newRule.Id}</code> hoặc bật tại Web Dashboard.",
+                                    $"👉 Bấm nút bên dưới để phản hồi ngay, hoặc gửi lệnh: <code>/enable_rule {shortId}</code>.",
                                     "info",
+                                    buttons,
                                     ct);
                             }
                             else
