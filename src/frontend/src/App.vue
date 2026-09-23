@@ -17,7 +17,7 @@ onMounted(() => {
       severity: payload.severity,
       summary: payload.summary,
       detail: payload.detail,
-      life: payload.life,
+      life: payload.life ?? 4000,
     });
   });
 
