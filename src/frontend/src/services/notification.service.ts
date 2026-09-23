@@ -18,7 +18,10 @@ export const registerToastTrigger = (trigger: ToastTrigger) => {
 
 export const showToast = (toast: ToastPayload) => {
   if (toastTrigger) {
-    toastTrigger(toast);
+    toastTrigger({
+      ...toast,
+      life: toast.life ?? 4000,
+    });
   }
 };
 
