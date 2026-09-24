@@ -3,7 +3,7 @@
 [![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Vue 3](https://img.shields.io/badge/Vue.js-3.x-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-120%2F120_Passing-brightgreen?logo=checkmarx&logoColor=white)](https://github.com/ThienHN0910/Google-Workspace-Personal-Assistant)
+[![Tests](https://img.shields.io/badge/Tests-135%2F135_Passing-brightgreen?logo=checkmarx&logoColor=white)](https://github.com/ThienHN0910/Google-Workspace-Personal-Assistant)
 [![MongoDB Atlas](https://img.shields.io/badge/MongoDB-Atlas_M0-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![Google Gemini AI](https://img.shields.io/badge/AI-Google_Gemini-8E75B2?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Case Study](https://img.shields.io/badge/Case_Study-Portfolio-007ACC?style=flat-square&logo=vercel)](https://thienhn.io.vn/projects/google-workspace-personal-assistant)
@@ -25,14 +25,34 @@
   - **Smart Calendar Extractor (`calendar-extractor`)**: Scans incoming communications every **2 hours** for interview invitations and schedule requests.
 - **Dynamic Hangfire Rescheduling**: Changing intervals in the Settings Hub immediately reschedules Hangfire cron jobs without requiring a backend server restart.
 
-### 🧹 Regex-First EmailOps & AI Rule Learning (UC01)
+### 🧹 Regex-First EmailOps & Few-Shot AI Learning (UC01)
 - **Two-Phase Sweep**:
   - *Phase 1 (Regex-First)*: Automatically cleans known commercial newsletters and promotional notifications using compiled regex patterns, consuming **0 AI tokens**.
   - *Phase 2 (AI Pattern Learning)*: Uses Gemini AI to analyze remaining spam patterns, automatically generates and deduplicates new regex rules, saves them as pending or active rules, and alerts via Telegram.
+- **Few-Shot Learning Feedback Loop**:
+  - Users can mark any email directly from the Inbox or Action Logs with a single click: *"Email này có thể xóa"* along with a custom rationale (e.g., *"Bản tin tuyển dụng spam hàng ngày"*, *"Báo cáo khuyến mãi không bao giờ đọc"*).
+  - Feedback is persisted in the `EmailCleanupFeedback` MongoDB collection.
+  - During subsequent AI sweep cycles, recent feedback entries are dynamically queried and injected into the Gemini prompt as **few-shot in-context learning demonstrations**.
+  - Gemini continuously aligns with the user's personal inbox curation preferences over time—eliminating false negatives without fine-tuning or code changes.
 - **Trash vs. Archive Action Support**: Rules support configurable target actions (`Trash` for decluttering inbox with recoverable 30-day Google Trash retention, or `Archive` for long-term storage).
 - **ReDoS Safety & Protection**: Regex execution is protected with strict timeouts (500ms) and compile validations to prevent catastrophic backtracking.
 - **Protected Financial & Tech Domains**: Strictly protects emails from VPBank, Vietcombank, Techcombank, MB Bank, MoMo, GitHub, Google, Vercel, and custom whitelist domains against accidental deletion.
 - **Immutable Audit Logging**: Every sweep action is immutably recorded in `EmailActionLog` with message metadata and execution metrics.
+
+### 🌐 Public Guest Portal & Strict Guest SEO (UC13)
+- **High-Taste Cyber-Glass UI**:
+  - Crafted following strict design taste parameters: **Phá cách (Variance): 9**, **Độ sâu animation: 3**, **Mật độ (Visual Density): 5**.
+  - High-impact cyber-cockpit dark theme (`#070b14`), luminous 1px neon borders, layered glassmorphism (`backdrop-filter: blur(24px)`), ambient radial glows, and responsive capability Bento grid.
+  - Tactile 60fps GPU-accelerated micro-interactions (`transform: scale(0.98)`, `translate3d(0, -1.5px, 0)`), strictly adhering to GPU-accelerated properties only, with full `prefers-reduced-motion` compliance.
+- **Interactive Anonymous Guest Scheduler**:
+  - Google Calendar-inspired interactive availability calendar (Week, Month, Agenda views) accessible anonymously without authentication.
+  - Real-time **Bận / Rảnh** status pill synchronized directly with Google Calendar free-busy API.
+  - Scoped privacy masking: Public events display details, while private personal events are safely masked as *"Khung giờ bận (Riêng tư)"*.
+- **Strict Guest-Only SEO Optimization**:
+  - **Targeted Surface Indexing**: SEO meta tags, canonical URL, OpenGraph, and Twitter Cards are configured strictly for public guest pages (`/login`, `/public/calendar`).
+  - **Dynamic Authenticated Route Guard**: All protected application pages (`/dashboard`, `/email`, `/calendar`, `/finance`, `/tasks`, `/drive-guard`, `/settings`) dynamically receive `<meta name="robots" content="noindex, nofollow, noarchive">` via router navigation guards.
+  - **Schema.org Structured Data**: JSON-LD `WebApplication` metadata embedded in `index.html` detailing core platform features, author, and security profile.
+  - **Search Engine Crawl Directives**: `robots.txt` and `sitemap.xml` properly route bots to guest portals and exclude internal admin APIs.
 
 ### 🤖 Telegram ChatOps & Interactive Inline Control
 - **Interactive Inline Buttons**: Real-time cleanup notifications come with clickable Telegram inline buttons:
@@ -91,11 +111,6 @@
   - Supports manual remote execution via `?trigger=<job-id>` or `?trigger=all`.
 - **Pre-built GitHub Actions Workflow**: `.github/workflows/keep-alive.yml` automatically pings every 14 minutes, keeping the backend awake 24/7 at **0đ cost**. Also compatible with Cron-job.org and UptimeRobot.
 
-### 📅 Smart Scheduling & Guest Calendar Grid (UC03)
-- **Interactive Public Guest View**: Google Calendar-inspired interactive calendar (Week Grid, Month Grid, Agenda view, date navigation) accessible anonymously.
-- **Date Range Synchronization**: Query parameters (`startDate`, `endDate`) allow viewing past and future schedules dynamically.
-- **Scoped Visibility (`IsPublic`)**: Toggle events and synced tasks between Public and Private visibility to protect sensitive personal schedules.
-
 ---
 
 ## 🏗 System Architecture
@@ -134,7 +149,7 @@
 │         │              │              │                   │
 │  ┌──────┴─────┐ ┌──────┴─────┐ ┌──────┴──────────┐       │
 │  │ MongoDB    │ │ Google APIs│ │ Gemini AI       │       │
-│  │ Atlas M0   │ │(Gmail,Cal, │ │ (Parse, Learn,  │       │
+│  │ Atlas M0   │ │(Gmail,Cal, │ │ (Few-shot Learn,│       │
 │  │ (AES-256)  │ │ Drive,Task)│ │  Drafts, Quota) │       │
 │  └────────────┘ └────────────┘ └─────────────────┘       │
 │         ▲                                                 │
@@ -145,6 +160,7 @@
 ### ⚡ Technical Highlights
 - **Clean Architecture**: Decoupled Domain, Application, Infrastructure, and API projects following SOLID principles.
 - **Native CQRS Dispatcher**: Custom lightweight generic dispatcher (`IDispatcher`) using .NET 8 native dependency injection—eliminating third-party MediatR dependencies.
+- **Dynamic Few-Shot Learning**: Real-time user feedback injection into Gemini prompt templates for adaptive spam purge.
 - **AES-256 GCM Token Security**: Google OAuth access and refresh tokens are encrypted at rest in MongoDB.
 - **OAuth Resilience**: Pre-flight expiration verification (`EnsureFreshTokenAsync`) and automatic 401 retry loops (`ExecuteWithRetryAsync`).
 - **Edge HTTPS Proxying**: `vercel.json` rewrites proxy frontend requests seamless across HTTPS (Vercel) to HTTP (MonsterASP) backends, eliminating CORS and mixed-content issues.
@@ -159,7 +175,7 @@
 | **Background Engine** | Hangfire with MongoStorage | Scheduled recurring automation (Email, Bank, Drive, Calendar) |
 | **Frontend Framework** | Vue 3 (Composition API) | TypeScript, Vite 5, SCSS, PrimeFlex, Pinia, Axios |
 | **Database** | MongoDB Atlas | M0 Free Tier (NoSQL document store, encrypted tokens) |
-| **AI Integration** | Google Gemini API (`GeminiAIService`) | Email parsing, spam rule learning, draft creation, 250k token quota |
+| **AI Integration** | Google Gemini API (`GeminiAIService`) | Email parsing, few-shot spam learning, draft creation, 250k quota |
 | **Google Workspace APIs** | Gmail, Calendar, Drive, Sheets, Tasks | OAuth2 Token Auto-Refresh, 401 Retry, Push Watch Notifications |
 | **Alerting & ChatOps** | Telegram Bot, Discord, SignalR | Interactive inline buttons, short ID commands, real-time toasts |
 | **Hosting & Anti-Sleep** | MonsterASP.NET & Vercel | IIS Keep-Alive heartbeat, Vercel Serverless Rewrites |
@@ -190,12 +206,14 @@ Google-Workspace-Personal-Assistant/
 │   │   ├── GOpsHub.Application/             # Native CQRS Commands, Queries & Services
 │   │   ├── GOpsHub.Infrastructure/          # Google APIs, AI, Mongo Repositories, Telegram ChatOps
 │   │   ├── GOpsHub.API/                     # Web API Controllers & SignalR Hubs
-│   │   └── GOpsHub.Tests/                   # 120 Unit & Integration Tests (100% pass)
+│   │   └── GOpsHub.Tests/                   # 135 Unit & Integration Tests (100% pass)
 │   │
 │   └── frontend/                            # 🎨 Vue 3 SPA Solution
+│       ├── public/                          # Static assets (robots.txt, sitemap.xml, favicon.svg)
 │       ├── src/
 │       │   ├── components/                  # Cyber-Cockpit UI, Bento Grid, Toast Notification
-│       │   ├── views/                       # Dashboard, EmailOps, Tasks, DriveGuard, Finance, Calendar, Settings
+│       │   ├── layouts/                     # DefaultLayout & PublicLayout (Cyber-Glass)
+│       │   ├── views/                       # Dashboard, EmailOps, Tasks, DriveGuard, Finance, Calendar, Settings, Login, PublicCalendar
 │       │   ├── services/                    # Axios API Client & SignalR Hub Listener
 │       │   └── stores/                      # Pinia State Management
 │       └── vite.config.ts
@@ -247,7 +265,7 @@ npm run dev
 ### 4. Running Verification Tests
 
 ```bash
-# Run all backend unit tests (120 tests)
+# Run all backend unit tests (135 tests passing)
 dotnet test src/backend/GOpsHub.sln
 
 # Run frontend build and typecheck

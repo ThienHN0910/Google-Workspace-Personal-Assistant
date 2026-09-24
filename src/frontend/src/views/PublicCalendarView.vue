@@ -562,6 +562,10 @@ onMounted(fetchCalendarData);
       background: rgba(255, 255, 255, 0.15);
       transform: translate3d(0, -1px, 0);
     }
+
+    &:active {
+      transform: scale(0.98);
+    }
   }
 
   .nav-buttons {
@@ -585,6 +589,10 @@ onMounted(fetchCalendarData);
         color: #fff;
         background: rgba(255, 255, 255, 0.08);
         transform: translate3d(0, -1px, 0);
+      }
+
+      &:active {
+        transform: scale(0.98);
       }
     }
   }
@@ -627,6 +635,10 @@ onMounted(fetchCalendarData);
 
     &:hover:not(.active) {
       color: #f8fafc;
+    }
+
+    &:active {
+      transform: scale(0.98);
     }
   }
 }
@@ -1089,6 +1101,29 @@ onMounted(fetchCalendarData);
     .agenda-badge {
       align-self: flex-end;
     }
+  }
+}
+
+@keyframes neonPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-today,
+  .nav-btn,
+  .view-switcher button,
+  .status-dot,
+  .event-pill,
+  .agenda-card {
+    transition: none !important;
+    animation: none !important;
   }
 }
 </style>
