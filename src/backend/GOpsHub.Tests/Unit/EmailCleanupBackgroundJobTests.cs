@@ -368,4 +368,67 @@ public class EmailCleanupBackgroundJobTests
             Arg.Is<EmailActionLog>(l => l.EmailId == "urgent-email-1" && l.Action == "UrgentNotified"),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAutoCleanupAsync_WithFeedbackRepo_ShouldPassFeedbacksToAnalyzeSpamPatternsAsync()
+    {
+        // Arrange
+        var feedbackRepo = Substitute.For<IRepository<CleanupFeedback>>();
+        var feedback = new CleanupFeedback
+        {
+            EmailId = "fb-mail-1",
+            Sender = "newsletter@medium.com",
+            Subject = "Daily Digest",
+            Reason = "Không đọc",
+            Tags = new List<string> { "Bản tin không đọc" }
+        };
+        feedbackRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<CleanupFeedback> { feedback });
+
+        var remainingEmail = new EmailMessage
+        {
+            Id = "candidate-1",
+            From = "newsletter@medium.com",
+            Subject = "Daily Digest Today",
+            Snippet = "Here is your digest...",
+            IsRead = false,
+            Labels = new List<string>()
+        };
+
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+
+        _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { remainingEmail });
+
+        _actionLogRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<EmailActionLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<EmailActionLog>());
+
+        _usageTracker.CanRunBackgroundAiAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        _aiService.AnalyzeSpamPatternsAsync(Arg.Any<string>(), Arg.Any<List<CleanupFeedback>>(), Arg.Any<CancellationToken>())
+            .Returns(new AIRegexRuleSuggestion
+            {
+                HasPattern = false
+            });
+
+        var job = new EmailCleanupBackgroundJob(
+            _ruleRepo,
+            _logRepo,
+            _actionLogRepo,
+            _gmailService,
+            _aiService,
+            _usageTracker,
+            _notificationService,
+            _logger,
+            feedbackRepo);
+
+        // Act
+        await job.RunAutoCleanupAsync();
+
+        // Assert
+        await _aiService.Received(1).AnalyzeSpamPatternsAsync(
+            Arg.Is<string>(s => s.Contains("candidate-1")),
+            Arg.Is<List<CleanupFeedback>>(list => list != null && list.Count == 1 && list[0].Sender == "newsletter@medium.com"),
+            Arg.Any<CancellationToken>());
+    }
 }

@@ -81,9 +81,46 @@
     </div>
 
     <!-- Loading State -->
-    <LoadingSpinner v-if="loading" text="Đang tải danh sách quy tắc dọn dẹp..." />
+    <LoadingSpinner v-if="loading" text="Đang tải dữ liệu..." />
 
-    <!-- Empty State -->
+    <!-- Feedback Management View -->
+    <div v-else-if="activeFilterTab === 'feedback'" class="feedbacks-container">
+      <div v-if="filteredFeedbacks.length === 0" class="empty-state">
+        <div class="empty-icon"><i class="pi pi-sparkles" style="color: #c084fc;"></i></div>
+        <h3>Chưa có mẫu nào được dạy cho AI</h3>
+        <p>
+          Khi duyệt Hộp thư đến, hãy bấm nút <b>"Dọn & Dạy AI"</b> trên các email không muốn giữ lại. AI sẽ lưu mẫu và sử dụng để học quy tắc dọn dẹp tốt hơn.
+        </p>
+      </div>
+      <div v-else class="feedbacks-grid">
+        <div v-for="fb in filteredFeedbacks" :key="fb.id" class="feedback-card">
+          <div class="feedback-header">
+            <div class="fb-sender-group">
+              <span class="fb-sender">{{ fb.sender }}</span>
+              <span v-if="fb.senderDomain" class="fb-domain-badge">@{{ fb.senderDomain }}</span>
+            </div>
+            <button class="btn-delete-fb" @click="handleDeleteFeedback(fb.id)" title="Xóa mẫu dạy này">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+          <div class="fb-subject">{{ fb.subject || '(Không có tiêu đề)' }}</div>
+          <div v-if="fb.snippet" class="fb-snippet">"{{ fb.snippet }}"</div>
+          <div class="fb-footer">
+            <div class="fb-tags">
+              <span v-for="tag in fb.tags" :key="tag" class="fb-tag-pill">{{ tag }}</span>
+            </div>
+            <div class="fb-reason">
+              <i class="pi pi-comment"></i> {{ fb.reason }}
+            </div>
+            <div class="fb-date">
+              <i class="pi pi-clock"></i> {{ formatDate(fb.createdAt) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State for Rules -->
     <div v-else-if="filteredRules.length === 0" class="empty-state">
       <div class="empty-icon"><i class="pi pi-inbox"></i></div>
       <h3>Không tìm thấy quy tắc dọn dẹp nào</h3>
@@ -298,6 +335,7 @@ import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const rules = ref<any[]>([]);
+const feedbacks = ref<any[]>([]);
 const loading = ref(true);
 const runningCleanup = ref(false);
 const submitting = ref(false);
@@ -333,6 +371,40 @@ const fetchRules = async () => {
   }
 };
 
+const fetchFeedbacks = async () => {
+  try {
+    const res: any = await api.get('/emailops/cleanup/feedback');
+    if (res.success) {
+      feedbacks.value = res.data || [];
+    }
+  } catch (e) {
+    console.error('Failed to fetch feedbacks:', e);
+  }
+};
+
+const handleDeleteFeedback = async (id: string) => {
+  if (confirm('Bạn có chắc muốn xóa mẫu dạy AI này không?')) {
+    try {
+      await api.delete(`/emailops/cleanup/feedback/${id}`);
+      feedbacks.value = feedbacks.value.filter(f => f.id !== id);
+    } catch (e) {
+      alert('Lỗi khi xóa mẫu feedback');
+    }
+  }
+};
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 // Computed Stats
 const totalRules = computed(() => rules.value.length);
 const activeRulesCount = computed(() => rules.value.filter(r => r.isActive).length);
@@ -343,8 +415,20 @@ const filterTabs = computed(() => [
   { id: 'all', label: 'Tất cả quy tắc', count: totalRules.value },
   { id: 'active', label: 'Đang bật', count: activeRulesCount.value },
   { id: 'auto', label: 'AI Tự động học', count: autoLearnedCount.value },
+  { id: 'feedback', label: '🧠 Mẫu đã dạy AI', count: feedbacks.value.length },
   { id: 'inactive', label: 'Đã tắt', count: totalRules.value - activeRulesCount.value }
 ]);
+
+const filteredFeedbacks = computed(() => {
+  if (!searchQuery.value.trim()) return feedbacks.value;
+  const q = searchQuery.value.toLowerCase().trim();
+  return feedbacks.value.filter(f =>
+    f.sender?.toLowerCase().includes(q) ||
+    f.subject?.toLowerCase().includes(q) ||
+    f.reason?.toLowerCase().includes(q) ||
+    (f.tags && f.tags.some((t: string) => t.toLowerCase().includes(q)))
+  );
+});
 
 const filteredRules = computed(() => {
   return rules.value.filter(rule => {
@@ -462,7 +546,10 @@ const copyText = (text: string) => {
   alert(`Đã sao chép vào bộ nhớ tạm:\n${text}`);
 };
 
-onMounted(fetchRules);
+onMounted(() => {
+  fetchRules();
+  fetchFeedbacks();
+});
 </script>
 
 <style scoped lang="scss">
@@ -1095,5 +1182,149 @@ onMounted(fetchRules);
   cursor: pointer;
 
   &:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.05); }
+}
+
+/* Feedback Management Grid */
+.feedbacks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.feedbacks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1rem;
+}
+
+.feedback-card {
+  background: rgba(18, 24, 38, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+
+  &:hover {
+    border-color: rgba(168, 85, 247, 0.45);
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15);
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+.feedback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fb-sender-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+}
+
+.fb-sender {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #38bdf8;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.fb-domain-badge {
+  font-size: 0.7rem;
+  font-family: monospace;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.btn-delete-fb {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+  }
+}
+
+.fb-subject {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+}
+
+.fb-snippet {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+.fb-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.fb-tag-pill {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c084fc;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.fb-reason {
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  i {
+    color: #a855f7;
+    font-size: 0.8rem;
+  }
+}
+
+.fb-date {
+  font-size: 0.725rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 </style>

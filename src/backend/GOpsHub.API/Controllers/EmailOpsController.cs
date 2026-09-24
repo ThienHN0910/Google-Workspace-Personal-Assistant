@@ -149,6 +149,45 @@ public class EmailOpsController : ControllerBase
     }
 
     /// <summary>
+    /// Submit user deletion feedback to teach AI and trash email immediately
+    /// </summary>
+    [HttpPost("cleanup/feedback")]
+    public async Task<ActionResult<ApiResponse<CleanupFeedback>>> SubmitCleanupFeedback([FromBody] SubmitCleanupFeedbackCommand command, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.EmailId))
+            return BadRequest(ApiResponse<CleanupFeedback>.Fail("EmailId không được để trống."));
+
+        if (string.IsNullOrWhiteSpace(command.Reason) && (command.Tags == null || !command.Tags.Any()))
+            return BadRequest(ApiResponse<CleanupFeedback>.Fail("Vui lòng cung cấp ít nhất một lý do hoặc tag xóa email."));
+
+        var result = await _dispatcher.SendAsync(command, ct);
+        return Ok(ApiResponse<CleanupFeedback>.Ok(result, "Đã xóa email và lưu mẫu huấn luyện AI thành công."));
+    }
+
+    /// <summary>
+    /// Get recent user cleanup feedbacks
+    /// </summary>
+    [HttpGet("cleanup/feedback")]
+    public async Task<ActionResult<ApiResponse<List<CleanupFeedback>>>> GetCleanupFeedbacks([FromQuery] int limit = 50, CancellationToken ct = default)
+    {
+        var result = await _dispatcher.QueryAsync(new GetCleanupFeedbacksQuery(limit), ct);
+        return Ok(ApiResponse<List<CleanupFeedback>>.Ok(result));
+    }
+
+    /// <summary>
+    /// Delete a user cleanup feedback entry
+    /// </summary>
+    [HttpDelete("cleanup/feedback/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteCleanupFeedback(string id, CancellationToken ct = default)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteCleanupFeedbackCommand(id), ct);
+        if (!result)
+            return NotFound(ApiResponse<bool>.Fail("Không tìm thấy mẫu phản hồi để xóa."));
+
+        return Ok(ApiResponse<bool>.Ok(true, "Đã xóa mẫu phản hồi dạy AI."));
+    }
+
+    /// <summary>
     /// Get cleanup execution history
     /// </summary>
     [HttpGet("logs")]

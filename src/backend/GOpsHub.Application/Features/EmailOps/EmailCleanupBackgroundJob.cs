@@ -14,6 +14,7 @@ public class EmailCleanupBackgroundJob
     private readonly IRepository<CleanupRule> _ruleRepo;
     private readonly IRepository<CleanupLog> _logRepo;
     private readonly IRepository<EmailActionLog> _actionLogRepo;
+    private readonly IRepository<CleanupFeedback>? _feedbackRepo;
     private readonly IGmailService _gmailService;
     private readonly IAIService _aiService;
     private readonly IAiUsageTracker _usageTracker;
@@ -28,11 +29,13 @@ public class EmailCleanupBackgroundJob
         IAIService aiService,
         IAiUsageTracker usageTracker,
         INotificationService notificationService,
-        ILogger<EmailCleanupBackgroundJob> logger)
+        ILogger<EmailCleanupBackgroundJob> logger,
+        IRepository<CleanupFeedback>? feedbackRepo = null)
     {
         _ruleRepo = ruleRepo;
         _logRepo = logRepo;
         _actionLogRepo = actionLogRepo;
+        _feedbackRepo = feedbackRepo;
         _gmailService = gmailService;
         _aiService = aiService;
         _usageTracker = usageTracker;
@@ -210,7 +213,23 @@ public class EmailCleanupBackgroundJob
                     snippetsBuilder.AppendLine($"[ID: {rem.Id}] Từ: {rem.From} | Tiêu đề: {rem.Subject} | Nội dung: {rem.Snippet}");
                 }
 
-                var suggestion = await _aiService.AnalyzeSpamPatternsAsync(snippetsBuilder.ToString(), ct);
+                List<CleanupFeedback>? recentFeedbacks = null;
+                if (_feedbackRepo != null)
+                {
+                    try
+                    {
+                        var allFeedbacks = await _feedbackRepo.GetAllAsync(ct);
+                        recentFeedbacks = allFeedbacks.OrderByDescending(f => f.CreatedAt).Take(10).ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Không thể tải danh sách CleanupFeedback cho AI phân tích.");
+                    }
+                }
+
+                var suggestion = (recentFeedbacks != null && recentFeedbacks.Any())
+                    ? await _aiService.AnalyzeSpamPatternsAsync(snippetsBuilder.ToString(), recentFeedbacks, ct)
+                    : await _aiService.AnalyzeSpamPatternsAsync(snippetsBuilder.ToString(), ct);
 
                 if (suggestion != null && suggestion.HasPattern && (!string.IsNullOrEmpty(suggestion.SuggestedSubjectRegex) || !string.IsNullOrEmpty(suggestion.SuggestedSenderRegex)))
                 {

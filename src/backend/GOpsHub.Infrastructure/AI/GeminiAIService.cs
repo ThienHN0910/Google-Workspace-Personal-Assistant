@@ -418,11 +418,28 @@ Chỉ trả về JSON array hợp lệ.";
         }
     }
 
-    public async Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default)
+    public Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default)
+        => AnalyzeSpamPatternsAsync(emailSnippetsBatch, null, ct);
+
+    public async Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, List<CleanupFeedback>? userFeedbacks, CancellationToken ct = default)
     {
+        var feedbackSection = new StringBuilder();
+        if (userFeedbacks != null && userFeedbacks.Any())
+        {
+            feedbackSection.AppendLine();
+            feedbackSection.AppendLine("VÍ DỤ THỰC TẾ NGƯỜI DÙNG ĐÃ CHỦ ĐỘNG DẠY CÓ THỂ XÓA (FEW-SHOT USER FEEDBACK):");
+            feedbackSection.AppendLine("Người dùng đã xác nhận các email mẫu sau đây là rác/không đọc và có thể xóa. Hãy ưu tiên phân tích theo các gu và lý do này:");
+            foreach (var fb in userFeedbacks.Take(10))
+            {
+                var tagStr = fb.Tags != null && fb.Tags.Any() ? $"[{string.Join(", ", fb.Tags)}] " : "";
+                feedbackSection.AppendLine($"- Người gửi: {fb.Sender} | Tiêu đề: {fb.Subject} | Lý do xóa: {tagStr}{fb.Reason}");
+            }
+            feedbackSection.AppendLine("LƯU Ý AN TOÀN QUAN TRỌNG: Dù người dùng dạy xóa email từ ngân hàng/tổ chức tài chính, TUYỆT ĐỐI KHÔNG sinh quy tắc suggestedSenderRegex bao phủ cả domain ngân hàng. Chỉ sinh suggestedSubjectRegex lọc đúng từ khóa quảng cáo cụ thể.");
+        }
+
         var prompt = $@"Bạn là chuyên gia phân loại email. Hãy phân tích danh sách tóm tắt các email sau và tìm xem có nhóm email nào là thư rác, quảng cáo, khuyến mãi (sale off, giảm giá), newsletter lặp đi lặp lại hay không.
 Nếu phát hiện mẫu email lặp lại, hãy gợi ý một quy tắc Regex chuẩn để tự động nhận diện các email tương tự trong tương lai.
-
+{feedbackSection}
 Quy tắc phân loại và an toàn BẮT BUỘC:
 1. Hành động (Action):
    - Chọn ""Archive"" cho: Bản tin (Newsletter), tin tức công nghệ/công việc, cập nhật tính năng sản phẩm (Feature updates/Digest), khảo sát học tập, thông báo cộng đồng. Giúp giữ hộp thư gọn gàng mà không làm mất tài liệu tra cứu.
