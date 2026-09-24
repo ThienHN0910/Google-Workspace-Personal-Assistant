@@ -1,0 +1,23 @@
+# Robots.txt for G-Ops Hub — Google Workspace Personal Assistant
+# Allow guest-accessible landing, documentation, and public scheduling portal
+# Strictly disallow indexing of private authenticated admin routes and API endpoints
+
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /public/
+Allow: /public/calendar
+Allow: /favicon.svg
+Allow: /sitemap.xml
+
+# Authenticated Admin & Private Application Routes
+Disallow: /dashboard
+Disallow: /email
+Disallow: /calendar
+Disallow: /finance
+Disallow: /tasks
+Disallow: /drive-guard
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://g-ops-hub.vercel.app/sitemap.xml

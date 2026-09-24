@@ -2,13 +2,72 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>G-Ops Hub — Google Workspace Automation Assistant</title>
+    <meta name="theme-color" content="#070b14" />
+    
+    <!-- Primary SEO Meta Tags (Guest Facing) -->
+    <title>G-Ops Hub — Google Workspace AI Operations & Personal Assistant</title>
+    <meta name="title" content="G-Ops Hub — Google Workspace AI Operations & Personal Assistant" />
+    <meta name="description" content="Trung tâm điều hành và trợ lý tự động hóa Google Workspace bằng Gemini AI: dọn dẹp email thông minh với Few-shot learning, bảo mật DriveGuard, trích xuất biến động ngân hàng sang Google Sheets và đặt lịch công khai." />
+    <meta name="keywords" content="Google Workspace Assistant, Trợ lý AI, Dọn dẹp Gmail tự động, Hangfire Automation, Gemini AI, Few-shot Learning, Google Sheets Finance, DriveGuard, Google Calendar Scheduler, ThienHN" />
+    <meta name="author" content="ThienHN" />
+    <meta name="robots" content="index, follow" id="robots-meta" />
+    <link rel="canonical" href="https://g-ops-hub.vercel.app/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://g-ops-hub.vercel.app/" />
+    <meta property="og:site_name" content="G-Ops Hub" />
+    <meta property="og:title" content="G-Ops Hub — Google Workspace AI Operations & Personal Assistant" />
+    <meta property="og:description" content="Trung tâm điều hành và tự động hóa Google Workspace với Gemini AI, Hangfire 24/7 và Telegram ChatOps. Trải nghiệm dọn dẹp email thông minh và đặt lịch hẹn công khai." />
+    <meta property="og:image" content="https://g-ops-hub.vercel.app/og-cover.png" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://g-ops-hub.vercel.app/" />
+    <meta property="twitter:title" content="G-Ops Hub — Google Workspace AI Operations & Personal Assistant" />
+    <meta property="twitter:description" content="Trung tâm điều hành và tự động hóa Google Workspace với Gemini AI, Hangfire 24/7 và Telegram ChatOps." />
+    <meta property="twitter:image" content="https://g-ops-hub.vercel.app/og-cover.png" />
+    <meta property="twitter:creator" content="@ThienHN" />
+
+    <!-- Schema.org JSON-LD Structured Data for Guest SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "G-Ops Hub",
+      "url": "https://g-ops-hub.vercel.app",
+      "description": "Trung tâm điều hành và trợ lý AI thông minh cho hệ sinh thái Google Workspace (Gmail, Calendar, Drive, Sheets, Tasks) với kiến trúc .NET 8 CQRS và Vue 3.",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "author": {
+        "@type": "Person",
+        "name": "ThienHN",
+        "url": "https://thienhn.io.vn"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "Dọn dẹp hòm thư Gmail thông minh hai giai đoạn kết hợp Regex và Gemini AI Few-shot Learning",
+        "Trích xuất biến động số dư ngân hàng qua email vào Google Sheets tự động",
+        "Giám sát an ninh và cách ly file độc hại Google Drive (DriveGuard)",
+        "Đặt lịch hẹn và hiển thị khung giờ bận/rảnh công khai (Public Calendar Guest Portal)",
+        "Điều khiển vận hành qua Telegram ChatOps tương tác với Inline Buttons"
+      ]
+    }
+    </script>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Google Identity Services (OAuth) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
