@@ -35,7 +35,7 @@ public class GoogleTokenService : IGoogleTokenService
         _logger = logger;
     }
 
-    public string GetAuthorizationUrl(string redirectUri)
+    public string GetAuthorizationUrl(string redirectUri, string? state = null)
     {
         var scopeString = string.Join(" ", Scopes);
         var url = "https://accounts.google.com/o/oauth2/v2/auth" +
@@ -45,6 +45,11 @@ public class GoogleTokenService : IGoogleTokenService
             $"&scope={Uri.EscapeDataString(scopeString)}" +
             $"&access_type=offline" +
             $"&prompt=consent";
+
+        if (!string.IsNullOrEmpty(state))
+        {
+            url += $"&state={Uri.EscapeDataString(state)}";
+        }
 
         return url;
     }

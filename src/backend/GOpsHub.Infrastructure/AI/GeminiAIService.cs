@@ -469,4 +469,47 @@ Nếu không tìm thấy mẫu email rác lặp lại nào, trả về:
             return null;
         }
     }
+
+    public async Task<UrgentEmailAnalysisResult> AnalyzeUrgentEmailAsync(string subject, string from, string content, CancellationToken ct = default)
+    {
+        var prompt = $@"Bạn là trợ lý AI phân tích email công việc. Hãy phân tích email hành động khẩn cấp/quan trọng dưới đây:
+Tiêu đề: {subject}
+Người gửi: {from}
+Nội dung tóm tắt: {content}
+
+Hãy xác định:
+1. Mức độ quan trọng: ""Khẩn cấp"" (dịch vụ sắp ngừng hoạt động, cảnh báo bảo mật nguy hiểm, khóa tài khoản), ""Cao"" (cần nâng cấp runtime, deadline dự án trong tuần), hoặc ""Trung bình"".
+2. Tóm tắt hành động người dùng cần làm ngắn gọn trong 1 câu (tiếng Việt).
+3. Hạn chót/Deadline nếu có nêu rõ trong email (Ví dụ: ""01/10/2026"" hoặc null nếu không nêu).
+
+Trả về đúng định dạng JSON thuần (KHÔNG có markdown codeblock):
+{{
+  ""urgencyLevel"": ""Khẩn cấp"",
+  ""actionSummary"": ""Cần nâng cấp Node.js lên phiên bản 24 trước ngày 01/10/2026 để tránh lỗi bản build"",
+  ""deadline"": ""01/10/2026""
+}}";
+
+        try
+        {
+            var responseText = await CallGeminiApiAsync(prompt, featureName: "EmailUrgentAnalysis", isBackground: true, ct: ct);
+            var cleanJson = CleanJsonResponse(responseText);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<UrgentEmailAnalysisResult>(cleanJson, options);
+            if (result != null && !string.IsNullOrEmpty(result.ActionSummary))
+            {
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to analyze urgent email with Gemini AI.");
+        }
+
+        return new UrgentEmailAnalysisResult
+        {
+            UrgencyLevel = "Cao",
+            ActionSummary = $"Cần kiểm tra và xử lý email '{subject}' từ {from}",
+            Deadline = null
+        };
+    }
 }

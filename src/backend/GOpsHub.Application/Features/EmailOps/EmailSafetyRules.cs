@@ -69,10 +69,22 @@ public static class EmailSafetyRules
     }
 
     /// <summary>
+    /// Checks whether an email's subject denotes urgent or required action that must be preserved.
+    /// </summary>
+    public static bool IsUrgentActionRequired(EmailMessage? email)
+    {
+        if (email == null || string.IsNullOrWhiteSpace(email.Subject)) return false;
+
+        const string pattern = @"(?i).*(\[?(action required|cần hành động|urgent action|chú ý quan trọng)\]?|security alert|critical alert).*";
+        return Regex.IsMatch(email.Subject, pattern, RegexOptions.None, RegexTimeout);
+    }
+
+    /// <summary>
     /// Validates if an email is eligible for cleanup:
     /// - Must NOT be starred (flagged as important)
     /// - Must NOT be read (preserves all read emails for archival/audit)
     /// - Must NOT originate from protected bank or whitelisted senders
+    /// - Must NOT be marked as Action Required / Urgent
     /// </summary>
     public static bool IsSafeToClean(EmailMessage? email, IEnumerable<string>? whitelistDomains)
     {
@@ -80,6 +92,7 @@ public static class EmailSafetyRules
         if (email.IsStarred) return false;
         if (email.IsRead) return false;
         if (IsProtectedSender(email.From, whitelistDomains)) return false;
+        if (IsUrgentActionRequired(email)) return false;
 
         return true;
     }

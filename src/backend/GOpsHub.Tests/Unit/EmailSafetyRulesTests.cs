@@ -297,4 +297,35 @@ public class EmailSafetyRulesTests
 
         isDuplicate.Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData("[Action Required] Node.js 20 is being discontinued on October 1st, 2026", true)]
+    [InlineData("Action Required: Please verify your domain DNS records", true)]
+    [InlineData("Cần hành động: Cập nhật thông tin thanh toán trước ngày 30", true)]
+    [InlineData("[Critical Alert] Unusual login activity detected", true)]
+    [InlineData("Security alert for your linked Google account", true)]
+    [InlineData("Siêu khuyến mãi 9.9 giảm giá sốc", false)]
+    [InlineData("Weekly newsletter issue #45", false)]
+    public void IsUrgentActionRequired_ShouldIdentifyUrgentEmailsCorrectly(string subject, bool expected)
+    {
+        var email = new EmailMessage { Subject = subject };
+        var result = EmailSafetyRules.IsUrgentActionRequired(email);
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsSafeToClean_WhenActionRequiredEmail_ShouldReturnFalse()
+    {
+        var email = new EmailMessage
+        {
+            Id = "urgent-1",
+            From = "notifications@vercel.com",
+            Subject = "[Action Required] Node.js 20 is being discontinued on October 1st, 2026",
+            IsRead = false,
+            Labels = new List<string>()
+        };
+
+        var isSafe = EmailSafetyRules.IsSafeToClean(email, null);
+        isSafe.Should().BeFalse();
+    }
 }

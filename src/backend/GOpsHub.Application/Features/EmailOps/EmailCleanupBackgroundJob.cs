@@ -2,6 +2,7 @@ using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Enums;
 using GOpsHub.Domain.Interfaces;
+using GOpsHub.Application.Features.EmailOps.Commands;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -39,9 +40,14 @@ public class EmailCleanupBackgroundJob
         _logger = logger;
     }
 
-    public async Task RunAutoCleanupAsync(CancellationToken ct = default)
+    public async Task<CleanupLogResult> RunAutoCleanupAsync(CancellationToken ct = default)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         _logger.LogInformation("Starting scheduled Email Cleanup (UC01 Inbox Zero - Regex First)...");
+
+        // Đảm bảo các quy tắc dọn dẹp mặc định (Vercel bot, Google OAuth) được khởi tạo
+        await EnsureDefaultRulesAsync(ct);
+
         var allActiveRules = await _ruleRepo.FindAsync(r => r.IsActive, ct);
 
         // Separate regex rules and AI rules
@@ -54,18 +60,84 @@ public class EmailCleanupBackgroundJob
         if (candidateEmails == null || !candidateEmails.Any())
         {
             _logger.LogInformation("Hộp thư không có email chưa đọc nào. Bỏ qua quét dọn dẹp.");
-            return;
+            sw.Stop();
+            return new CleanupLogResult
+            {
+                RulesExecuted = allActiveRules.Count,
+                TotalProcessed = 0,
+                TotalTrashed = 0,
+                TotalArchived = 0,
+                TotalSkipped = 0,
+                TotalDurationMs = sw.ElapsedMilliseconds
+            };
         }
 
         // Lấy danh sách email đã được đánh dấu chờ duyệt trước đó để tránh quét trùng
         var existingPendingLogs = await _actionLogRepo.FindAsync(x => x.Action == "PendingApproval", ct);
         var pendingEmailIds = existingPendingLogs.Select(x => x.EmailId).ToHashSet();
 
+        // Lấy danh sách email Action Required đã thông báo để tránh gửi lặp lại
+        var existingUrgentLogs = await _actionLogRepo.FindAsync(x => x.Action == "UrgentNotified", ct);
+        var urgentEmailIds = existingUrgentLogs.Select(x => x.EmailId).ToHashSet();
+
         var sessionId = Guid.NewGuid().ToString("N")[..8];
         var processedEmailIds = new HashSet<string>();
         int totalTrashed = 0;
         int totalArchived = 0;
         int totalRegexCleaned = 0;
+
+        // ==========================================
+        // GIAI ĐOẠN 0: Xử lý Email Cần hành động khẩn cấp (Action Required)
+        // ==========================================
+        foreach (var email in candidateEmails)
+        {
+            if (EmailSafetyRules.IsUrgentActionRequired(email))
+            {
+                processedEmailIds.Add(email.Id); // Bảo vệ tuyệt đối: không để Regex/AI dọn xóa
+
+                if (!urgentEmailIds.Contains(email.Id))
+                {
+                    try
+                    {
+                        var aiAnalysis = await _aiService.AnalyzeUrgentEmailAsync(
+                            email.Subject,
+                            email.From,
+                            email.Snippet ?? email.Body ?? "",
+                            ct);
+
+                        var urgentMsg = $"📌 <b>Tiêu đề:</b> {email.Subject}\n" +
+                                        $"👤 <b>Người gửi:</b> {email.From}\n" +
+                                        $"⚡ <b>Mức độ:</b> <b>{aiAnalysis.UrgencyLevel}</b>\n" +
+                                        $"📝 <b>Hành động cần làm:</b> {aiAnalysis.ActionSummary}\n" +
+                                        (string.IsNullOrEmpty(aiAnalysis.Deadline) ? "" : $"⏳ <b>Hạn chót:</b> {aiAnalysis.Deadline}\n") +
+                                        $"🛡️ <i>Email này đã được giữ an toàn trong Hộp thư đến.</i>";
+
+                        await _notificationService.SendNotificationAsync(
+                            "🚨 [CẦN HÀNH ĐỘNG] Email quan trọng từ dịch vụ",
+                            urgentMsg,
+                            "warning",
+                            ct);
+
+                        await _actionLogRepo.CreateAsync(new EmailActionLog
+                        {
+                            EmailId = email.Id,
+                            Subject = email.Subject,
+                            Sender = email.From,
+                            Action = "UrgentNotified",
+                            SourceJob = "EmailCleanup",
+                            SessionId = sessionId,
+                            Reason = $"UrgentAction ({aiAnalysis.UrgencyLevel}): {aiAnalysis.ActionSummary}"
+                        }, ct);
+
+                        urgentEmailIds.Add(email.Id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Lỗi khi phân tích hoặc gửi thông báo email khẩn cấp ID: {EmailId}", email.Id);
+                    }
+                }
+            }
+        }
 
         // ==========================================
         // GIAI ĐOẠN 1: Dọn dẹp bằng Regex trước (Tiết kiệm Token AI)
@@ -311,5 +383,54 @@ public class EmailCleanupBackgroundJob
         }
 
         _logger.LogInformation("Hoàn tất Email Cleanup: Trashed={Trashed}, Archived={Archived}, RegexCount={Regex}", totalTrashed, totalArchived, totalRegexCleaned);
+
+        sw.Stop();
+        return new CleanupLogResult
+        {
+            RulesExecuted = allActiveRules.Count,
+            TotalProcessed = candidateEmails.Count,
+            TotalTrashed = totalTrashed,
+            TotalArchived = totalArchived,
+            TotalSkipped = Math.Max(0, candidateEmails.Count - processedEmailIds.Count),
+            TotalDurationMs = sw.ElapsedMilliseconds
+        };
+    }
+
+    private async Task EnsureDefaultRulesAsync(CancellationToken ct)
+    {
+        try
+        {
+            var vercelBotRule = await _ruleRepo.FindOneAsync(r => r.RuleName == "Tự động dọn: Vercel Bot Comments & Deployments", ct);
+            if (vercelBotRule == null)
+            {
+                await _ruleRepo.CreateAsync(new CleanupRule
+                {
+                    RuleName = "Tự động dọn: Vercel Bot Comments & Deployments",
+                    SenderRegex = @"(?i).*(vercel\[bot\]|notifications@github\.com).*",
+                    BodyRegex = @"(?i).*(vercel\[bot\]|deployment ready|preview deployment).*",
+                    Action = CleanupAction.Trash,
+                    IsActive = true
+                }, ct);
+                _logger.LogInformation("Đã khởi tạo quy tắc dọn dẹp mặc định: Vercel Bot Comments & Deployments");
+            }
+
+            var googleShareRule = await _ruleRepo.FindOneAsync(r => r.RuleName == "Tự động dọn: Google OAuth Data Sharing Alerts", ct);
+            if (googleShareRule == null)
+            {
+                await _ruleRepo.CreateAsync(new CleanupRule
+                {
+                    RuleName = "Tự động dọn: Google OAuth Data Sharing Alerts",
+                    SenderRegex = @"(?i).*noreply-accounts@google\.com.*",
+                    SubjectRegex = @"(?i).*Bạn đã chia sẻ một số dữ liệu trong Tài khoản Google.*",
+                    Action = CleanupAction.Trash,
+                    IsActive = true
+                }, ct);
+                _logger.LogInformation("Đã khởi tạo quy tắc dọn dẹp mặc định: Google OAuth Data Sharing Alerts");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Lỗi khi kiểm tra/khởi tạo quy tắc dọn dẹp mặc định.");
+        }
     }
 }

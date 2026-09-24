@@ -1,5 +1,6 @@
 using FluentAssertions;
 using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Application.Features.EmailOps;
 using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Enums;
@@ -17,17 +18,23 @@ public class RunCleanupCommandHandlerTests
     private readonly IRepository<EmailActionLog> _actionLogRepo = Substitute.For<IRepository<EmailActionLog>>();
     private readonly IGmailService _gmailService = Substitute.For<IGmailService>();
     private readonly IAIService _aiService = Substitute.For<IAIService>();
-    private readonly ILogger<RunCleanupCommandHandler> _logger = Substitute.For<ILogger<RunCleanupCommandHandler>>();
+    private readonly IAiUsageTracker _usageTracker = Substitute.For<IAiUsageTracker>();
+    private readonly INotificationService _notificationService = Substitute.For<INotificationService>();
+    private readonly ILogger<EmailCleanupBackgroundJob> _logger = Substitute.For<ILogger<EmailCleanupBackgroundJob>>();
 
     private RunCleanupCommandHandler CreateHandler()
     {
-        return new RunCleanupCommandHandler(
+        var job = new EmailCleanupBackgroundJob(
             _ruleRepo,
             _logRepo,
             _actionLogRepo,
             _gmailService,
             _aiService,
+            _usageTracker,
+            _notificationService,
             _logger);
+
+        return new RunCleanupCommandHandler(job);
     }
 
     [Fact]

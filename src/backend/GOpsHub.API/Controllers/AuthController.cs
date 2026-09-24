@@ -53,10 +53,24 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("google-redirect")]
     [AllowAnonymous]
-    public IActionResult GoogleRedirect()
+    public IActionResult GoogleRedirect([FromQuery] string? returnUrl)
     {
         var redirectUri = GetOAuthRedirectUri();
-        var url = _tokenService.GetAuthorizationUrl(redirectUri);
+        string? state = null;
+        if (!string.IsNullOrEmpty(returnUrl) && Uri.TryCreate(returnUrl, UriKind.Absolute, out _))
+        {
+            state = returnUrl;
+        }
+        else
+        {
+            var referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrEmpty(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var uri))
+            {
+                state = $"{uri.Scheme}://{uri.Authority}";
+            }
+        }
+
+        var url = _tokenService.GetAuthorizationUrl(redirectUri, state);
         return Redirect(url);
     }
 
@@ -65,9 +79,13 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpGet("google-callback")]
     [AllowAnonymous]
-    public async Task<IActionResult> GoogleCallback([FromQuery] string code, [FromQuery] string? error, CancellationToken ct)
+    public async Task<IActionResult> GoogleCallback([FromQuery] string code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken ct)
     {
         var frontendUrl = _configuration["FRONTEND_URL"] ?? "http://localhost:5173";
+        if (!string.IsNullOrEmpty(state) && Uri.TryCreate(state, UriKind.Absolute, out var stateUri))
+        {
+            frontendUrl = $"{stateUri.Scheme}://{stateUri.Authority}";
+        }
 
         if (!string.IsNullOrEmpty(error))
         {

@@ -1,94 +1,290 @@
 <template>
-  <div class="cleanup-rules">
+  <div class="cleanup-rules-container">
+    <!-- Header Section -->
     <div class="header-actions">
-      <h2>Quy tắc dọn dẹp Email (UC01)</h2>
+      <div class="header-title-group">
+        <h2>
+          <i class="pi pi-shield-check title-icon"></i>
+          Quy tắc dọn dẹp Email (UC01 Inbox Zero)
+        </h2>
+        <p class="subtitle">Quản lý danh sách quy tắc dọn dẹp Regex và AI tự động học để dọn dẹp hộp thư đến</p>
+      </div>
       <div class="header-btns">
         <button class="secondary-btn" @click="openCreateModal">
-          <i class="pi pi-plus"></i> Tạo quy tắc
+          <i class="pi pi-plus"></i> Tạo quy tắc mới
         </button>
-        <button class="primary-btn" @click="handleRunAll">
-          <i class="pi pi-play"></i> Chạy dọn dẹp
+        <button class="primary-btn" @click="handleRunAll" :disabled="runningCleanup">
+          <i class="pi" :class="runningCleanup ? 'pi-spin pi-spinner' : 'pi-play'"></i>
+          {{ runningCleanup ? 'Đang thực thi...' : 'Chạy dọn dẹp ngay' }}
         </button>
       </div>
     </div>
 
-    <LoadingSpinner v-if="loading" text="Đang tải quy tắc..." />
-
-    <div v-else class="rules-grid">
-      <div v-for="rule in rules" :key="rule.id" class="rule-card" :class="{ 'inactive': !rule.isActive }">
-        <div class="rule-header">
-          <span class="rule-name">{{ rule.ruleName }}</span>
-          <span class="badge" :class="rule.action === 0 ? 'trash' : 'archive'">
-            {{ rule.action === 0 ? 'Xóa tạm' : 'Lưu trữ' }}
-          </span>
+    <!-- Summary Statistics Bar -->
+    <div class="stats-overview">
+      <div class="stat-card">
+        <div class="stat-icon icon-indigo"><i class="pi pi-list"></i></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ totalRules }}</span>
+          <span class="stat-label">Tổng số Quy tắc</span>
         </div>
-        <div class="rule-details">
-          <div v-if="rule.useAI"><i class="pi pi-sparkles"></i> AI: <strong>{{ rule.aiPrompt }}</strong></div>
-          <div v-else-if="rule.customQuery"><i class="pi pi-search"></i> Truy vấn: <strong>{{ rule.customQuery }}</strong></div>
-          <div v-else>
-            <span v-if="rule.subjectRegex"><i class="pi pi-align-left"></i> Tiêu đề: <strong>{{ rule.subjectRegex }}</strong><br></span>
-            <span v-if="rule.bodyRegex"><i class="pi pi-file"></i> Nội dung: <strong>{{ rule.bodyRegex }}</strong></span>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon icon-emerald"><i class="pi pi-check-circle"></i></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ activeRulesCount }}</span>
+          <span class="stat-label">Đang kích hoạt</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon icon-purple"><i class="pi pi-sparkles"></i></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ autoLearnedCount }}</span>
+          <span class="stat-label">AI Tự động học</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon icon-rose"><i class="pi pi-trash"></i></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ trashRulesCount }}</span>
+          <span class="stat-label">Hành động Xóa (Trash)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="filter-bar">
+      <div class="search-box">
+        <i class="pi pi-search search-icon"></i>
+        <input 
+          v-model="searchQuery" 
+          type="text" 
+          placeholder="Tìm quy tắc theo tên, regex hoặc từ khóa..."
+        />
+        <button v-if="searchQuery" class="clear-search" @click="searchQuery = ''">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <div class="filter-tabs">
+        <button 
+          v-for="tab in filterTabs" 
+          :key="tab.id"
+          class="filter-tab"
+          :class="{ active: activeFilterTab === tab.id }"
+          @click="activeFilterTab = tab.id"
+        >
+          <span>{{ tab.label }}</span>
+          <span class="tab-count">{{ tab.count }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <LoadingSpinner v-if="loading" text="Đang tải danh sách quy tắc dọn dẹp..." />
+
+    <!-- Empty State -->
+    <div v-else-if="filteredRules.length === 0" class="empty-state">
+      <div class="empty-icon"><i class="pi pi-inbox"></i></div>
+      <h3>Không tìm thấy quy tắc dọn dẹp nào</h3>
+      <p v-if="searchQuery || activeFilterTab !== 'all'">
+        Thử thay đổi từ khóa tìm kiếm hoặc chuyển sang bộ lọc khác.
+      </p>
+      <p v-else>
+        Chưa có quy tắc dọn dẹp nào. Bạn có thể bấm "Tạo quy tắc mới" hoặc chờ AI tự động học pattern.
+      </p>
+      <button class="secondary-btn" @click="openCreateModal" style="margin-top: 1rem;">
+        <i class="pi pi-plus"></i> Tạo quy tắc đầu tiên
+      </button>
+    </div>
+
+    <!-- Rules Grid -->
+    <div v-else class="rules-grid">
+      <div 
+        v-for="rule in filteredRules" 
+        :key="rule.id" 
+        class="rule-card" 
+        :class="{ 'inactive': !rule.isActive }"
+      >
+        <!-- Card Header -->
+        <div class="card-header">
+          <div class="rule-title-group">
+            <span class="rule-name">{{ rule.ruleName }}</span>
+            <div class="rule-badges">
+              <span v-if="rule.isAutoLearned" class="tag-badge tag-ai">
+                <i class="pi pi-sparkles"></i> AI Tự học
+              </span>
+              <span v-else-if="rule.useAI" class="tag-badge tag-ai-manual">
+                <i class="pi pi-bolt"></i> AI Filter
+              </span>
+              <span v-else class="tag-badge tag-manual">
+                <i class="pi pi-cog"></i> Thủ công
+              </span>
+
+              <span class="action-badge" :class="rule.action === 0 ? 'badge-trash' : 'badge-archive'">
+                <i class="pi" :class="rule.action === 0 ? 'pi-trash' : 'pi-inbox'"></i>
+                {{ rule.action === 0 ? 'Xóa rác' : 'Lưu trữ' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Active Toggle Switch -->
+          <label class="switch" :title="rule.isActive ? 'Bấm để tắt quy tắc' : 'Bấm để bật quy tắc'">
+            <input type="checkbox" :checked="rule.isActive" @change="handleToggle(rule.id)" />
+            <span class="slider round"></span>
+          </label>
+        </div>
+
+        <!-- Card Body / Details -->
+        <div class="card-body">
+          <!-- AI Prompt Condition -->
+          <div v-if="rule.useAI" class="detail-item ai-item">
+            <div class="detail-label"><i class="pi pi-sparkles"></i> Prompt Điều kiện AI:</div>
+            <div class="code-block ai-prompt-box">{{ rule.aiPrompt || 'Chưa thiết lập prompt' }}</div>
+          </div>
+
+          <!-- Custom Gmail Query -->
+          <div v-else-if="rule.customQuery" class="detail-item">
+            <div class="detail-label"><i class="pi pi-search"></i> Gmail Search Query:</div>
+            <div class="code-block query-box">
+              <code>{{ rule.customQuery }}</code>
+              <button class="copy-btn" @click="copyText(rule.customQuery)" title="Sao chép query">
+                <i class="pi pi-copy"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Regex Conditions -->
+          <div v-else class="regex-details">
+            <div v-if="rule.subjectRegex" class="detail-item">
+              <div class="detail-label"><i class="pi pi-align-left"></i> Regex Tiêu đề (Subject):</div>
+              <div class="code-block">
+                <code>{{ rule.subjectRegex }}</code>
+                <button class="copy-btn" @click="copyText(rule.subjectRegex)" title="Sao chép Regex">
+                  <i class="pi pi-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="rule.senderRegex" class="detail-item">
+              <div class="detail-label"><i class="pi pi-user"></i> Regex Người gửi (Sender):</div>
+              <div class="code-block">
+                <code>{{ rule.senderRegex }}</code>
+                <button class="copy-btn" @click="copyText(rule.senderRegex)" title="Sao chép Regex">
+                  <i class="pi pi-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="rule.bodyRegex" class="detail-item">
+              <div class="detail-label"><i class="pi pi-file"></i> Regex Nội dung (Body):</div>
+              <div class="code-block">
+                <code>{{ rule.bodyRegex }}</code>
+                <button class="copy-btn" @click="copyText(rule.bodyRegex)" title="Sao chép Regex">
+                  <i class="pi pi-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="!rule.subjectRegex && !rule.senderRegex && !rule.bodyRegex" class="detail-item fallback-item">
+              <span class="text-muted"><i class="pi pi-info-circle"></i> Quy tắc dọn dẹp mặc định cho email chưa đọc.</span>
+            </div>
           </div>
         </div>
-        <div class="rule-actions">
-          <button class="action-btn" :class="rule.isActive ? 'text-green' : 'text-gray'" @click="handleToggle(rule.id)" :title="rule.isActive ? 'Tắt quy tắc' : 'Bật quy tắc'">
-            <i class="pi" :class="rule.isActive ? 'pi-check-circle' : 'pi-minus-circle'"></i>
-          </button>
-          <button class="action-btn text-blue" @click="openEditModal(rule)" title="Sửa">
-            <i class="pi pi-pencil"></i>
-          </button>
-          <button class="action-btn text-red" @click="handleDelete(rule.id)" title="Xóa">
-            <i class="pi pi-trash"></i>
-          </button>
+
+        <!-- Card Actions Footer -->
+        <div class="card-footer">
+          <span class="status-indicator" :class="rule.isActive ? 'status-online' : 'status-offline'">
+            <span class="status-dot"></span>
+            {{ rule.isActive ? 'Đang hoạt động' : 'Tắt' }}
+          </span>
+
+          <div class="footer-btns">
+            <button class="icon-btn edit-btn" @click="openEditModal(rule)" title="Chỉnh sửa quy tắc">
+              <i class="pi pi-pencil"></i>
+              <span>Sửa</span>
+            </button>
+            <button class="icon-btn delete-btn" @click="handleDelete(rule.id)" title="Xóa quy tắc">
+              <i class="pi pi-trash"></i>
+              <span>Xóa</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Create/Edit Modal -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content">
-        <h3>{{ isEditing ? 'Sửa quy tắc' : 'Tạo quy tắc mới' }}</h3>
-        <form @submit.prevent="handleSubmit">
+      <div class="modal-content glass-panel">
+        <div class="modal-header">
+          <h3>
+            <i class="pi" :class="isEditing ? 'pi-pencil' : 'pi-plus-circle'"></i>
+            {{ isEditing ? 'Chỉnh sửa quy tắc dọn dẹp' : 'Tạo quy tắc dọn dẹp mới' }}
+          </h3>
+          <button class="close-btn" @click="closeModal"><i class="pi pi-times"></i></button>
+        </div>
 
+        <form @submit.prevent="handleSubmit" class="modal-form">
           <div class="form-group">
-            <label>Tên quy tắc</label>
-            <input v-model="formData.ruleName" required placeholder="Ví dụ: Xóa email quảng cáo" autofocus />
+            <label class="required-label">Tên quy tắc</label>
+            <input 
+              v-model="formData.ruleName" 
+              required 
+              placeholder="Ví dụ: Xóa email khuyến mãi & quảng cáo" 
+              autofocus 
+            />
           </div>
 
           <div class="form-group">
-            <label>Hành động</label>
+            <label class="required-label">Hành động khi khớp điều kiện</label>
             <select v-model.number="formData.action" required>
-              <option :value="0">Xóa vào thùng rác (Trash)</option>
-              <option :value="1">Lưu trữ (Archive)</option>
+              <option :value="0">🗑️ Chuyển vào Thùng rác (Trash)</option>
+              <option :value="1">📦 Lưu trữ (Archive / Bỏ khỏi Inbox)</option>
             </select>
           </div>
 
           <div class="form-group-checkbox">
-            <label>
+            <label class="checkbox-container">
               <input type="checkbox" v-model="formData.useAI" />
-              Sử dụng AI để quyết định (Giới hạn 10 calls/phút)
+              <span class="checkmark"></span>
+              <span class="checkbox-label">
+                <i class="pi pi-sparkles text-purple"></i> Sử dụng Gemini AI phân tích nội dung email
+              </span>
             </label>
           </div>
 
-          <div v-if="formData.useAI" class="form-group">
-            <label>Prompt AI (Điều kiện xóa)</label>
-            <textarea v-model="formData.aiPrompt" rows="3" placeholder="Ví dụ: Email này là quảng cáo khóa học hoặc giảm giá"></textarea>
+          <div v-if="formData.useAI" class="form-group animate-fade">
+            <label>Prompt AI (Mô tả điều kiện dọn dẹp)</label>
+            <textarea 
+              v-model="formData.aiPrompt" 
+              rows="3" 
+              placeholder="Ví dụ: Đánh giá xem email này có phải là thông báo khuyến mãi, giảm giá khóa học hoặc spam không."
+            ></textarea>
           </div>
 
-          <div v-if="!formData.useAI">
+          <div v-else class="regex-form-group animate-fade">
             <div class="form-group">
-              <label>Regex Tiêu đề (Tùy chọn)</label>
-              <input v-model="formData.subjectRegex" placeholder="Ví dụ: ^\[Quảng cáo\]" />
+              <label>Regex Tiêu đề (Subject Regex)</label>
+              <input v-model="formData.subjectRegex" placeholder="Ví dụ: (?i).*(khuyến mãi|giảm giá|flash sale).*" />
             </div>
+
             <div class="form-group">
-              <label>Regex Nội dung (Tùy chọn)</label>
-              <input v-model="formData.bodyRegex" placeholder="Ví dụ: unsubscribe|hủy đăng ký" />
+              <label>Regex Người gửi (Sender Regex)</label>
+              <input v-model="formData.senderRegex" placeholder="Ví dụ: (?i).*(no-reply|newsletter)@domain\.com" />
+            </div>
+
+            <div class="form-group">
+              <label>Regex Nội dung (Body Regex)</label>
+              <input v-model="formData.bodyRegex" placeholder="Ví dụ: (?i).*(unsubscribe|hủy đăng ký).*" />
             </div>
           </div>
 
           <div class="modal-actions">
-            <button type="button" class="btn-cancel" @click="closeModal">Hủy</button>
-            <button type="submit" class="btn-submit">Lưu</button>
+            <button type="button" class="btn-secondary" @click="closeModal">Hủy bỏ</button>
+            <button type="submit" class="btn-primary" :disabled="submitting">
+              <i v-if="submitting" class="pi pi-spin pi-spinner"></i>
+              <span>{{ isEditing ? 'Cập nhật quy tắc' : 'Tạo mới quy tắc' }}</span>
+            </button>
           </div>
         </form>
       </div>
@@ -97,12 +293,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 
 const rules = ref<any[]>([]);
 const loading = ref(true);
+const runningCleanup = ref(false);
+const submitting = ref(false);
+const searchQuery = ref('');
+const activeFilterTab = ref('all');
 
 const showModal = ref(false);
 const isEditing = ref(false);
@@ -110,11 +310,12 @@ const currentEditId = ref('');
 const formData = ref({
   ruleName: '',
   action: 0,
-  whitelistDomains: [],
+  whitelistDomains: [] as string[],
   customQuery: '',
   useAI: false,
   aiPrompt: '',
   subjectRegex: '',
+  senderRegex: '',
   bodyRegex: ''
 });
 
@@ -123,7 +324,7 @@ const fetchRules = async () => {
   try {
     const res: any = await api.get('/emailops/rules');
     if (res.success) {
-      rules.value = res.data;
+      rules.value = res.data || [];
     }
   } catch (e) {
     console.error('Failed to fetch rules:', e);
@@ -132,23 +333,64 @@ const fetchRules = async () => {
   }
 };
 
+// Computed Stats
+const totalRules = computed(() => rules.value.length);
+const activeRulesCount = computed(() => rules.value.filter(r => r.isActive).length);
+const autoLearnedCount = computed(() => rules.value.filter(r => r.isAutoLearned).length);
+const trashRulesCount = computed(() => rules.value.filter(r => r.action === 0).length);
+
+const filterTabs = computed(() => [
+  { id: 'all', label: 'Tất cả quy tắc', count: totalRules.value },
+  { id: 'active', label: 'Đang bật', count: activeRulesCount.value },
+  { id: 'auto', label: 'AI Tự động học', count: autoLearnedCount.value },
+  { id: 'inactive', label: 'Đã tắt', count: totalRules.value - activeRulesCount.value }
+]);
+
+const filteredRules = computed(() => {
+  return rules.value.filter(rule => {
+    // 1. Tab Filter
+    if (activeFilterTab.value === 'active' && !rule.isActive) return false;
+    if (activeFilterTab.value === 'inactive' && rule.isActive) return false;
+    if (activeFilterTab.value === 'auto' && !rule.isAutoLearned) return false;
+
+    // 2. Search Query Filter
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.toLowerCase().trim();
+      const matchName = rule.ruleName?.toLowerCase().includes(q);
+      const matchSubject = rule.subjectRegex?.toLowerCase().includes(q);
+      const matchSender = rule.senderRegex?.toLowerCase().includes(q);
+      const matchBody = rule.bodyRegex?.toLowerCase().includes(q);
+      const matchQuery = rule.customQuery?.toLowerCase().includes(q);
+      const matchPrompt = rule.aiPrompt?.toLowerCase().includes(q);
+      return matchName || matchSubject || matchSender || matchBody || matchQuery || matchPrompt;
+    }
+
+    return true;
+  });
+});
+
 const handleRunAll = async () => {
+  runningCleanup.value = true;
   try {
     const res: any = await api.post('/emailops/rules/run', {});
     if (res.success) {
-      alert(`Đã thực thi! Xóa: ${res.data.totalTrashed}, Lưu trữ: ${res.data.totalArchived}`);
+      alert(`✅ Thực thi Dọn dẹp Inbox thành công!\n• Đã dọn dẹp/chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Đã lưu trữ: ${res.data.totalArchived} email\n• Thời gian thực thi: ${res.data.totalDurationMs}ms`);
+      fetchRules();
     }
   } catch (e) {
-    alert('Lỗi thực thi quy tắc dọn dẹp');
+    alert('Lỗi thực thi quy tắc dọn dẹp inbox');
+  } finally {
+    runningCleanup.value = false;
   }
 };
 
 const openCreateModal = () => {
   isEditing.value = false;
+  currentEditId.value = '';
   formData.value = { 
     ruleName: '', action: 0, 
     whitelistDomains: [], customQuery: '', useAI: false, aiPrompt: '', 
-    subjectRegex: '', bodyRegex: '' 
+    subjectRegex: '', senderRegex: '', bodyRegex: '' 
   };
   showModal.value = true;
 };
@@ -156,7 +398,17 @@ const openCreateModal = () => {
 const openEditModal = (rule: any) => {
   isEditing.value = true;
   currentEditId.value = rule.id;
-  formData.value = { ...rule };
+  formData.value = { 
+    ruleName: rule.ruleName,
+    action: rule.action ?? 0,
+    whitelistDomains: rule.whitelistDomains || [],
+    customQuery: rule.customQuery || '',
+    useAI: rule.useAI || false,
+    aiPrompt: rule.aiPrompt || '',
+    subjectRegex: rule.subjectRegex || '',
+    senderRegex: rule.senderRegex || '',
+    bodyRegex: rule.bodyRegex || ''
+  };
   showModal.value = true;
 };
 
@@ -165,6 +417,7 @@ const closeModal = () => {
 };
 
 const handleSubmit = async () => {
+  submitting.value = true;
   try {
     if (isEditing.value) {
       await api.put(`/emailops/rules/${currentEditId.value}`, formData.value);
@@ -175,11 +428,13 @@ const handleSubmit = async () => {
     fetchRules();
   } catch (e) {
     alert('Lỗi khi lưu quy tắc');
+  } finally {
+    submitting.value = false;
   }
 };
 
 const handleDelete = async (id: string) => {
-  if (confirm('Bạn có chắc chắn muốn xóa quy tắc này?')) {
+  if (confirm('Bạn có chắc chắn muốn xóa quy tắc dọn dẹp này không?')) {
     try {
       await api.delete(`/emailops/rules/${id}`);
       fetchRules();
@@ -192,21 +447,60 @@ const handleDelete = async (id: string) => {
 const handleToggle = async (id: string) => {
   try {
     await api.patch(`/emailops/rules/${id}/toggle`, {});
-    fetchRules();
+    // Optimistic toggle locally
+    const rule = rules.value.find(r => r.id === id);
+    if (rule) rule.isActive = !rule.isActive;
   } catch (e) {
     alert('Lỗi khi chuyển trạng thái quy tắc');
+    fetchRules();
   }
+};
+
+const copyText = (text: string) => {
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  alert(`Đã sao chép vào bộ nhớ tạm:\n${text}`);
 };
 
 onMounted(fetchRules);
 </script>
 
 <style scoped lang="scss">
+.cleanup-rules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Header */
 .header-actions {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header-title-group {
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.35rem 0;
+
+    .title-icon {
+      color: #6366f1;
+    }
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin: 0;
+  }
 }
 
 .header-btns {
@@ -215,186 +509,591 @@ onMounted(fetchRules);
 }
 
 .primary-btn {
-  background: #6366f1;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #fff;
   border: none;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
+  padding: 0.65rem 1.35rem;
+  border-radius: 0.6rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  &:hover { background: #4f46e5; }
-}
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  transition: all 0.2s ease;
 
-.secondary-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  &:hover { background: rgba(255, 255, 255, 0.15); }
-}
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+  }
 
-.rules-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-}
-
-.rule-card {
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  transition: opacity 0.3s;
-  &.inactive {
+  &:disabled {
     opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 
-.rule-header {
+.secondary-btn {
+  background: rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* Stats Overview */
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+.stat-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+
+  &.icon-indigo { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+  &.icon-emerald { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+  &.icon-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+  &.icon-rose { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+
+  .stat-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+}
+
+/* Filter & Search Bar */
+.filter-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.rule-name { font-weight: 700; font-size: 1rem; }
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
 
-.badge {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-weight: 600;
-  &.trash { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
-  &.archive { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+  .search-icon {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+  }
+
+  input {
+    width: 100%;
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    padding: 0.5rem 2.2rem;
+    border-radius: 0.5rem;
+    font-size: 0.88rem;
+
+    &:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+  }
+
+  .clear-search {
+    position: absolute;
+    right: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    &:hover { color: #f8fafc; }
+  }
 }
 
-.rule-details {
-  font-size: 0.85rem;
+.filter-tabs {
+  display: flex;
+  gap: 0.4rem;
+  background: #0f172a;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.filter-tab {
+  background: transparent;
+  border: none;
   color: #94a3b8;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+
+  &:hover { color: #f8fafc; }
+
+  &.active {
+    background: #1e293b;
+    color: #818cf8;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .tab-count {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.72rem;
+  }
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: rgba(30, 41, 59, 0.3);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+
+  .empty-icon {
+    font-size: 2.5rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+  }
+
+  h3 { color: #f8fafc; margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+  p { color: #94a3b8; font-size: 0.85rem; margin: 0; }
+}
+
+/* Rules Grid */
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
+.rule-card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.85rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  word-break: break-all;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
+  justify-content: space-between;
+  backdrop-filter: blur(12px);
+  transition: all 0.25s ease;
+
+  &:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  &.inactive {
+    opacity: 0.55;
+    filter: grayscale(0.2);
+  }
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 1rem;
 }
 
-.rule-actions {
+.rule-title-group {
   display: flex;
-  gap: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 0.75rem;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 0.4rem;
+
+  .rule-name {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #f8fafc;
+    line-height: 1.35;
+  }
 }
 
-.action-btn {
-  background: none;
-  border: none;
+.rule-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tag-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  &.tag-ai { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
+  &.tag-ai-manual { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3); }
+  &.tag-manual { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.2); }
+}
+
+.action-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  &.badge-trash { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+  &.badge-archive { background: rgba(59, 130, 246, 0.18); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+
+  input { opacity: 0; width: 0; height: 0; }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #334155;
+    transition: .3s;
+    border-radius: 22px;
+
+    &:before {
+      position: absolute;
+      content: "";
+      height: 16px; width: 16px;
+      left: 3px; bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+  }
+
+  input:checked + .slider {
+    background-color: #10b981;
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(16px);
+  }
+}
+
+/* Card Body */
+.card-body {
+  margin-bottom: 1rem;
+}
+
+.regex-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  .detail-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+}
+
+.code-block {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  font-family: 'Fira Code', monospace, sans-serif;
+  font-size: 0.78rem;
+  color: #38bdf8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  word-break: break-all;
+
+  code { font-family: inherit; }
+
+  .copy-btn {
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0.2rem;
+    margin-left: 0.4rem;
+    font-size: 0.85rem;
+    &:hover { color: #38bdf8; }
+  }
+}
+
+.ai-prompt-box {
+  color: #c084fc;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.fallback-item {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+/* Card Footer */
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.75rem;
+}
+
+.status-indicator {
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  &.status-online {
+    color: #34d399;
+    .status-dot { background: #34d399; box-shadow: 0 0 8px #34d399; }
+  }
+
+  &.status-offline {
+    color: #64748b;
+    .status-dot { background: #64748b; }
+  }
+}
+
+.footer-btns {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  font-size: 0.78rem;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 1.1rem;
-  transition: background 0.2s;
-  &:hover { background: rgba(255, 255, 255, 0.1); }
-  &.text-green { color: #34d399; }
-  &.text-blue { color: #60a5fa; }
-  &.text-red { color: #f87171; }
-  &.text-gray { color: #94a3b8; }
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+
+  &.edit-btn:hover {
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  &.delete-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
 }
 
 /* Modal Styles */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 1rem;
 }
 
 .modal-content {
   background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1rem;
-  padding: 2rem;
+  padding: 1.75rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 480px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
 
-.modal-content h3 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
+.modal-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  
-  label {
-    font-size: 0.85rem;
-    color: #cbd5e1;
-  }
-  
-    input, select, textarea {
-    background: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #f8fafc;
-    padding: 0.5rem;
-    border-radius: 0.35rem;
-    font-family: inherit;
-  }
-}
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
 
-.form-group-checkbox {
-  margin-bottom: 1rem;
-  label {
+  h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: #f8fafc;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.85rem;
-    color: #cbd5e1;
-    cursor: pointer;
-    input { width: 1.1rem; height: 1.1rem; cursor: pointer; }
   }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: #64748b;
+    font-size: 1.1rem;
+    cursor: pointer;
+    &:hover { color: #f8fafc; }
+  }
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+
+  label {
+    font-size: 0.82rem;
+    color: #cbd5e1;
+    font-weight: 600;
+
+    &.required-label::after {
+      content: ' *';
+      color: #f43f5e;
+    }
+  }
+
+  input, select, textarea {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f8fafc;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.5rem;
+    font-family: inherit;
+    font-size: 0.88rem;
+
+    &:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+  }
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+
+  input { width: 1rem; height: 1rem; cursor: pointer; }
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.btn-cancel {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 0.5rem 1rem;
-  &:hover { color: #f8fafc; }
-}
-
-.btn-submit {
+.btn-primary {
   background: #6366f1;
   color: #fff;
   border: none;
-  padding: 0.5rem 1.25rem;
-  border-radius: 0.35rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.5rem;
   font-weight: 600;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+
   &:hover { background: #4f46e5; }
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.05); }
 }
 </style>

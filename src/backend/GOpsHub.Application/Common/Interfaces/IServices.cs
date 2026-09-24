@@ -15,6 +15,14 @@ public interface IAIService
     Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default);
     Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default);
     Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default);
+    Task<UrgentEmailAnalysisResult> AnalyzeUrgentEmailAsync(string subject, string from, string content, CancellationToken ct = default);
+}
+
+public class UrgentEmailAnalysisResult
+{
+    public string UrgencyLevel { get; set; } = "Cao";
+    public string ActionSummary { get; set; } = string.Empty;
+    public string? Deadline { get; set; }
 }
 
 public class AIReplyResult

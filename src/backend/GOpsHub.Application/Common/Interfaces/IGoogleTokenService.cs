@@ -8,7 +8,7 @@ public interface IGoogleTokenService
     /// <summary>
     /// Builds the Google OAuth2 consent URL for the user to authorize.
     /// </summary>
-    string GetAuthorizationUrl(string redirectUri);
+    string GetAuthorizationUrl(string redirectUri, string? state = null);
 
     /// <summary>
     /// Exchanges an authorization code for access and refresh tokens.
