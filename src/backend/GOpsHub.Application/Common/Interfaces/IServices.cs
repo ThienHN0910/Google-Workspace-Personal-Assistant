@@ -15,6 +15,7 @@ public interface IAIService
     Task<bool> CheckCleanupConditionAsync(string emailContent, string prompt, CancellationToken ct = default);
     Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default);
     Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default);
+    Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, List<GOpsHub.Domain.Entities.CleanupFeedback>? userFeedbacks, CancellationToken ct = default);
     Task<UrgentEmailAnalysisResult> AnalyzeUrgentEmailAsync(string subject, string from, string content, CancellationToken ct = default);
 }
 

@@ -77,6 +77,7 @@
           </button>
           <button class="btn-cancel" @click="markAsRead(selectedEmail.id)" v-if="!selectedEmail.isRead"><i class="pi pi-check"></i> Đánh dấu đã đọc</button>
           <button class="btn-danger" @click="trashEmail(selectedEmail.id)"><i class="pi pi-trash"></i> Xóa</button>
+          <button class="btn-cancel text-purple" @click="openTeachModal(selectedEmail)" title="Dọn & Dạy AI (Xóa + Lý do)"><i class="pi pi-sparkles"></i> Dọn & Dạy AI</button>
           <button class="btn-submit" @click="draftAi(selectedEmail.id)" :disabled="draftingAi">
             <i class="pi pi-sparkles"></i> {{ draftingAi ? 'Đang tạo...' : 'Tạo nháp AI' }}
           </button>
@@ -120,6 +121,7 @@
             </button>
             <button v-if="email.isRead" class="action-btn text-blue" @click.stop="markAsUnread(email.id)" title="Đánh dấu chưa đọc"><i class="pi pi-envelope"></i></button>
             <button v-if="!email.isRead" class="action-btn text-green" @click.stop="markAsRead(email.id)" title="Đánh dấu đã đọc"><i class="pi pi-check"></i></button>
+            <button class="action-btn text-purple" @click.stop="openTeachModal(email)" title="Dọn & Dạy AI (Có thể xóa + Lý do)"><i class="pi pi-sparkles"></i></button>
             <button class="action-btn text-red" @click.stop="trashEmail(email.id)" title="Chuyển vào thùng rác"><i class="pi pi-trash"></i></button>
           </div>
         </div>
@@ -208,6 +210,15 @@
       @close="showComposeModal = false"
       @sent="resetAndFetch"
     />
+
+    <!-- Teach AI Cleanup Modal -->
+    <TeachAiCleanupModal
+      v-if="showTeachModal"
+      :visible="showTeachModal"
+      :email="teachEmailTarget"
+      @close="showTeachModal = false"
+      @submitted="handleTeachSubmitted"
+    />
   </div>
 </template>
 
@@ -224,6 +235,22 @@ const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/c
 const DraftReviewCard = defineAsyncComponent(() => import('@/components/email/DraftReviewCard.vue'));
 const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
 const EmailActionLogList = defineAsyncComponent(() => import('@/components/email/EmailActionLogList.vue'));
+const TeachAiCleanupModal = defineAsyncComponent(() => import('@/components/email/TeachAiCleanupModal.vue'));
+
+const showTeachModal = ref(false);
+const teachEmailTarget = ref<any>(null);
+
+const openTeachModal = (email: any) => {
+  teachEmailTarget.value = email;
+  showTeachModal.value = true;
+};
+
+const handleTeachSubmitted = (emailId: string) => {
+  emails.value = emails.value.filter(e => e.id !== emailId);
+  if (selectedEmail.value?.id === emailId) {
+    selectedEmail.value = null;
+  }
+};
 
 const showComposeModal = ref(false);
 const pendingDrafts = ref<any[]>([]);
@@ -872,6 +899,13 @@ onMounted(() => {
       &.text-yellow { color: #fbbf24; }
       &.text-blue { color: #38bdf8; }
       &.text-green { color: #34d399; }
+      &.text-purple { 
+        color: #c084fc; 
+        &:hover { 
+          background: rgba(139, 92, 246, 0.25); 
+          border-color: rgba(139, 92, 246, 0.5); 
+        } 
+      }
       &.text-red { color: #fb7185; }
     }
   }

@@ -109,3 +109,30 @@ public class EmailActionLog : BaseEntity
     public DateTime ExecutedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// User-submitted deletion signal and rationale for few-shot AI cleanup learning.
+/// </summary>
+public class CleanupFeedback : BaseEntity
+{
+    [BsonElement("emailId")]
+    public string EmailId { get; set; } = string.Empty;
+
+    [BsonElement("sender")]
+    public string Sender { get; set; } = string.Empty;
+
+    [BsonElement("senderDomain")]
+    public string? SenderDomain { get; set; }
+
+    [BsonElement("subject")]
+    public string? Subject { get; set; }
+
+    [BsonElement("snippet")]
+    public string? Snippet { get; set; }
+
+    [BsonElement("reason")]
+    public string Reason { get; set; } = string.Empty;
+
+    [BsonElement("tags")]
+    public List<string> Tags { get; set; } = new();
+}
+

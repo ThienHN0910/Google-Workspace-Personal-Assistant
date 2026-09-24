@@ -204,5 +204,69 @@ public class GeminiAIServiceTests
         result.DraftContent.Should().Contain("Phản hồi từ model động");
         mockHandler.LastRequest?.RequestUri?.ToString().Should().Contain("/models/gemini-custom-pro:generateContent");
     }
+
+    [Fact]
+    public async Task AnalyzeSpamPatternsAsync_WithUserFeedbacks_ShouldIncludeFewShotSectionInPrompt()
+    {
+        // Arrange
+        var inMemorySettings = new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "fake-api-key",
+            ["Gemini:Model"] = "gemini-3.5-flash-lite"
+        };
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
+        var logger = Substitute.For<ILogger<GeminiAIService>>();
+        var rateLimiter = new GeminiRateLimiter();
+        var usageTracker = Substitute.For<IAiUsageTracker>();
+
+        var validResponseBody = @"{
+            ""candidates"": [{
+                ""content"": {
+                    ""parts"": [{ ""text"": ""{\""hasPattern\"": false}"" }]
+                }
+            }]
+        }";
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(validResponseBody, Encoding.UTF8, "application/json")
+        };
+        var mockHandler = new MockHttpMessageHandler(httpResponse);
+        var httpClient = new HttpClient(mockHandler);
+
+        var service = new GeminiAIService(config, logger, rateLimiter, usageTracker, httpClient: httpClient);
+
+        var feedbacks = new List<CleanupFeedback>
+        {
+            new()
+            {
+                Sender = "sales@promo.com",
+                Subject = "Khuyến mãi cực sốc",
+                Reason = "Email rác không xem",
+                Tags = new List<string> { "Quảng cáo / Khuyến mãi" }
+            }
+        };
+
+        // Act
+        var result = await service.AnalyzeSpamPatternsAsync("Email snippet test", feedbacks);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.HasPattern.Should().BeFalse();
+
+        var requestBody = await mockHandler.LastRequest!.Content!.ReadAsStringAsync();
+        using var jsonDoc = System.Text.Json.JsonDocument.Parse(requestBody);
+        var promptText = jsonDoc.RootElement
+            .GetProperty("contents")[0]
+            .GetProperty("parts")[0]
+            .GetProperty("text")
+            .GetString();
+
+        promptText.Should().NotBeNull();
+        promptText!.Should().Contain("FEW-SHOT USER FEEDBACK");
+        promptText.Should().Contain("sales@promo.com");
+        promptText.Should().Contain("Khuyến mãi cực sốc");
+        promptText.Should().Contain("Email rác không xem");
+        promptText.Should().Contain("TUYỆT ĐỐI KHÔNG sinh quy tắc suggestedSenderRegex bao phủ cả domain ngân hàng");
+    }
 }
 
