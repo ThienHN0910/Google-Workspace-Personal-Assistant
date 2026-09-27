@@ -20,4 +20,4 @@ Disallow: /drive-guard
 Disallow: /settings
 Disallow: /api/
 
-Sitemap: https://g-ops-hub.vercel.app/sitemap.xml
+Sitemap: https://gwpa.thienhn.io.vn/sitemap.xml

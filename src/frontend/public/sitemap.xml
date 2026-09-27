@@ -2,15 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <!-- G-Ops Hub Guest Landing / Sign-in Portal -->
   <url>
-    <loc>https://g-ops-hub.vercel.app/login</loc>
-    <lastmod>2026-09-25</lastmod>
+    <loc>https://gwpa.thienhn.io.vn/login</loc>
+    <lastmod>2026-09-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <!-- Public Google Calendar Guest Scheduler -->
   <url>
-    <loc>https://g-ops-hub.vercel.app/public/calendar</loc>
-    <lastmod>2026-09-25</lastmod>
+    <loc>https://gwpa.thienhn.io.vn/public/calendar</loc>
+    <lastmod>2026-09-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
