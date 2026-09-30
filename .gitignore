@@ -12,6 +12,7 @@ node_modules/
 dist/
 .vite/
 *.local
+__pycache__/
 
 # OS & Environment
 .env

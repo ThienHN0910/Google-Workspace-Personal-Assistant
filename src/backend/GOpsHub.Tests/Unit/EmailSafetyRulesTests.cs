@@ -8,6 +8,16 @@ namespace GOpsHub.Tests.Unit;
 
 public class EmailSafetyRulesTests
 {
+    [Fact]
+    public void SenderRegexMatchesMailboxAddressInsteadOfDisplayName()
+    {
+        var rule = new CleanupRule { SenderRegex = @"^notifications@vercel\.com$",
+            SubjectRegex = "Failed deployment" };
+        EmailSafetyRules.IsEmailMatchingRegex(new EmailMessage { From = "Vercel <notifications@vercel.com>",
+            Subject = "Failed deployment for alpha" }, rule).Should().BeTrue();
+        EmailSafetyRules.IsEmailMatchingRegex(new EmailMessage { From = "Vercel notifications@vercel.com <attacker@example.com>",
+            Subject = "Failed deployment for alpha" }, rule).Should().BeFalse();
+    }
     [Theory]
     [InlineData("customercare@vpb.com.vn")]
     [InlineData("no-reply@vietcombank.com.vn")]

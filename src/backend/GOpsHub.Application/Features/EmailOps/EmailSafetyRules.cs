@@ -153,8 +153,9 @@ public static class EmailSafetyRules
             // 1. Sender condition (if specified, MUST match)
             if (hasSenderCondition)
             {
-                if (string.IsNullOrEmpty(email.From) ||
-                    !Regex.IsMatch(email.From, rule.SenderRegex!, RegexOptions.IgnoreCase, RegexTimeout))
+                var senderAddress = GetSenderAddress(email.From);
+                if (senderAddress == null ||
+                    !Regex.IsMatch(senderAddress, rule.SenderRegex!, RegexOptions.IgnoreCase, RegexTimeout))
                 {
                     return false;
                 }
