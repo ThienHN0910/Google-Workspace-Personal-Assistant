@@ -32,6 +32,40 @@ public class GeminiAIServiceTests
     }
 
     [Fact]
+    public async Task AnalyzeCleanupBatchUsesBothReasonsAndRejectsUnknownMessageIds()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "fake-api-key", ["Gemini:Model"] = "gemini-test"
+        }).Build();
+        var modelJson = "[{\"emailId\":\"mail-1\",\"outcome\":\"Review\",\"reason\":\"new type\"}," +
+            "{\"emailId\":\"unknown\",\"outcome\":\"Trash\",\"reason\":\"ignore\"}]";
+        var responseJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            candidates = new[] { new { content = new { parts = new[] { new { text = modelJson } } } } }
+        });
+        var mockHandler = new MockHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+        });
+        var service = new GeminiAIService(config, Substitute.For<ILogger<GeminiAIService>>(),
+            new GeminiRateLimiter(), Substitute.For<IAiUsageTracker>(), httpClient: new HttpClient(mockHandler));
+        var examples = new List<CleanupFeedback>
+        {
+            new() { Sender = "notifications@vercel.com", Subject = "Failed deployment", Reason = "I retest production", Decision = GOpsHub.Domain.Enums.CleanupDecision.Trash },
+            new() { Sender = "security@example.com", Subject = "Security alert", Reason = "I must read this", Decision = GOpsHub.Domain.Enums.CleanupDecision.Keep }
+        };
+
+        var result = await service.AnalyzeCleanupBatchAsync(
+            new[] { new EmailMessage { Id = "mail-1", From = "notifications@vercel.com", Subject = "Failed deployment" } }, examples);
+
+        result.Should().ContainSingle(x => x.EmailId == "mail-1" && x.Outcome == AICleanupOutcome.Review);
+        var body = await mockHandler.LastRequest!.Content!.ReadAsStringAsync();
+        body.Should().Contain("I retest production").And.Contain("I must read this");
+        body.Should().NotContain("Archive").And.NotContain("training");
+    }
+
+    [Fact]
     public async Task CallGeminiApiAsync_WhenHttp429_ShouldSendCriticalTelegramNotification()
     {
         // Arrange
@@ -269,4 +303,3 @@ public class GeminiAIServiceTests
         promptText.Should().Contain("TUYỆT ĐỐI KHÔNG sinh quy tắc suggestedSenderRegex bao phủ cả domain ngân hàng");
     }
 }
-

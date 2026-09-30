@@ -5,21 +5,25 @@ An intelligent automation assistant integrating Google Workspace APIs, scheduled
 ## Language
 
 **CleanupFeedback**:
-A user-submitted retention preference indicating that a specific email should be deleted along with the user's rationale, used as few-shot guidance for AI cleanup.
+A saved user decision to move an email to Trash or Keep it, with a written reason. The decision can guide later classifications of similar email.
 _Avoid_: DeletionSample, FeedbackRecord, TrainingData
 
 **CleanupRule**:
-A pattern-matching rule specifying regex criteria and actions (trash or archive) for automated inbox cleaning.
+A reviewed sender-and-subject pattern that can move matching eligible unread email to Trash.
 _Avoid_: Filter, MailFilter, DiscardPolicy
+
+**CleanupReview**:
+A pending user decision about an email the system proposed for cleanup. The user chooses Trash or Keep and records a reason.
+_Avoid_: PendingApprovalLog, AITrainingSample
 
 **EmailActionLog**:
 An immutable audit record capturing actions performed on emails, the associated reason, and the initiating process.
 _Avoid_: AuditEntry, MailHistory, ExecutionLog
 
 **CleanupLog**:
-A summarized batch execution record aggregating metrics on emails processed, trashed, and archived during a cleanup run.
+A summarized batch execution record of emails considered and moved to Trash during a cleanup run.
 _Avoid_: RunSummary, JobRecord
 
 **UrgentActionEmail**:
-A high-priority email requiring explicit user intervention, protected from automated deletion.
+A high-priority email requiring explicit user intervention, protected from automatic cleanup unless the user has approved a specific exception.
 _Avoid_: CriticalMail, AlertEmail

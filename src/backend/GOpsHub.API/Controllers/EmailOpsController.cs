@@ -128,6 +128,20 @@ public class EmailOpsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<CleanupRule>>.Ok(rules));
     }
 
+    [HttpGet("rules/{id}/preview")]
+    public async Task<ActionResult<ApiResponse<CleanupRulePreview>>> PreviewCleanupRule(string id)
+    {
+        var preview = await _dispatcher.QueryAsync(new PreviewCleanupRuleQuery(id));
+        return Ok(ApiResponse<CleanupRulePreview>.Ok(preview));
+    }
+
+    [HttpPost("rules/{id}/approve")]
+    public async Task<ActionResult<ApiResponse<CleanupRule>>> ApproveCleanupRule(string id)
+    {
+        var rule = await _dispatcher.SendAsync(new ApproveCleanupRuleCommand(id));
+        return Ok(ApiResponse<CleanupRule>.Ok(rule));
+    }
+
     /// <summary>
     /// Create a new cleanup rule (UC01)
     /// </summary>
@@ -237,13 +251,12 @@ public class EmailOpsController : ControllerBase
     }
 
     /// <summary>
-    /// Approve an uncertain email action awaiting human confirmation (Trash or Archive)
+    /// Legacy action-log approval is retired; use reason-required cleanup reviews.
     /// </summary>
     [HttpPost("action-logs/{id}/approve")]
     public async Task<ActionResult<ApiResponse<EmailActionLog>>> ApproveEmailAction(string id, [FromBody] ApproveEmailActionRequest request)
     {
-        var updatedLog = await _dispatcher.SendAsync(new ApproveEmailActionCommand(id, request.Action ?? "Trash"));
-        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã phê duyệt và thực thi dọn dẹp email."));
+        return StatusCode(410, ApiResponse<EmailActionLog>.Fail("Use /emailops/cleanup/reviews/{id}/resolve with a written reason."));
     }
 
     /// <summary>
@@ -252,8 +265,7 @@ public class EmailOpsController : ControllerBase
     [HttpPost("action-logs/{id}/reject")]
     public async Task<ActionResult<ApiResponse<EmailActionLog>>> DismissEmailAction(string id)
     {
-        var updatedLog = await _dispatcher.SendAsync(new DismissEmailActionCommand(id));
-        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã bỏ qua email khỏi danh sách chờ duyệt."));
+        return StatusCode(410, ApiResponse<EmailActionLog>.Fail("Use /emailops/cleanup/reviews/{id}/resolve with a written reason."));
     }
 
     /// <summary>
@@ -269,14 +281,31 @@ public class EmailOpsController : ControllerBase
         return Ok(ApiResponse<PagedResult<EmailActionLog>>.Ok(logs));
     }
 
+    [HttpGet("cleanup/reviews")]
+    public async Task<ActionResult<ApiResponse<PagedResult<CleanupReview>>>> GetCleanupReviews(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        var result = await _dispatcher.QueryAsync(new GetPendingCleanupReviewsQuery(page, pageSize));
+        return Ok(ApiResponse<PagedResult<CleanupReview>>.Ok(result));
+    }
+
+    [HttpPost("cleanup/reviews/{id}/resolve")]
+    public async Task<ActionResult<ApiResponse<CleanupReview>>> ResolveCleanupReview(
+        string id, [FromBody] ResolveCleanupReviewRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return BadRequest(ApiResponse<CleanupReview>.Fail("Vui lòng nhập lý do."));
+        var result = await _dispatcher.SendAsync(new ResolveCleanupReviewCommand(id, request.Decision, request.Reason), ct);
+        return Ok(ApiResponse<CleanupReview>.Ok(result));
+    }
+
     /// <summary>
     /// Batch approve or dismiss uncertain email actions awaiting human confirmation
     /// </summary>
     [HttpPost("action-logs/pending/batch-action")]
-    public async Task<ActionResult<ApiResponse<BatchPendingEmailActionResult>>> BatchPendingEmailActions([FromBody] BatchPendingEmailActionCommand command)
+    public async Task<ActionResult<ApiResponse<bool>>> BatchPendingEmailActions([FromBody] object? request)
     {
-        var result = await _dispatcher.SendAsync(command);
-        return Ok(ApiResponse<BatchPendingEmailActionResult>.Ok(result, $"Đã xử lý {result.SuccessCount}/{result.TotalRequested} email chờ duyệt."));
+        return StatusCode(410, ApiResponse<bool>.Fail("Batch legacy cleanup actions are retired; resolve each cleanup review with a reason."));
     }
 
     /// <summary>
@@ -334,7 +363,8 @@ public class EmailOpsController : ControllerBase
             request.UseAI,
             request.AIPrompt,
             request.SubjectRegex,
-            request.BodyRegex);
+            request.BodyRegex,
+            request.SenderRegex);
         var rule = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<CleanupRule>.Ok(rule, "Đã cập nhật quy tắc."));
     }
@@ -380,6 +410,7 @@ public class UpdateCleanupRuleRequest
     public string? AIPrompt { get; set; }
     public string? SubjectRegex { get; set; }
     public string? BodyRegex { get; set; }
+    public string? SenderRegex { get; set; }
 }
 
 public class ReplyEmailRequest
@@ -413,4 +444,10 @@ public class DeleteBatchActionLogsRequest
 public class ApproveEmailActionRequest
 {
     public string? Action { get; set; } = "Trash";
+}
+
+public class ResolveCleanupReviewRequest
+{
+    public CleanupDecision Decision { get; set; }
+    public string Reason { get; set; } = string.Empty;
 }

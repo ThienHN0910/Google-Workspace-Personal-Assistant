@@ -77,7 +77,7 @@
           </button>
           <button class="btn-cancel" @click="markAsRead(selectedEmail.id)" v-if="!selectedEmail.isRead"><i class="pi pi-check"></i> Đánh dấu đã đọc</button>
           <button class="btn-danger" @click="trashEmail(selectedEmail.id)"><i class="pi pi-trash"></i> Xóa</button>
-          <button class="btn-cancel text-purple" @click="openTeachModal(selectedEmail)" title="Dọn & Dạy AI (Xóa + Lý do)"><i class="pi pi-sparkles"></i> Dọn & Dạy AI</button>
+          <button class="btn-cancel text-purple" @click="openTeachModal(selectedEmail)" title="Chuyển vào Thùng rác và lưu lý do"><i class="pi pi-sparkles"></i> Xóa và lưu lý do</button>
           <button class="btn-submit" @click="draftAi(selectedEmail.id)" :disabled="draftingAi">
             <i class="pi pi-sparkles"></i> {{ draftingAi ? 'Đang tạo...' : 'Tạo nháp AI' }}
           </button>
@@ -121,7 +121,7 @@
             </button>
             <button v-if="email.isRead" class="action-btn text-blue" @click.stop="markAsUnread(email.id)" title="Đánh dấu chưa đọc"><i class="pi pi-envelope"></i></button>
             <button v-if="!email.isRead" class="action-btn text-green" @click.stop="markAsRead(email.id)" title="Đánh dấu đã đọc"><i class="pi pi-check"></i></button>
-            <button class="action-btn text-purple" @click.stop="openTeachModal(email)" title="Dọn & Dạy AI (Có thể xóa + Lý do)"><i class="pi pi-sparkles"></i></button>
+            <button class="action-btn text-purple" @click.stop="openTeachModal(email)" title="Chuyển vào Thùng rác và lưu lý do"><i class="pi pi-sparkles"></i></button>
             <button class="action-btn text-red" @click.stop="trashEmail(email.id)" title="Chuyển vào thùng rác"><i class="pi pi-trash"></i></button>
           </div>
         </div>
@@ -174,7 +174,6 @@
             <div class="log-body">
               <div class="log-stat">Quét: <strong>{{ log.totalProcessed }}</strong></div>
               <div class="log-stat text-red">Đã Xóa: <strong>{{ log.totalTrashed }}</strong></div>
-              <div class="log-stat text-orange">Lưu trữ: <strong>{{ log.totalArchived }}</strong></div>
               <div class="log-stat text-gray">Bỏ qua: <strong>{{ log.totalSkipped }}</strong></div>
             </div>
             <div class="log-footer">

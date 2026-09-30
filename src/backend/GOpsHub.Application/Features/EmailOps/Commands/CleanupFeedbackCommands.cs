@@ -1,8 +1,7 @@
 using GOpsHub.Application.Common.CQRS;
-using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
+using GOpsHub.Domain.Enums;
 using GOpsHub.Domain.Interfaces;
-using Microsoft.Extensions.Logging;
 
 namespace GOpsHub.Application.Features.EmailOps.Commands;
 
@@ -18,65 +17,58 @@ public record SubmitCleanupFeedbackCommand(
 public class SubmitCleanupFeedbackCommandHandler : ICommandHandler<SubmitCleanupFeedbackCommand, CleanupFeedback>
 {
     private readonly IRepository<CleanupFeedback> _feedbackRepo;
-    private readonly IRepository<EmailActionLog> _actionLogRepo;
-    private readonly IGmailService _gmailService;
-    private readonly ILogger<SubmitCleanupFeedbackCommandHandler> _logger;
+    private readonly IRepository<CleanupReview> _reviews;
+    private readonly ICommandHandler<ResolveCleanupReviewCommand, CleanupReview> _resolver;
 
     public SubmitCleanupFeedbackCommandHandler(
         IRepository<CleanupFeedback> feedbackRepo,
-        IRepository<EmailActionLog> actionLogRepo,
-        IGmailService gmailService,
-        ILogger<SubmitCleanupFeedbackCommandHandler> logger)
+        IRepository<CleanupReview> reviews,
+        ICommandHandler<ResolveCleanupReviewCommand, CleanupReview> resolver)
     {
         _feedbackRepo = feedbackRepo;
-        _actionLogRepo = actionLogRepo;
-        _gmailService = gmailService;
-        _logger = logger;
+        _reviews = reviews;
+        _resolver = resolver;
     }
 
     public async Task<CleanupFeedback> HandleAsync(SubmitCleanupFeedbackCommand command, CancellationToken ct = default)
     {
-        string? domain = ExtractDomain(command.Sender);
+        if (string.IsNullOrWhiteSpace(command.Reason))
+            throw new ArgumentException("A written deletion reason is required.", nameof(command));
 
-        var feedback = new CleanupFeedback
+        if (string.IsNullOrWhiteSpace(command.EmailId))
+            throw new ArgumentException("Email ID is required.", nameof(command));
+
+        var review = await _reviews.FindOneAsync(x => x.EmailId == command.EmailId, ct);
+        if (review == null)
         {
-            EmailId = command.EmailId,
-            Sender = command.Sender,
-            SenderDomain = domain,
-            Subject = command.Subject,
-            Snippet = command.Snippet,
-            Reason = command.Reason,
-            Tags = command.Tags ?? new List<string>(),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var savedFeedback = await _feedbackRepo.CreateAsync(feedback, ct);
-
-        // Trash email in Gmail
-        try
-        {
-            await _gmailService.TrashEmailAsync(command.EmailId, ct);
+            try
+            {
+                review = await _reviews.CreateAsync(new CleanupReview
+                {
+                    EmailId = command.EmailId,
+                    Sender = command.Sender,
+                    Subject = command.Subject,
+                    Snippet = command.Snippet is { Length: > 300 } ? command.Snippet[..300] : command.Snippet,
+                    AiReason = "Manual Trash with reason",
+                    Status = CleanupReviewStatus.Pending
+                }, ct);
+            }
+            catch
+            {
+                review = await _reviews.FindOneAsync(x => x.EmailId == command.EmailId, ct);
+                if (review == null) throw;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to trash email ID {EmailId} when submitting cleanup feedback", command.EmailId);
-            throw;
-        }
 
-        // Record audit trail
-        var tagsSummary = (feedback.Tags.Count > 0) ? $"[{string.Join(", ", feedback.Tags)}] " : "";
-        await _actionLogRepo.CreateAsync(new EmailActionLog
-        {
-            EmailId = command.EmailId,
-            Subject = command.Subject,
-            Sender = command.Sender,
-            Action = "UserTaughtTrash",
-            SourceJob = "EmailCleanup",
-            Reason = $"User feedback: {tagsSummary}{command.Reason}".Trim(),
-            ExecutedAt = DateTime.UtcNow
-        }, ct);
+        if (review.Status == CleanupReviewStatus.Kept)
+            throw new InvalidOperationException("This email was kept; resolve the existing preference first.");
+        if (review.Status != CleanupReviewStatus.Trashed)
+            await _resolver.HandleAsync(new ResolveCleanupReviewCommand(review.Id,
+                CleanupDecision.Trash, command.Reason.Trim(), command.Tags), ct);
 
-        return savedFeedback;
+        return await _feedbackRepo.FindOneAsync(x => x.ReviewId == review.Id &&
+            x.Decision == CleanupDecision.Trash, ct)
+            ?? throw new InvalidOperationException("Trash completed but feedback is unavailable; retry later.");
     }
 
     public static string? ExtractDomain(string? sender)

@@ -16,7 +16,28 @@ public interface IAIService
     Task<List<AIBatchTransactionResult>> ParseBatchTransactionEmailsAsync(string batchContent, string bankName, CancellationToken ct = default);
     Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, CancellationToken ct = default);
     Task<AIRegexRuleSuggestion?> AnalyzeSpamPatternsAsync(string emailSnippetsBatch, List<GOpsHub.Domain.Entities.CleanupFeedback>? userFeedbacks, CancellationToken ct = default);
+    Task<IReadOnlyList<AICleanupDecision>> AnalyzeCleanupBatchAsync(
+        IReadOnlyList<EmailMessage> emails,
+        IReadOnlyList<GOpsHub.Domain.Entities.CleanupFeedback> examples,
+        CancellationToken ct = default);
     Task<UrgentEmailAnalysisResult> AnalyzeUrgentEmailAsync(string subject, string from, string content, CancellationToken ct = default);
+}
+
+public enum AICleanupOutcome
+{
+    Unknown = 0,
+    Trash = 1,
+    Review = 2,
+    Keep = 3
+}
+
+public class AICleanupDecision
+{
+    public string EmailId { get; set; } = string.Empty;
+    public AICleanupOutcome Outcome { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public List<string> FeedbackIds { get; set; } = new();
+    public AIRegexRuleSuggestion? Proposal { get; set; }
 }
 
 public class UrgentEmailAnalysisResult

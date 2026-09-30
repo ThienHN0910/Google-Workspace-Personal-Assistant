@@ -150,6 +150,7 @@ public class RunCleanupCommandHandlerTests
             RuleName = "Promo Rule 1",
             SubjectRegex = "promo",
             Action = CleanupAction.Trash,
+            ApprovalStatus = CleanupRuleApprovalStatus.Approved,
             IsActive = true
         };
         var rule2 = new CleanupRule
@@ -157,7 +158,8 @@ public class RunCleanupCommandHandlerTests
             Id = "r-batch-2",
             RuleName = "Promo Rule 2",
             SubjectRegex = "discount",
-            Action = CleanupAction.Archive,
+            Action = CleanupAction.Trash,
+            ApprovalStatus = CleanupRuleApprovalStatus.Approved,
             IsActive = true
         };
         var rule3 = new CleanupRule
@@ -166,6 +168,7 @@ public class RunCleanupCommandHandlerTests
             RuleName = "Promo Rule 3",
             SubjectRegex = "sale",
             Action = CleanupAction.Trash,
+            ApprovalStatus = CleanupRuleApprovalStatus.Approved,
             IsActive = true
         };
 

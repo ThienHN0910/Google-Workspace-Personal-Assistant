@@ -1,24 +1,23 @@
 using GOpsHub.Application.Common.Interfaces;
+using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Enums;
 using GOpsHub.Domain.Interfaces;
-using GOpsHub.Application.Features.EmailOps.Commands;
 using Microsoft.Extensions.Logging;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace GOpsHub.Application.Features.EmailOps;
 
 public class EmailCleanupBackgroundJob
 {
-    private readonly IRepository<CleanupRule> _ruleRepo;
-    private readonly IRepository<CleanupLog> _logRepo;
-    private readonly IRepository<EmailActionLog> _actionLogRepo;
-    private readonly IRepository<CleanupFeedback>? _feedbackRepo;
-    private readonly IGmailService _gmailService;
-    private readonly IAIService _aiService;
-    private readonly IAiUsageTracker _usageTracker;
-    private readonly INotificationService _notificationService;
+    private readonly IRepository<CleanupRule> _rules;
+    private readonly IRepository<CleanupLog> _runs;
+    private readonly IRepository<EmailActionLog> _actions;
+    private readonly IRepository<CleanupFeedback>? _feedback;
+    private readonly IRepository<CleanupReview>? _reviews;
+    private readonly IGmailService _gmail;
+    private readonly IAIService _ai;
+    private readonly IAiUsageTracker _usage;
+    private readonly INotificationService _notifications;
     private readonly ILogger<EmailCleanupBackgroundJob> _logger;
 
     public EmailCleanupBackgroundJob(
@@ -30,426 +29,241 @@ public class EmailCleanupBackgroundJob
         IAiUsageTracker usageTracker,
         INotificationService notificationService,
         ILogger<EmailCleanupBackgroundJob> logger,
-        IRepository<CleanupFeedback>? feedbackRepo = null)
+        IRepository<CleanupFeedback>? feedbackRepo = null,
+        IRepository<CleanupReview>? reviewRepo = null)
     {
-        _ruleRepo = ruleRepo;
-        _logRepo = logRepo;
-        _actionLogRepo = actionLogRepo;
-        _feedbackRepo = feedbackRepo;
-        _gmailService = gmailService;
-        _aiService = aiService;
-        _usageTracker = usageTracker;
-        _notificationService = notificationService;
+        _rules = ruleRepo;
+        _runs = logRepo;
+        _actions = actionLogRepo;
+        _gmail = gmailService;
+        _ai = aiService;
+        _usage = usageTracker;
+        _notifications = notificationService;
         _logger = logger;
+        _feedback = feedbackRepo;
+        _reviews = reviewRepo;
     }
 
     public async Task<CleanupLogResult> RunAutoCleanupAsync(CancellationToken ct = default)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        _logger.LogInformation("Starting scheduled Email Cleanup (UC01 Inbox Zero - Regex First)...");
-
-        // Đảm bảo các quy tắc dọn dẹp mặc định (Vercel bot, Google OAuth) được khởi tạo
-        await EnsureDefaultRulesAsync(ct);
-
-        var allActiveRules = await _ruleRepo.FindAsync(r => r.IsActive, ct);
-
-        // Separate regex rules and AI rules
-        var regexRules = allActiveRules
-            .Where(r => !string.IsNullOrEmpty(r.SubjectRegex) || !string.IsNullOrEmpty(r.SenderRegex) || !string.IsNullOrEmpty(r.BodyRegex))
-            .ToList();
-
-        // Fetch recent UNREAD candidates from Inbox
-        var candidateEmails = await _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, ct);
-        if (candidateEmails == null || !candidateEmails.Any())
-        {
-            _logger.LogInformation("Hộp thư không có email chưa đọc nào. Bỏ qua quét dọn dẹp.");
-            sw.Stop();
-            return new CleanupLogResult
-            {
-                RulesExecuted = allActiveRules.Count,
-                TotalProcessed = 0,
-                TotalTrashed = 0,
-                TotalArchived = 0,
-                TotalSkipped = 0,
-                TotalDurationMs = sw.ElapsedMilliseconds
-            };
-        }
-
-        // Lấy danh sách email đã được đánh dấu chờ duyệt trước đó để tránh quét trùng
-        var existingPendingLogs = await _actionLogRepo.FindAsync(x => x.Action == "PendingApproval", ct);
-        var pendingEmailIds = existingPendingLogs.Select(x => x.EmailId).ToHashSet();
-
-        // Lấy danh sách email Action Required đã thông báo để tránh gửi lặp lại
-        var existingUrgentLogs = await _actionLogRepo.FindAsync(x => x.Action == "UrgentNotified", ct);
-        var urgentEmailIds = existingUrgentLogs.Select(x => x.EmailId).ToHashSet();
-
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         var sessionId = Guid.NewGuid().ToString("N")[..8];
-        var processedEmailIds = new HashSet<string>();
-        int totalTrashed = 0;
-        int totalArchived = 0;
-        int totalRegexCleaned = 0;
-
-        // ==========================================
-        // GIAI ĐOẠN 0: Xử lý Email Cần hành động khẩn cấp (Action Required)
-        // ==========================================
-        foreach (var email in candidateEmails)
+        var activeRules = (await _rules.FindAsync(x => x.IsActive &&
+            x.ApprovalStatus == CleanupRuleApprovalStatus.Approved, ct))
+            .Where(x => x.IsActive && x.ApprovalStatus == CleanupRuleApprovalStatus.Approved &&
+                x.Action == CleanupAction.Trash).ToList();
+        var candidates = await _gmail.GetEmailsAsync("is:unread in:inbox -is:starred", 100, ct);
+        var result = new CleanupLogResult { RulesExecuted = activeRules.Count, TotalProcessed = candidates.Count };
+        if (candidates.Count == 0)
         {
-            if (EmailSafetyRules.IsUrgentActionRequired(email))
-            {
-                processedEmailIds.Add(email.Id); // Bảo vệ tuyệt đối: không để Regex/AI dọn xóa
-
-                if (!urgentEmailIds.Contains(email.Id))
-                {
-                    try
-                    {
-                        var aiAnalysis = await _aiService.AnalyzeUrgentEmailAsync(
-                            email.Subject,
-                            email.From,
-                            email.Snippet ?? email.Body ?? "",
-                            ct);
-
-                        var urgentMsg = $"📌 <b>Tiêu đề:</b> {email.Subject}\n" +
-                                        $"👤 <b>Người gửi:</b> {email.From}\n" +
-                                        $"⚡ <b>Mức độ:</b> <b>{aiAnalysis.UrgencyLevel}</b>\n" +
-                                        $"📝 <b>Hành động cần làm:</b> {aiAnalysis.ActionSummary}\n" +
-                                        (string.IsNullOrEmpty(aiAnalysis.Deadline) ? "" : $"⏳ <b>Hạn chót:</b> {aiAnalysis.Deadline}\n") +
-                                        $"🛡️ <i>Email này đã được giữ an toàn trong Hộp thư đến.</i>";
-
-                        await _notificationService.SendNotificationAsync(
-                            "🚨 [CẦN HÀNH ĐỘNG] Email quan trọng từ dịch vụ",
-                            urgentMsg,
-                            "warning",
-                            ct);
-
-                        await _actionLogRepo.CreateAsync(new EmailActionLog
-                        {
-                            EmailId = email.Id,
-                            Subject = email.Subject,
-                            Sender = email.From,
-                            Action = "UrgentNotified",
-                            SourceJob = "EmailCleanup",
-                            SessionId = sessionId,
-                            Reason = $"UrgentAction ({aiAnalysis.UrgencyLevel}): {aiAnalysis.ActionSummary}"
-                        }, ct);
-
-                        urgentEmailIds.Add(email.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Lỗi khi phân tích hoặc gửi thông báo email khẩn cấp ID: {EmailId}", email.Id);
-                    }
-                }
-            }
+            result.TotalDurationMs = watch.ElapsedMilliseconds;
+            return result;
         }
 
-        // ==========================================
-        // GIAI ĐOẠN 1: Dọn dẹp bằng Regex trước (Tiết kiệm Token AI)
-        // ==========================================
-        foreach (var email in candidateEmails)
-        {
-            if (!EmailSafetyRules.IsSafeToClean(email, allActiveRules.SelectMany(r => r.WhitelistDomains)))
+        var protectedReviews = _reviews == null
+            ? Array.Empty<CleanupReview>()
+            : (await _reviews.FindAsync(x => x.Status == CleanupReviewStatus.Pending ||
+                x.Status == CleanupReviewStatus.ProcessingTrash ||
+                x.Status == CleanupReviewStatus.Kept, ct)).ToArray();
+        var pendingIds = protectedReviews.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
+        var feedback = _feedback == null
+            ? Array.Empty<CleanupFeedback>()
+            : (await _feedback.GetAllAsync(ct)).ToArray();
+        var keepIds = feedback.Where(x => x.Decision == CleanupDecision.Keep)
+            .Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
+        var applicableRules = activeRules.Where(rule => !feedback.Any(sample =>
+            sample.Decision == CleanupDecision.Keep &&
+            EmailSafetyRules.IsEmailMatchingRegex(new EmailMessage
             {
+                From = sample.Sender,
+                Subject = sample.Subject ?? string.Empty,
+                Snippet = sample.Snippet ?? string.Empty
+            }, rule))).ToList();
+        result.RulesExecuted = applicableRules.Count;
+        var whitelist = activeRules.SelectMany(x => x.WhitelistDomains ?? new List<string>()).Distinct().ToArray();
+        var urgentLogs = await _actions.FindAsync(x => x.Action == "UrgentNotified", ct);
+        var notifiedIds = urgentLogs.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
+        var remaining = new List<EmailMessage>();
+
+        foreach (var email in candidates)
+        {
+            if (pendingIds.Contains(email.Id) || keepIds.Contains(email.Id) ||
+                CleanupPreferenceSelector.HasMatchingKeep(email, feedback)) continue;
+
+            if (EmailSafetyRules.IsUrgentActionRequired(email) &&
+                !EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist))
+            {
+                if (!notifiedIds.Contains(email.Id))
+                    await NotifyUrgentAsync(email, sessionId, ct);
+                continue;
+            }
+            if (!EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist)) continue;
+
+            var rule = applicableRules.FirstOrDefault(x => EmailSafetyRules.IsEmailMatchingRegex(email, x));
+            if (rule != null)
+            {
+                await TrashAndLogAsync(email, $"RegexMatched: Rule '{rule.RuleName}'", sessionId, ct);
+                result.TotalTrashed++;
                 continue;
             }
 
-            foreach (var rule in regexRules)
-            {
-                if (EmailSafetyRules.IsEmailMatchingRegex(email, rule))
-                {
-                    if (rule.Action == CleanupAction.Trash)
-                    {
-                        await _gmailService.TrashEmailAsync(email.Id, ct);
-                        totalTrashed++;
-                    }
-                    else
-                    {
-                        await _gmailService.ArchiveEmailAsync(email.Id, ct);
-                        totalArchived++;
-                    }
-
-                    processedEmailIds.Add(email.Id);
-                    totalRegexCleaned++;
-
-                    // Ghi audit log chi tiết
-                    await _actionLogRepo.CreateAsync(new EmailActionLog
-                    {
-                        EmailId = email.Id,
-                        Subject = email.Subject,
-                        Sender = email.From,
-                        Action = rule.Action == CleanupAction.Trash ? "Trashed" : "Archived",
-                        SourceJob = "EmailCleanup",
-                        SessionId = sessionId,
-                        Reason = $"RegexMatched: Rule '{rule.RuleName}' (SubjectRegex: '{rule.SubjectRegex}', SenderRegex: '{rule.SenderRegex}')"
-                    }, ct);
-
-                    break; // Đã dọn bởi rule này, chuyển sang email tiếp theo
-                }
-            }
+            remaining.Add(email);
         }
 
-        _logger.LogInformation("Giai đoạn 1 (Regex-First): Đã dọn {Count} emails chưa đọc mà KHÔNG tốn token AI.", totalRegexCleaned);
-
-        // ==========================================
-        // GIAI ĐOẠN 2: Học Regex Tự động & Phân tích AI cho các email còn lại
-        // ==========================================
-        var remainingEmails = candidateEmails
-            .Where(e => !processedEmailIds.Contains(e.Id) 
-                     && !pendingEmailIds.Contains(e.Id) 
-                     && EmailSafetyRules.IsSafeToClean(e, allActiveRules.SelectMany(r => r.WhitelistDomains)))
-            .Take(15)
-            .ToList();
-
-        if (!remainingEmails.Any())
+        if (remaining.Count > 0 && await _usage.CanRunBackgroundAiAsync(ct))
         {
-            _logger.LogInformation("Không còn email chưa đọc nào cần phân tích AI.");
-        }
-        else if (await _usageTracker.CanRunBackgroundAiAsync(ct))
-        {
+            var batch = remaining.Take(15).ToList();
+            var examples = batch.SelectMany(email => CleanupPreferenceSelector.SelectRelevant(email, feedback, 10))
+                .GroupBy(x => x.Id).Select(x => x.First()).Take(30).ToList();
             try
             {
-                var snippetsBuilder = new StringBuilder();
-                foreach (var rem in remainingEmails)
+                var decisions = await _ai.AnalyzeCleanupBatchAsync(batch, examples, ct);
+                var byId = decisions.GroupBy(x => x.EmailId).ToDictionary(x => x.Key, x => x.First());
+                foreach (var email in batch)
                 {
-                    snippetsBuilder.AppendLine($"[ID: {rem.Id}] Từ: {rem.From} | Tiêu đề: {rem.Subject} | Nội dung: {rem.Snippet}");
-                }
-
-                List<CleanupFeedback>? recentFeedbacks = null;
-                if (_feedbackRepo != null)
-                {
-                    try
+                    if (!byId.TryGetValue(email.Id, out var decision)) continue;
+                    if (decision.Outcome == AICleanupOutcome.Keep) continue;
+                    if (decision.Outcome == AICleanupOutcome.Trash &&
+                        CleanupPreferenceSelector.CanAutoTrashKnownType(email, decision,
+                            examples.Where(x => decision.FeedbackIds.Contains(x.Id)).ToList(),
+                            feedback.Where(x => x.Decision == CleanupDecision.Keep).ToList()) &&
+                        EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist))
                     {
-                        var allFeedbacks = await _feedbackRepo.GetAllAsync(ct);
-                        recentFeedbacks = allFeedbacks.OrderByDescending(f => f.CreatedAt).Take(10).ToList();
+                        await TrashAndLogAsync(email, $"AiKnownPreference: {decision.Reason}", sessionId, ct);
+                        result.TotalTrashed++;
                     }
-                    catch (Exception ex)
+                    else if (decision.Outcome is AICleanupOutcome.Trash or AICleanupOutcome.Review)
                     {
-                        _logger.LogWarning(ex, "Không thể tải danh sách CleanupFeedback cho AI phân tích.");
-                    }
-                }
-
-                var suggestion = (recentFeedbacks != null && recentFeedbacks.Any())
-                    ? await _aiService.AnalyzeSpamPatternsAsync(snippetsBuilder.ToString(), recentFeedbacks, ct)
-                    : await _aiService.AnalyzeSpamPatternsAsync(snippetsBuilder.ToString(), ct);
-
-                if (suggestion != null && suggestion.HasPattern && (!string.IsNullOrEmpty(suggestion.SuggestedSubjectRegex) || !string.IsNullOrEmpty(suggestion.SuggestedSenderRegex)))
-                {
-                    // Phân nhánh theo độ tin cậy của AI:
-                    if (suggestion.ConfidenceScore >= 0.85)
-                    {
-                        // 1. Độ tin cậy cao: Tự động học quy tắc và dọn dẹp an toàn
-                        bool isValidSubject = EmailSafetyRules.IsValidRegex(suggestion.SuggestedSubjectRegex);
-                        bool isValidSender = EmailSafetyRules.IsValidRegex(suggestion.SuggestedSenderRegex);
-
-                        if (!isValidSubject || !isValidSender)
-                        {
-                            _logger.LogWarning("AI gợi ý biểu thức Regex không hợp lệ cú pháp. Bỏ qua tạo quy tắc. Subject: '{Subject}', Sender: '{Sender}'",
-                                suggestion.SuggestedSubjectRegex, suggestion.SuggestedSenderRegex);
-                        }
-                        else
-                        {
-                            bool isDuplicate = EmailSafetyRules.IsDuplicateRule(
-                                suggestion.SuggestedSubjectRegex,
-                                suggestion.SuggestedSenderRegex,
-                                allActiveRules);
-
-                            if (!isDuplicate)
-                            {
-                                var newRule = new CleanupRule
-                                {
-                                    RuleName = $"Tự động học: {suggestion.Category}",
-                                    Action = CleanupAction.Trash, // Ưu tiên xóa vào thùng rác theo cấu hình người dùng
-                                    SubjectRegex = suggestion.SuggestedSubjectRegex,
-                                    SenderRegex = suggestion.SuggestedSenderRegex,
-                                    IsActive = false, // An toàn: Mặc định TẮT để người dùng chủ động duyệt trước khi áp dụng vĩnh viễn
-                                    IsAutoLearned = true,
-                                    UseAI = false
-                                };
-
-                                await _ruleRepo.CreateAsync(newRule, ct);
-                                _logger.LogInformation("Tạo thành công CleanupRule tự động (Chờ kích hoạt): {RuleName} (ID: {RuleId})", newRule.RuleName, newRule.Id);
-
-                                var shortId = newRule.Id.Length >= 8 ? newRule.Id[..8] : newRule.Id;
-                                var buttons = new List<NotificationButtonRow>
-                                {
-                                    new NotificationButtonRow
-                                    {
-                                        new NotificationButton { Text = "✅ Bật quy tắc ngay", CallbackData = $"rule:enable:{shortId}" },
-                                        new NotificationButton { Text = "🗑️ Xóa quy tắc", CallbackData = $"rule:delete:{shortId}" }
-                                    }
-                                };
-
-                                // Thông báo Telegram kèm nút phản hồi tương tác và ID ngắn
-                                await _notificationService.SendNotificationAsync(
-                                    "🤖 AI vừa học Quy tắc Dọn dẹp mới (Đang chờ kích hoạt)",
-                                    $"Đã phân tích và đề xuất quy tắc: <b>{newRule.RuleName}</b>\n" +
-                                    $"• Regex Tiêu đề: <code>{newRule.SubjectRegex ?? "N/A"}</code>\n" +
-                                    $"• Regex Người gửi: <code>{newRule.SenderRegex ?? "N/A"}</code>\n" +
-                                    $"• Hành động: <b>Xóa (Trash)</b>\n" +
-                                    $"• Mã quy tắc: <code>{shortId}</code>\n\n" +
-                                    $"🛡️ <i>Quy tắc đang ở trạng thái <b>TẮT</b> để đảm bảo an toàn tuyệt đối.</i>\n" +
-                                    $"👉 Bấm nút bên dưới để phản hồi ngay, hoặc gửi lệnh: <code>/enable_rule {shortId}</code>.",
-                                    "info",
-                                    buttons,
-                                    ct);
-                            }
-                            else
-                            {
-                                _logger.LogInformation("Quy tắc do AI gợi ý tương đồng hoặc đã bị bao phủ bởi quy tắc hiện có. Bỏ qua tạo mới.");
-                            }
-                        }
-
-                        // Dọn dẹp các email mục tiêu được AI chỉ định
-                        if (suggestion.TargetEmailIds != null && suggestion.TargetEmailIds.Any())
-                        {
-                            foreach (var targetId in suggestion.TargetEmailIds)
-                            {
-                                var targetEmail = remainingEmails.FirstOrDefault(e => e.Id == targetId);
-                                if (targetEmail != null)
-                                {
-                                    if (suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        await _gmailService.ArchiveEmailAsync(targetId, ct);
-                                        totalArchived++;
-                                    }
-                                    else
-                                    {
-                                        await _gmailService.TrashEmailAsync(targetId, ct);
-                                        totalTrashed++;
-                                    }
-
-                                    await _actionLogRepo.CreateAsync(new EmailActionLog
-                                    {
-                                        EmailId = targetId,
-                                        Subject = targetEmail.Subject,
-                                        Sender = targetEmail.From,
-                                        Action = suggestion.Action.Equals("Archive", StringComparison.OrdinalIgnoreCase) ? "Archived" : "Trashed",
-                                        SourceJob = "EmailCleanup",
-                                        SessionId = sessionId,
-                                        Reason = $"AiPatternMatched ({suggestion.ConfidenceScore:P0}): Category '{suggestion.Category}' - {suggestion.Reason}"
-                                    }, ct);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // 2. Độ tin cậy phân vân (< 0.85): Đánh dấu lại và chờ người dùng duyệt xóa
-                        _logger.LogInformation("AI gợi ý với độ tin cậy phân vân ({Score:P0}) cho nhóm '{Category}'. Đánh dấu chờ người dùng duyệt.", suggestion.ConfidenceScore, suggestion.Category);
-                        int pendingCount = 0;
-                        if (suggestion.TargetEmailIds != null && suggestion.TargetEmailIds.Any())
-                        {
-                            foreach (var targetId in suggestion.TargetEmailIds)
-                            {
-                                var targetEmail = remainingEmails.FirstOrDefault(e => e.Id == targetId);
-                                if (targetEmail != null)
-                                {
-                                    await _actionLogRepo.CreateAsync(new EmailActionLog
-                                    {
-                                        EmailId = targetId,
-                                        Subject = targetEmail.Subject,
-                                        Sender = targetEmail.From,
-                                        Action = "PendingApproval",
-                                        SourceJob = "EmailCleanup",
-                                        SessionId = sessionId,
-                                        Reason = $"AiUncertain ({suggestion.ConfidenceScore:P0}): Nhóm '{suggestion.Category}' - {suggestion.Reason}"
-                                    }, ct);
-                                    pendingCount++;
-                                }
-                            }
-                        }
-
-                        if (pendingCount > 0)
-                        {
-                            await _notificationService.SendNotificationAsync(
-                                "⚠️ Email nghi vấn chờ duyệt dọn dẹp",
-                                $"AI phát hiện <b>{pendingCount}</b> email chưa đọc nghi ngờ rác/quảng cáo thuộc nhóm <b>{suggestion.Category}</b> (Độ tin cậy: {suggestion.ConfidenceScore:P0}).\nCác email này đã được lưu vào danh sách <b>Chờ duyệt</b> để bạn xem xét trước khi dọn.",
-                                "warning",
-                                ct);
-                        }
+                        var proposedRuleId = decision.Outcome == AICleanupOutcome.Trash
+                            ? await SaveDraftProposalAsync(decision, ct) : null;
+                        await CreateReviewAsync(email, decision.Reason, proposedRuleId, ct);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Lỗi khi gọi AI phân tích học pattern rác mới.");
+                _logger.LogWarning(ex, "Cleanup AI step failed; no further messages were moved.");
             }
         }
 
-        // Bắn thông báo tóm tắt nếu có dọn dẹp
-        if (totalTrashed > 0 || totalArchived > 0)
+        result.TotalSkipped = Math.Max(0, result.TotalProcessed - result.TotalTrashed);
+        result.TotalArchived = 0;
+        result.TotalDurationMs = watch.ElapsedMilliseconds;
+        if (result.TotalTrashed > 0)
         {
-            int totalAiCleaned = Math.Max(0, (totalTrashed + totalArchived) - totalRegexCleaned);
-
-            await _logRepo.CreateAsync(new CleanupLog
+            await _runs.CreateAsync(new CleanupLog
             {
                 RuleName = "AutoCleanupBackgroundJob",
                 SessionId = sessionId,
                 ExecutedAt = DateTime.UtcNow,
-                TotalProcessed = processedEmailIds.Count,
-                TotalTrashed = totalTrashed,
-                TotalArchived = totalArchived,
-                TotalSkipped = Math.Max(0, candidateEmails.Count - processedEmailIds.Count),
-                Details = $"{totalTrashed} trashed, {totalArchived} archived ({totalRegexCleaned} regex, {totalAiCleaned} AI)"
+                TotalProcessed = result.TotalProcessed,
+                TotalTrashed = result.TotalTrashed,
+                TotalArchived = 0,
+                TotalSkipped = result.TotalSkipped,
+                DurationMs = result.TotalDurationMs,
+                Details = $"{result.TotalTrashed} moved to Trash"
             }, ct);
-
-            var summaryMsg = $"• Đã xóa: <b>{totalTrashed}</b> email\n• Đã lưu trữ: <b>{totalArchived}</b> email\n(<i>{totalRegexCleaned} Regex, {totalAiCleaned} AI</i>)\n\n👉 Chat <code>/readmore</code> để xem danh sách chi tiết.";
-
-            await _notificationService.SendNotificationAsync(
-                "🧹 Dọn dẹp Inbox hoàn tất",
-                summaryMsg,
-                "info",
-                ct);
+            await _notifications.SendNotificationAsync("Dọn dẹp Inbox hoàn tất",
+                $"Đã chuyển {result.TotalTrashed} email vào Thùng rác.", "info", ct);
         }
-
-        _logger.LogInformation("Hoàn tất Email Cleanup: Trashed={Trashed}, Archived={Archived}, RegexCount={Regex}", totalTrashed, totalArchived, totalRegexCleaned);
-
-        sw.Stop();
-        return new CleanupLogResult
-        {
-            RulesExecuted = allActiveRules.Count,
-            TotalProcessed = candidateEmails.Count,
-            TotalTrashed = totalTrashed,
-            TotalArchived = totalArchived,
-            TotalSkipped = Math.Max(0, candidateEmails.Count - processedEmailIds.Count),
-            TotalDurationMs = sw.ElapsedMilliseconds
-        };
+        return result;
     }
 
-    private async Task EnsureDefaultRulesAsync(CancellationToken ct)
+    private async Task<string?> SaveDraftProposalAsync(AICleanupDecision decision, CancellationToken ct)
     {
+        var proposal = decision.Proposal;
+        if (proposal?.HasPattern != true ||
+            string.IsNullOrWhiteSpace(proposal.SuggestedSenderRegex) ||
+            string.IsNullOrWhiteSpace(proposal.SuggestedSubjectRegex) ||
+            !EmailSafetyRules.IsValidRegex(proposal.SuggestedSenderRegex) ||
+            !EmailSafetyRules.IsValidRegex(proposal.SuggestedSubjectRegex) ||
+            proposal.SuggestedSenderRegex.Contains(".*") ||
+            proposal.SuggestedSubjectRegex.Trim() is ".*" or "^.*$") return null;
+
+        var existing = await _rules.GetAllAsync(ct);
+        var duplicate = existing.FirstOrDefault(x =>
+            string.Equals(x.SenderRegex?.Trim(), proposal.SuggestedSenderRegex.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.SubjectRegex?.Trim(), proposal.SuggestedSubjectRegex.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(x.BodyRegex));
+        if (duplicate != null) return duplicate.Id;
+
+        var draft = await _rules.CreateAsync(new CleanupRule
+        {
+            RuleName = $"AI proposal: {proposal.Category}",
+            SenderRegex = proposal.SuggestedSenderRegex,
+            SubjectRegex = proposal.SuggestedSubjectRegex,
+            Action = CleanupAction.Trash,
+            IsActive = false,
+            IsAutoLearned = true,
+            ApprovalStatus = CleanupRuleApprovalStatus.Draft,
+            SourceFeedbackId = decision.FeedbackIds.FirstOrDefault()
+        }, ct);
+        return draft?.Id;
+    }
+
+    private async Task CreateReviewAsync(EmailMessage email, string reason, string? proposedRuleId, CancellationToken ct)
+    {
+        if (_reviews == null) return;
+        if (await _reviews.FindOneAsync(x => x.EmailId == email.Id, ct) != null) return;
         try
         {
-            var vercelBotRule = await _ruleRepo.FindOneAsync(r => r.RuleName == "Tự động dọn: Vercel Bot Comments & Deployments", ct);
-            if (vercelBotRule == null)
+            await _reviews.CreateAsync(new CleanupReview
             {
-                await _ruleRepo.CreateAsync(new CleanupRule
-                {
-                    RuleName = "Tự động dọn: Vercel Bot Comments & Deployments",
-                    SenderRegex = @"(?i).*(vercel\[bot\]|notifications@github\.com).*",
-                    BodyRegex = @"(?i).*(vercel\[bot\]|deployment ready|preview deployment).*",
-                    Action = CleanupAction.Trash,
-                    IsActive = true
-                }, ct);
-                _logger.LogInformation("Đã khởi tạo quy tắc dọn dẹp mặc định: Vercel Bot Comments & Deployments");
-            }
-
-            var googleShareRule = await _ruleRepo.FindOneAsync(r => r.RuleName == "Tự động dọn: Google OAuth Data Sharing Alerts", ct);
-            if (googleShareRule == null)
-            {
-                await _ruleRepo.CreateAsync(new CleanupRule
-                {
-                    RuleName = "Tự động dọn: Google OAuth Data Sharing Alerts",
-                    SenderRegex = @"(?i).*noreply-accounts@google\.com.*",
-                    SubjectRegex = @"(?i).*Bạn đã chia sẻ một số dữ liệu trong Tài khoản Google.*",
-                    Action = CleanupAction.Trash,
-                    IsActive = true
-                }, ct);
-                _logger.LogInformation("Đã khởi tạo quy tắc dọn dẹp mặc định: Google OAuth Data Sharing Alerts");
-            }
+                EmailId = email.Id,
+                Sender = email.From,
+                Subject = email.Subject,
+                Snippet = email.Snippet is { Length: > 300 } ? email.Snippet[..300] : email.Snippet,
+                AiReason = reason,
+                ProposedRuleId = proposedRuleId,
+                Status = CleanupReviewStatus.Pending
+            }, ct);
+            await _notifications.SendNotificationAsync("Email chờ duyệt dọn dẹp",
+                $"Email '{email.Subject}' đang chờ bạn chọn Xóa hoặc Giữ.", "warning", ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Lỗi khi kiểm tra/khởi tạo quy tắc dọn dẹp mặc định.");
+            _logger.LogWarning(ex, "Could not save cleanup review for {EmailId}", email.Id);
+        }
+    }
+
+    private async Task TrashAndLogAsync(EmailMessage email, string reason, string sessionId, CancellationToken ct)
+    {
+        await _gmail.TrashEmailAsync(email.Id, ct);
+        await _actions.CreateAsync(new EmailActionLog
+        {
+            EmailId = email.Id,
+            Sender = email.From,
+            Subject = email.Subject,
+            Action = "Trashed",
+            SourceJob = "EmailCleanup",
+            SessionId = sessionId,
+            Reason = reason
+        }, ct);
+    }
+
+    private async Task NotifyUrgentAsync(EmailMessage email, string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            var analysis = await _ai.AnalyzeUrgentEmailAsync(email.Subject, email.From,
+                email.Snippet ?? email.Body ?? string.Empty, ct);
+            await _notifications.SendNotificationAsync("[CẦN HÀNH ĐỘNG] Email quan trọng từ dịch vụ",
+                $"Tiêu đề: {email.Subject}\nMức độ: {analysis.UrgencyLevel}\nHành động: {analysis.ActionSummary}",
+                "warning", ct);
+            await _actions.CreateAsync(new EmailActionLog
+            {
+                EmailId = email.Id,
+                Sender = email.From,
+                Subject = email.Subject,
+                Action = "UrgentNotified",
+                SourceJob = "EmailCleanup",
+                SessionId = sessionId,
+                Reason = $"UrgentAction ({analysis.UrgencyLevel}): {analysis.ActionSummary}"
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not notify urgent email {EmailId}", email.Id);
         }
     }
 }

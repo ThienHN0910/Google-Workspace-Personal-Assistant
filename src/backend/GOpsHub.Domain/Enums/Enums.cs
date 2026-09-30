@@ -6,6 +6,27 @@ public enum CleanupAction
     Archive = 1
 }
 
+public enum CleanupDecision
+{
+    Trash = 0,
+    Keep = 1
+}
+
+public enum CleanupReviewStatus
+{
+    Pending = 0,
+    ProcessingTrash = 1,
+    Trashed = 2,
+    Kept = 3
+}
+
+public enum CleanupRuleApprovalStatus
+{
+    Draft = 0,
+    Approved = 1,
+    Rejected = 2
+}
+
 public enum DraftStatus
 {
     Pending = 0,
