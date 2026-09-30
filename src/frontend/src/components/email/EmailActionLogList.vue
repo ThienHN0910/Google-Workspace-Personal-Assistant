@@ -1,5 +1,6 @@
 <template>
   <div class="action-logs-container">
+    <CleanupReviewList />
     <!-- Filters & Action Bar -->
     <div class="logs-toolbar">
       <div class="filter-pills">
@@ -12,9 +13,6 @@
         >
           <i :class="filter.icon"></i>
           <span>{{ filter.label }}</span>
-          <span v-if="filter.value === 'PendingApproval' && pendingCount > 0" class="counter-badge">
-            {{ pendingCount }}
-          </span>
         </button>
       </div>
 
@@ -118,31 +116,6 @@
             </td>
             <td class="col-ops">
               <div class="row-actions">
-                <!-- If Pending Approval, show Approve (Trash/Archive) and Dismiss -->
-                <template v-if="item.action === 'PendingApproval'">
-                  <button 
-                    class="btn-action-small btn-trash-action" 
-                    @click="handleApprove(item, 'Trash')" 
-                    title="Duyệt chuyển Thùng rác"
-                  >
-                    <i class="pi pi-trash"></i> Duyệt xóa
-                  </button>
-                  <button 
-                    class="btn-action-small btn-archive-action" 
-                    @click="handleApprove(item, 'Archive')" 
-                    title="Duyệt Lưu trữ"
-                  >
-                    <i class="pi pi-box"></i> Lưu trữ
-                  </button>
-                  <button 
-                    class="btn-action-small btn-dismiss-action" 
-                    @click="handleDismiss(item)" 
-                    title="Bỏ qua không xử lý"
-                  >
-                    <i class="pi pi-times"></i>
-                  </button>
-                </template>
-
                 <!-- Delete this single log entry from database -->
                 <button 
                   class="btn-icon-subtle text-red" 
@@ -221,6 +194,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import CleanupReviewList from './CleanupReviewList.vue';
 import { showToast } from '@/services/notification.service';
 
 interface EmailActionLog {
@@ -243,14 +217,12 @@ const deleting = ref(false);
 const searchQuery = ref('');
 const currentActionFilter = ref('');
 const selectedIds = ref<string[]>([]);
-const pendingCount = ref(0);
 
 const showPruneModal = ref(false);
 const pruneOption = ref('30days');
 
 const actionFilters = [
   { label: 'Tất cả', value: '', icon: 'pi pi-list' },
-  { label: 'Chờ duyệt', value: 'PendingApproval', icon: 'pi pi-clock' },
   { label: 'Đã xóa', value: 'Trashed', icon: 'pi pi-trash' },
   { label: 'Đã lưu trữ', value: 'Archived', icon: 'pi pi-box' },
   { label: 'Đã đọc', value: 'MarkedRead', icon: 'pi pi-check' },
@@ -337,8 +309,6 @@ const fetchLogs = async (page = 1) => {
       selectedIds.value = [];
     }
 
-    // Refresh pending count
-    fetchPendingCount();
   } catch (err: any) {
     showToast({
       severity: 'error',
@@ -350,19 +320,6 @@ const fetchLogs = async (page = 1) => {
   }
 };
 
-const fetchPendingCount = async () => {
-  try {
-    const res: any = await api.get('/emailops/action-logs', {
-      params: { page: 1, pageSize: 1, action: 'PendingApproval' }
-    });
-    if (res.data) {
-      pendingCount.value = res.data.totalCount || 0;
-    }
-  } catch {
-    // Ignore
-  }
-};
-
 const changeActionFilter = (filterVal: string) => {
   currentActionFilter.value = filterVal;
   fetchLogs(1);
@@ -371,45 +328,6 @@ const changeActionFilter = (filterVal: string) => {
 const clearSearch = () => {
   searchQuery.value = '';
   fetchLogs(1);
-};
-
-const handleApprove = async (item: EmailActionLog, targetAction: string) => {
-  try {
-    const actionText = targetAction === 'Archive' ? 'Lưu trữ' : 'Xóa tạm';
-    const res: any = await api.post(`/emailops/action-logs/${item.id}/approve`, {
-      action: targetAction,
-    });
-    showToast({
-      severity: 'success',
-      summary: 'Duyệt thành công',
-      detail: `Đã thực thi ${actionText} email trên Gmail: "${item.subject || item.emailId}"`,
-    });
-    fetchLogs(currentPage.value);
-  } catch (err: any) {
-    showToast({
-      severity: 'error',
-      summary: 'Lỗi phê duyệt',
-      detail: err.message || 'Thao tác thất bại',
-    });
-  }
-};
-
-const handleDismiss = async (item: EmailActionLog) => {
-  try {
-    await api.post(`/emailops/action-logs/${item.id}/reject`, {});
-    showToast({
-      severity: 'info',
-      summary: 'Đã bỏ qua',
-      detail: `Đã chuyển email "${item.subject || item.emailId}" sang trạng thái Bỏ qua.`,
-    });
-    fetchLogs(currentPage.value);
-  } catch (err: any) {
-    showToast({
-      severity: 'error',
-      summary: 'Lỗi',
-      detail: err.message || 'Thao tác thất bại',
-    });
-  }
 };
 
 const handleDeleteSingle = async (id: string) => {

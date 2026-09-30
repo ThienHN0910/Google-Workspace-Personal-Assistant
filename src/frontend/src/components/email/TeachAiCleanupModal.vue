@@ -7,8 +7,8 @@
             <i class="pi pi-sparkles"></i>
           </div>
           <div>
-            <h3>Dọn dẹp & Huấn luyện AI</h3>
-            <p class="header-subtitle">Dạy AI khẩu vị dọn dẹp để tự động tối ưu các đợt quét tới</p>
+            <h3>Ghi nhớ lý do dọn dẹp</h3>
+            <p class="header-subtitle">Lưu lý do cùng email để gửi kèm những lần phân loại AI phù hợp về sau</p>
           </div>
         </div>
         <button class="btn-close" @click="$emit('close')">
@@ -33,7 +33,7 @@
       <div class="modal-body">
         <div class="tags-group">
           <label class="section-title">
-            <i class="pi pi-tags"></i> Chọn lý do nhanh (1 chạm):
+            <i class="pi pi-tags"></i> Gợi ý lý do (tùy chọn):
           </label>
           <div class="preset-tags">
             <button
@@ -52,7 +52,7 @@
 
         <div class="reason-group">
           <label class="section-title">
-            <i class="pi pi-comment"></i> Ghi chú lý do cụ thể (tùy chọn):
+            <i class="pi pi-comment"></i> Lý do nên chuyển vào Thùng rác:
           </label>
           <textarea
             v-model="customReason"
@@ -65,7 +65,7 @@
         <div class="info-alert">
           <i class="pi pi-info-circle"></i>
           <div>
-            Hệ thống sẽ <b>chuyển email này vào Thùng rác ngay</b> và nạp mẫu này vào ngữ cảnh huấn luyện (Few-shot learning) của AI cho lần dọn dẹp tiếp theo.
+            Hệ thống sẽ <b>chuyển email này vào Thùng rác ngay</b> và lưu lý do để gửi kèm các yêu cầu phân loại AI có liên quan sau này.
           </div>
         </div>
       </div>
@@ -81,7 +81,7 @@
           @click="handleSubmit"
         >
           <i class="pi" :class="submitting ? 'pi-spin pi-spinner' : 'pi-trash'"></i>
-          <span>{{ submitting ? 'Đang xử lý...' : 'Xóa & Huấn luyện AI' }}</span>
+          <span>{{ submitting ? 'Đang xử lý...' : 'Chuyển vào Thùng rác và lưu lý do' }}</span>
         </button>
       </div>
     </div>
@@ -110,7 +110,7 @@ const presetTags = [
   'Báo cáo / Cảnh báo định kỳ'
 ];
 
-const selectedTags = ref<string[]>(['Quảng cáo / Khuyến mãi']);
+const selectedTags = ref<string[]>([]);
 const customReason = ref('');
 const submitting = ref(false);
 
@@ -140,8 +140,8 @@ const handleSubmit = async () => {
     if (res.success) {
       showToast({
         severity: 'success',
-        summary: 'Dọn & Dạy AI',
-        detail: 'Đã chuyển email vào thùng rác và lưu mẫu dạy AI thành công!'
+        summary: 'Đã lưu lý do dọn dẹp',
+        detail: 'Đã chuyển email vào Thùng rác và lưu lý do.'
       });
       emit('submitted', props.email.id);
       emit('close');
@@ -149,7 +149,7 @@ const handleSubmit = async () => {
       showToast({
         severity: 'error',
         summary: 'Lỗi',
-        detail: res.message || 'Lỗi khi gửi phản hồi dạy AI.'
+        detail: res.message || 'Không thể lưu lý do dọn dẹp.'
       });
     }
   } catch (err: any) {

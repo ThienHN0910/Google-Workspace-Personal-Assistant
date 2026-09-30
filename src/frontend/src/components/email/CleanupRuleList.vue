@@ -7,7 +7,7 @@
           <i class="pi pi-shield-check title-icon"></i>
           Quy tắc dọn dẹp Email (UC01 Inbox Zero)
         </h2>
-        <p class="subtitle">Quản lý danh sách quy tắc dọn dẹp Regex và AI tự động học để dọn dẹp hộp thư đến</p>
+        <p class="subtitle">Regex chỉ chạy sau khi bạn xem trước và duyệt. Lý do bạn lưu được gửi kèm lần phân loại AI sau.</p>
       </div>
       <div class="header-btns">
         <button class="secondary-btn" @click="openCreateModal">
@@ -40,7 +40,7 @@
         <div class="stat-icon icon-purple"><i class="pi pi-sparkles"></i></div>
         <div class="stat-info">
           <span class="stat-value">{{ autoLearnedCount }}</span>
-          <span class="stat-label">AI Tự động học</span>
+          <span class="stat-label">Regex AI đề xuất</span>
         </div>
       </div>
       <div class="stat-card">
@@ -87,9 +87,9 @@
     <div v-else-if="activeFilterTab === 'feedback'" class="feedbacks-container">
       <div v-if="filteredFeedbacks.length === 0" class="empty-state">
         <div class="empty-icon"><i class="pi pi-sparkles" style="color: #c084fc;"></i></div>
-        <h3>Chưa có mẫu nào được dạy cho AI</h3>
+        <h3>Chưa lưu lý do dọn dẹp nào</h3>
         <p>
-          Khi duyệt Hộp thư đến, hãy bấm nút <b>"Dọn & Dạy AI"</b> trên các email không muốn giữ lại. AI sẽ lưu mẫu và sử dụng để học quy tắc dọn dẹp tốt hơn.
+          Khi duyệt email, hãy nhập lý do Xóa hoặc Giữ. Các ví dụ phù hợp sẽ được gửi kèm yêu cầu AI ở lần phân loại sau.
         </p>
       </div>
       <div v-else class="feedbacks-grid">
@@ -128,7 +128,7 @@
         Thử thay đổi từ khóa tìm kiếm hoặc chuyển sang bộ lọc khác.
       </p>
       <p v-else>
-        Chưa có quy tắc dọn dẹp nào. Bạn có thể bấm "Tạo quy tắc mới" hoặc chờ AI tự động học pattern.
+        Chưa có quy tắc dọn dẹp nào. Bạn có thể tạo bản nháp regex và xem trước trước khi bật.
       </p>
       <button class="secondary-btn" @click="openCreateModal" style="margin-top: 1rem;">
         <i class="pi pi-plus"></i> Tạo quy tắc đầu tiên
@@ -149,7 +149,7 @@
             <span class="rule-name">{{ rule.ruleName }}</span>
             <div class="rule-badges">
               <span v-if="rule.isAutoLearned" class="tag-badge tag-ai">
-                <i class="pi pi-sparkles"></i> AI Tự học
+                <i class="pi pi-sparkles"></i> AI đề xuất
               </span>
               <span v-else-if="rule.useAI" class="tag-badge tag-ai-manual">
                 <i class="pi pi-bolt"></i> AI Filter
@@ -158,31 +158,44 @@
                 <i class="pi pi-cog"></i> Thủ công
               </span>
 
-              <span class="action-badge" :class="rule.action === 0 ? 'badge-trash' : 'badge-archive'">
-                <i class="pi" :class="rule.action === 0 ? 'pi-trash' : 'pi-inbox'"></i>
-                {{ rule.action === 0 ? 'Xóa rác' : 'Lưu trữ' }}
+              <span class="action-badge badge-trash">
+                <i class="pi pi-trash"></i> {{ rule.action === 0 ? 'Thùng rác' : 'Lịch sử: Lưu trữ' }}
               </span>
+              <span class="tag-badge">{{ rule.approvalStatus === 1 ? 'Đã duyệt' : 'Chờ duyệt' }}</span>
             </div>
           </div>
 
-          <!-- Active Toggle Switch -->
-          <label class="switch" :title="rule.isActive ? 'Bấm để tắt quy tắc' : 'Bấm để bật quy tắc'">
-            <input type="checkbox" :checked="rule.isActive" @change="handleToggle(rule.id)" />
-            <span class="slider round"></span>
-          </label>
+          <button v-if="rule.isActive" type="button" class="secondary-btn" @click="handleToggle(rule.id)">Tắt</button>
+          <button v-else type="button" class="secondary-btn" @click="previewRule(rule.id)">Xem trước</button>
+        </div>
+
+        <div v-if="preview && preview.ruleId === rule.id" class="rule-preview">
+          <strong>Xem trước quy tắc</strong>
+          <p v-if="preview.blockers.length" class="preview-blocker" v-for="blocker in preview.blockers" :key="blocker">{{ blocker }}</p>
+          <p v-else>Không thấy điều kiện chặn trong mẫu hiện tại. Server sẽ kiểm tra lại khi duyệt.</p>
+          <ul v-if="preview.matches.length">
+            <li v-for="(match, index) in preview.matches" :key="`${match.emailId}-${index}`">
+              {{ match.source }} · {{ match.sender }} · {{ match.subject || '(Không có tiêu đề)' }}
+            </li>
+          </ul>
+          <button type="button" class="primary-btn" :disabled="preview.blockers.length > 0 || approvingRule"
+            @click="approveRule(rule.id)">Duyệt và bật</button>
         </div>
 
         <!-- Card Body / Details -->
         <div class="card-body">
-          <!-- AI Prompt Condition -->
+          <div v-if="rule.sourceFeedbackId" class="detail-item">
+            <div class="detail-label">Ví dụ nguồn: {{ rule.sourceFeedbackId }}</div>
+          </div>
+          <!-- Legacy settings remain visible for audit but do not run in cleanup. -->
           <div v-if="rule.useAI" class="detail-item ai-item">
-            <div class="detail-label"><i class="pi pi-sparkles"></i> Prompt Điều kiện AI:</div>
+            <div class="detail-label"><i class="pi pi-sparkles"></i> Prompt AI cũ (không chạy):</div>
             <div class="code-block ai-prompt-box">{{ rule.aiPrompt || 'Chưa thiết lập prompt' }}</div>
           </div>
 
           <!-- Custom Gmail Query -->
-          <div v-else-if="rule.customQuery" class="detail-item">
-            <div class="detail-label"><i class="pi pi-search"></i> Gmail Search Query:</div>
+          <div v-if="rule.customQuery" class="detail-item">
+            <div class="detail-label"><i class="pi pi-search"></i> Gmail Query cũ (không chạy):</div>
             <div class="code-block query-box">
               <code>{{ rule.customQuery }}</code>
               <button class="copy-btn" @click="copyText(rule.customQuery)" title="Sao chép query">
@@ -192,7 +205,7 @@
           </div>
 
           <!-- Regex Conditions -->
-          <div v-else class="regex-details">
+          <div class="regex-details">
             <div v-if="rule.subjectRegex" class="detail-item">
               <div class="detail-label"><i class="pi pi-align-left"></i> Regex Tiêu đề (Subject):</div>
               <div class="code-block">
@@ -276,30 +289,10 @@
             <label class="required-label">Hành động khi khớp điều kiện</label>
             <select v-model.number="formData.action" required>
               <option :value="0">🗑️ Chuyển vào Thùng rác (Trash)</option>
-              <option :value="1">📦 Lưu trữ (Archive / Bỏ khỏi Inbox)</option>
             </select>
           </div>
 
-          <div class="form-group-checkbox">
-            <label class="checkbox-container">
-              <input type="checkbox" v-model="formData.useAI" />
-              <span class="checkmark"></span>
-              <span class="checkbox-label">
-                <i class="pi pi-sparkles text-purple"></i> Sử dụng Gemini AI phân tích nội dung email
-              </span>
-            </label>
-          </div>
-
-          <div v-if="formData.useAI" class="form-group animate-fade">
-            <label>Prompt AI (Mô tả điều kiện dọn dẹp)</label>
-            <textarea 
-              v-model="formData.aiPrompt" 
-              rows="3" 
-              placeholder="Ví dụ: Đánh giá xem email này có phải là thông báo khuyến mãi, giảm giá khóa học hoặc spam không."
-            ></textarea>
-          </div>
-
-          <div v-else class="regex-form-group animate-fade">
+          <div class="regex-form-group animate-fade">
             <div class="form-group">
               <label>Regex Tiêu đề (Subject Regex)</label>
               <input v-model="formData.subjectRegex" placeholder="Ví dụ: (?i).*(khuyến mãi|giảm giá|flash sale).*" />
@@ -341,6 +334,8 @@ const runningCleanup = ref(false);
 const submitting = ref(false);
 const searchQuery = ref('');
 const activeFilterTab = ref('all');
+const preview = ref<{ ruleId: string; blockers: string[]; matches: { emailId: string; source: string; sender: string; subject?: string }[] } | null>(null);
+const approvingRule = ref(false);
 
 const showModal = ref(false);
 const isEditing = ref(false);
@@ -414,8 +409,8 @@ const trashRulesCount = computed(() => rules.value.filter(r => r.action === 0).l
 const filterTabs = computed(() => [
   { id: 'all', label: 'Tất cả quy tắc', count: totalRules.value },
   { id: 'active', label: 'Đang bật', count: activeRulesCount.value },
-  { id: 'auto', label: 'AI Tự động học', count: autoLearnedCount.value },
-  { id: 'feedback', label: '🧠 Mẫu đã dạy AI', count: feedbacks.value.length },
+  { id: 'auto', label: 'AI đề xuất', count: autoLearnedCount.value },
+  { id: 'feedback', label: 'Lý do đã lưu', count: feedbacks.value.length },
   { id: 'inactive', label: 'Đã tắt', count: totalRules.value - activeRulesCount.value }
 ]);
 
@@ -458,7 +453,7 @@ const handleRunAll = async () => {
   try {
     const res: any = await api.post('/emailops/rules/run', {});
     if (res.success) {
-      alert(`✅ Thực thi Dọn dẹp Inbox thành công!\n• Đã dọn dẹp/chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Đã lưu trữ: ${res.data.totalArchived} email\n• Thời gian thực thi: ${res.data.totalDurationMs}ms`);
+      alert(`✅ Dọn dẹp Inbox hoàn tất!\n• Đã chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Thời gian: ${res.data.totalDurationMs}ms`);
       fetchRules();
     }
   } catch (e) {
@@ -487,8 +482,8 @@ const openEditModal = (rule: any) => {
     action: rule.action ?? 0,
     whitelistDomains: rule.whitelistDomains || [],
     customQuery: rule.customQuery || '',
-    useAI: rule.useAI || false,
-    aiPrompt: rule.aiPrompt || '',
+    useAI: false,
+    aiPrompt: '',
     subjectRegex: rule.subjectRegex || '',
     senderRegex: rule.senderRegex || '',
     bodyRegex: rule.bodyRegex || ''
@@ -529,14 +524,38 @@ const handleDelete = async (id: string) => {
 };
 
 const handleToggle = async (id: string) => {
+  const rule = rules.value.find(r => r.id === id);
+  if (!rule?.isActive) { await previewRule(id); return; }
   try {
     await api.patch(`/emailops/rules/${id}/toggle`, {});
-    // Optimistic toggle locally
-    const rule = rules.value.find(r => r.id === id);
-    if (rule) rule.isActive = !rule.isActive;
+    await fetchRules();
   } catch (e) {
     alert('Lỗi khi chuyển trạng thái quy tắc');
     fetchRules();
+  }
+};
+
+const previewRule = async (id: string) => {
+  preview.value = null;
+  try {
+    const res: any = await api.get(`/emailops/rules/${id}/preview`);
+    preview.value = res.data;
+  } catch (e: any) {
+    alert(e.message || 'Không thể xem trước quy tắc');
+  }
+};
+
+const approveRule = async (id: string) => {
+  approvingRule.value = true;
+  try {
+    await api.post(`/emailops/rules/${id}/approve`, {});
+    preview.value = null;
+    await fetchRules();
+  } catch (e: any) {
+    await previewRule(id);
+    alert(e.message || 'Quy tắc không thể kích hoạt');
+  } finally {
+    approvingRule.value = false;
   }
 };
 
@@ -553,6 +572,15 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+.rule-preview {
+  padding: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, .2);
+  color: #cbd5e1;
+  font-size: .8rem;
+}
+.rule-preview ul { max-height: 10rem; overflow: auto; padding-left: 1.2rem; }
+.rule-preview li { margin: .35rem 0; }
+.preview-blocker { color: #fda4af; }
 .cleanup-rules-container {
   display: flex;
   flex-direction: column;
