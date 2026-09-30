@@ -29,11 +29,19 @@ public static class CleanupPreferenceSelector
         var address = EmailSafetyRules.GetSenderAddress(email.From);
         var subject = Normalize(email.Subject);
         if (address == null || subject.Length == 0) return false;
-        if (relevantKeep.Any(x => x.Decision == CleanupDecision.Keep &&
-            EmailSafetyRules.GetSenderAddress(x.Sender) == address && Normalize(x.Subject) == subject)) return false;
+        if (HasMatchingKeep(email, relevantKeep)) return false;
 
         return cited.Any(x => x.Decision == CleanupDecision.Trash &&
             decision.FeedbackIds.Contains(x.Id) &&
+            EmailSafetyRules.GetSenderAddress(x.Sender) == address && Normalize(x.Subject) == subject);
+    }
+
+    public static bool HasMatchingKeep(EmailMessage email, IEnumerable<CleanupFeedback> feedback)
+    {
+        var address = EmailSafetyRules.GetSenderAddress(email.From);
+        var subject = Normalize(email.Subject);
+        return address != null && subject.Length > 0 && feedback.Any(x =>
+            x.Decision == CleanupDecision.Keep &&
             EmailSafetyRules.GetSenderAddress(x.Sender) == address && Normalize(x.Subject) == subject);
     }
 

@@ -84,16 +84,20 @@ public static class EmailSafetyRules
 
     public static bool IsSafeForAutomaticTrash(EmailMessage? email, IEnumerable<string>? whitelistDomains)
     {
-        if (email == null || !IsSafeToClean(email, whitelistDomains)) return false;
+        if (email == null || email.IsRead || email.IsStarred ||
+            IsProtectedSender(email.From, whitelistDomains)) return false;
         var address = GetSenderAddress(email.From);
         if (address == null) return false;
 
         var subject = email.Subject ?? string.Empty;
+        var verifiedVercelFailure = address == "notifications@vercel.com" &&
+            Regex.IsMatch(subject, @"(?i)\b(failed\s+deployment|deployment\s+failed)\b",
+                RegexOptions.None, RegexTimeout);
+        if (IsUrgentActionRequired(email) && !verifiedVercelFailure) return false;
         const string technicalAlert = @"(?i)(failed\s+deployment|deployment\s+failed|summary\s+of\s+failures|security\s+alert|sign[- ]?in|đăng nhập|oauth|automatically\s+paused|verification|critical\s+alert)";
         if (!Regex.IsMatch(subject, technicalAlert, RegexOptions.None, RegexTimeout)) return true;
 
-        return address == "notifications@vercel.com" &&
-               Regex.IsMatch(subject, @"(?i)\b(failed\s+deployment|deployment\s+failed)\b", RegexOptions.None, RegexTimeout);
+        return verifiedVercelFailure;
     }
 
     /// <summary>
