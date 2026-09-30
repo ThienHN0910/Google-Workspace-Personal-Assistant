@@ -16,6 +16,25 @@ public class MongoDbContext
 
         var client = new MongoClient(settings.Value.ConnectionString);
         _database = client.GetDatabase(settings.Value.DatabaseName);
+        EnsureCleanupIndexes();
+    }
+
+    private void EnsureCleanupIndexes()
+    {
+        var reviews = GetCollection<CleanupReview>();
+        reviews.Indexes.CreateOne(new CreateIndexModel<CleanupReview>(
+            Builders<CleanupReview>.IndexKeys.Ascending(x => x.EmailId),
+            new CreateIndexOptions { Unique = true, Name = "ux_cleanup_review_email_id" }));
+
+        var feedback = GetCollection<CleanupFeedback>();
+        feedback.Indexes.CreateOne(new CreateIndexModel<CleanupFeedback>(
+            Builders<CleanupFeedback>.IndexKeys.Ascending(x => x.ReviewId),
+            new CreateIndexOptions<CleanupFeedback>
+            {
+                Unique = true,
+                Name = "ux_cleanup_feedback_review_id",
+                PartialFilterExpression = Builders<CleanupFeedback>.Filter.Ne(x => x.ReviewId, null)
+            }));
     }
 
     public IMongoCollection<T> GetCollection<T>(string? name = null)

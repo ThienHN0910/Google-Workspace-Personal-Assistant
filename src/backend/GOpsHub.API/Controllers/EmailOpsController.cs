@@ -269,6 +269,24 @@ public class EmailOpsController : ControllerBase
         return Ok(ApiResponse<PagedResult<EmailActionLog>>.Ok(logs));
     }
 
+    [HttpGet("cleanup/reviews")]
+    public async Task<ActionResult<ApiResponse<PagedResult<CleanupReview>>>> GetCleanupReviews(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        var result = await _dispatcher.QueryAsync(new GetPendingCleanupReviewsQuery(page, pageSize));
+        return Ok(ApiResponse<PagedResult<CleanupReview>>.Ok(result));
+    }
+
+    [HttpPost("cleanup/reviews/{id}/resolve")]
+    public async Task<ActionResult<ApiResponse<CleanupReview>>> ResolveCleanupReview(
+        string id, [FromBody] ResolveCleanupReviewRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return BadRequest(ApiResponse<CleanupReview>.Fail("Vui lòng nhập lý do."));
+        var result = await _dispatcher.SendAsync(new ResolveCleanupReviewCommand(id, request.Decision, request.Reason), ct);
+        return Ok(ApiResponse<CleanupReview>.Ok(result));
+    }
+
     /// <summary>
     /// Batch approve or dismiss uncertain email actions awaiting human confirmation
     /// </summary>
@@ -413,4 +431,10 @@ public class DeleteBatchActionLogsRequest
 public class ApproveEmailActionRequest
 {
     public string? Action { get; set; } = "Trash";
+}
+
+public class ResolveCleanupReviewRequest
+{
+    public CleanupDecision Decision { get; set; }
+    public string Reason { get; set; } = string.Empty;
 }
