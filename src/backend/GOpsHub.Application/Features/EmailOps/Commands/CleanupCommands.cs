@@ -15,7 +15,8 @@ public record CreateCleanupRuleCommand(
     bool UseAI = false,
     string? AIPrompt = null,
     string? SubjectRegex = null,
-    string? BodyRegex = null
+    string? BodyRegex = null,
+    string? SenderRegex = null
 ) : ICommand<CleanupRule>;
 
 public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRuleCommand, CleanupRule>
@@ -29,6 +30,8 @@ public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRule
 
     public async Task<CleanupRule> HandleAsync(CreateCleanupRuleCommand command, CancellationToken ct = default)
     {
+        if (command.Action != CleanupAction.Trash)
+            throw new InvalidOperationException("Cleanup rules only support Trash.");
         var rule = new CleanupRule
         {
             RuleName = command.RuleName,
@@ -39,7 +42,9 @@ public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRule
             AIPrompt = command.AIPrompt,
             SubjectRegex = command.SubjectRegex,
             BodyRegex = command.BodyRegex,
-            IsActive = true
+            SenderRegex = command.SenderRegex,
+            IsActive = false,
+            ApprovalStatus = CleanupRuleApprovalStatus.Draft
         };
 
         return await _ruleRepo.CreateAsync(rule, ct);

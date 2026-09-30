@@ -124,7 +124,9 @@ public class EmailCleanupBackgroundJob
                     }
                     else if (decision.Outcome is AICleanupOutcome.Trash or AICleanupOutcome.Review)
                     {
-                        await CreateReviewAsync(email, decision.Reason, ct);
+                        var proposedRuleId = decision.Outcome == AICleanupOutcome.Trash
+                            ? await SaveDraftProposalAsync(decision, ct) : null;
+                        await CreateReviewAsync(email, decision.Reason, proposedRuleId, ct);
                     }
                 }
             }
@@ -157,7 +159,39 @@ public class EmailCleanupBackgroundJob
         return result;
     }
 
-    private async Task CreateReviewAsync(EmailMessage email, string reason, CancellationToken ct)
+    private async Task<string?> SaveDraftProposalAsync(AICleanupDecision decision, CancellationToken ct)
+    {
+        var proposal = decision.Proposal;
+        if (proposal?.HasPattern != true ||
+            string.IsNullOrWhiteSpace(proposal.SuggestedSenderRegex) ||
+            string.IsNullOrWhiteSpace(proposal.SuggestedSubjectRegex) ||
+            !EmailSafetyRules.IsValidRegex(proposal.SuggestedSenderRegex) ||
+            !EmailSafetyRules.IsValidRegex(proposal.SuggestedSubjectRegex) ||
+            proposal.SuggestedSenderRegex.Contains(".*") ||
+            proposal.SuggestedSubjectRegex.Trim() is ".*" or "^.*$") return null;
+
+        var existing = await _rules.GetAllAsync(ct);
+        var duplicate = existing.FirstOrDefault(x =>
+            string.Equals(x.SenderRegex?.Trim(), proposal.SuggestedSenderRegex.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.SubjectRegex?.Trim(), proposal.SuggestedSubjectRegex.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(x.BodyRegex));
+        if (duplicate != null) return duplicate.Id;
+
+        var draft = await _rules.CreateAsync(new CleanupRule
+        {
+            RuleName = $"AI proposal: {proposal.Category}",
+            SenderRegex = proposal.SuggestedSenderRegex,
+            SubjectRegex = proposal.SuggestedSubjectRegex,
+            Action = CleanupAction.Trash,
+            IsActive = false,
+            IsAutoLearned = true,
+            ApprovalStatus = CleanupRuleApprovalStatus.Draft,
+            SourceFeedbackId = decision.FeedbackIds.FirstOrDefault()
+        }, ct);
+        return draft?.Id;
+    }
+
+    private async Task CreateReviewAsync(EmailMessage email, string reason, string? proposedRuleId, CancellationToken ct)
     {
         if (_reviews == null) return;
         if (await _reviews.FindOneAsync(x => x.EmailId == email.Id, ct) != null) return;
@@ -170,6 +204,7 @@ public class EmailCleanupBackgroundJob
                 Subject = email.Subject,
                 Snippet = email.Snippet is { Length: > 300 } ? email.Snippet[..300] : email.Snippet,
                 AiReason = reason,
+                ProposedRuleId = proposedRuleId,
                 Status = CleanupReviewStatus.Pending
             }, ct);
             await _notifications.SendNotificationAsync("Email chờ duyệt dọn dẹp",

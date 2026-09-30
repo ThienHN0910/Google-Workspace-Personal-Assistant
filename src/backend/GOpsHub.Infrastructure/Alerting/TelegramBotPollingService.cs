@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
+using GOpsHub.Application.Common.CQRS;
+using GOpsHub.Application.Features.EmailOps.Commands;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -300,8 +302,25 @@ public class TelegramBotPollingService : BackgroundService
             return;
         }
 
-        rule.IsActive = enable;
-        await ruleRepo.UpdateAsync(rule, ct);
+        if (enable)
+        {
+            try
+            {
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
+                rule = await dispatcher.SendAsync(new ApproveCleanupRuleCommand(rule.Id), ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await SendTelegramMessageAsync(botToken, chatId,
+                    $"Quy tắc chưa an toàn để kích hoạt: {EscapeTelegramHtml(ex.Message)}", ct);
+                return;
+            }
+        }
+        else
+        {
+            rule.IsActive = false;
+            await ruleRepo.UpdateAsync(rule, ct);
+        }
 
         var shortId = rule.Id.Length >= 8 ? rule.Id[..8] : rule.Id;
         var statusText = enable
@@ -366,8 +385,16 @@ public class TelegramBotPollingService : BackgroundService
 
         if (action == "enable")
         {
-            rule.IsActive = true;
-            await ruleRepo.UpdateAsync(rule, ct);
+            try
+            {
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
+                rule = await dispatcher.SendAsync(new ApproveCleanupRuleCommand(rule.Id), ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await AnswerCallbackQueryAsync(botToken, callbackQuery.id, ex.Message, ct);
+                return;
+            }
             alertText = $"Đã bật: {rule.RuleName}";
             confirmText = $"✅ <b>Đã kích hoạt quy tắc:</b> <code>{EscapeTelegramHtml(rule.RuleName)}</code> (<code>{shortId}</code>)\nQuy tắc này sẽ tự động xóa email khớp điều kiện trong các phiên dọn dẹp tiếp theo.";
         }

@@ -128,6 +128,20 @@ public class EmailOpsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<CleanupRule>>.Ok(rules));
     }
 
+    [HttpGet("rules/{id}/preview")]
+    public async Task<ActionResult<ApiResponse<CleanupRulePreview>>> PreviewCleanupRule(string id)
+    {
+        var preview = await _dispatcher.QueryAsync(new PreviewCleanupRuleQuery(id));
+        return Ok(ApiResponse<CleanupRulePreview>.Ok(preview));
+    }
+
+    [HttpPost("rules/{id}/approve")]
+    public async Task<ActionResult<ApiResponse<CleanupRule>>> ApproveCleanupRule(string id)
+    {
+        var rule = await _dispatcher.SendAsync(new ApproveCleanupRuleCommand(id));
+        return Ok(ApiResponse<CleanupRule>.Ok(rule));
+    }
+
     /// <summary>
     /// Create a new cleanup rule (UC01)
     /// </summary>
@@ -352,7 +366,8 @@ public class EmailOpsController : ControllerBase
             request.UseAI,
             request.AIPrompt,
             request.SubjectRegex,
-            request.BodyRegex);
+            request.BodyRegex,
+            request.SenderRegex);
         var rule = await _dispatcher.SendAsync(command);
         return Ok(ApiResponse<CleanupRule>.Ok(rule, "Đã cập nhật quy tắc."));
     }
@@ -398,6 +413,7 @@ public class UpdateCleanupRuleRequest
     public string? AIPrompt { get; set; }
     public string? SubjectRegex { get; set; }
     public string? BodyRegex { get; set; }
+    public string? SenderRegex { get; set; }
 }
 
 public class ReplyEmailRequest

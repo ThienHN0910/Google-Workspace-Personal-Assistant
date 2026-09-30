@@ -96,6 +96,32 @@ public class EmailCleanupBackgroundJobTests
     }
 
     [Fact]
+    public async Task AiRegexProposalIsSavedAsInactiveDraftOnlyOnce()
+    {
+        var reviews = Substitute.For<IRepository<CleanupReview>>();
+        reviews.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupReview, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupReview>());
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+        _ruleRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<CleanupRule>());
+        _gmailService.GetEmailsAsync(Arg.Any<string>(), 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { new() { Id = "m-proposal", From = "deals@example.com", Subject = "Sale" } });
+        _usageTracker.CanRunBackgroundAiAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _aiService.AnalyzeCleanupBatchAsync(Arg.Any<IReadOnlyList<EmailMessage>>(), Arg.Any<IReadOnlyList<CleanupFeedback>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<AICleanupDecision> { new() { EmailId = "m-proposal", Outcome = AICleanupOutcome.Trash,
+                Proposal = new AIRegexRuleSuggestion { HasPattern = true, SuggestedSenderRegex = "^deals@example\\.com$",
+                    SuggestedSubjectRegex = "Sale" } } });
+        var job = new EmailCleanupBackgroundJob(_ruleRepo, _logRepo, _actionLogRepo, _gmailService,
+            _aiService, _usageTracker, _notificationService, _logger, reviewRepo: reviews);
+
+        await job.RunAutoCleanupAsync();
+
+        await _ruleRepo.Received(1).CreateAsync(Arg.Is<CleanupRule>(x => !x.IsActive &&
+            x.ApprovalStatus == CleanupRuleApprovalStatus.Draft), Arg.Any<CancellationToken>());
+        await reviews.Received(1).CreateAsync(Arg.Is<CleanupReview>(x => x.EmailId == "m-proposal"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task VerifiedVercelFailureWithActionRequiredCanUseApprovedRule()
     {
         _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
