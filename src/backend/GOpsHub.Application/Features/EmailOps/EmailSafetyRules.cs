@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Net.Mail;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 
@@ -37,10 +38,17 @@ public static class EmailSafetyRules
     {
         if (string.IsNullOrWhiteSpace(from)) return false;
 
+        var address = GetSenderAddress(from);
+        var domain = address?.Split('@').LastOrDefault();
+        if (domain == null && !from.Contains('@') && !from.Contains('<'))
+            domain = from.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(domain)) return false;
+
         // 1. Protected bank & e-wallet domains
         foreach (var bankDomain in ProtectedBankDomains)
         {
-            if (from.Contains(bankDomain, StringComparison.OrdinalIgnoreCase))
+            if (domain.Equals(bankDomain, StringComparison.OrdinalIgnoreCase) ||
+                domain.EndsWith("." + bankDomain, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
@@ -50,15 +58,10 @@ public static class EmailSafetyRules
             foreach (var rawDomain in whitelistDomains)
             {
                 if (string.IsNullOrWhiteSpace(rawDomain)) continue;
-                var domain = rawDomain.Trim().TrimStart('@');
-                if (string.IsNullOrEmpty(domain)) continue;
+                var whitelistDomain = rawDomain.Trim().TrimStart('@');
+                if (string.IsNullOrEmpty(whitelistDomain)) continue;
 
-                // Match exact domain suffix, e.g. "foo@example.com" or "<foo@example.com>"
-                if (from.EndsWith("@" + domain, StringComparison.OrdinalIgnoreCase) ||
-                    from.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase) ||
-                    from.Contains("@" + domain + ">", StringComparison.OrdinalIgnoreCase) ||
-                    from.Contains("." + domain + ">", StringComparison.OrdinalIgnoreCase) ||
-                    from.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                if (IsDomainOrSubdomain(domain, whitelistDomain))
                 {
                     return true;
                 }
@@ -66,6 +69,31 @@ public static class EmailSafetyRules
         }
 
         return false;
+    }
+
+    public static string? GetSenderAddress(string? from)
+    {
+        if (string.IsNullOrWhiteSpace(from) || !MailAddress.TryCreate(from, out var parsed)) return null;
+        var address = parsed.Address.Trim().ToLowerInvariant();
+        return address.Contains('@') && !address.Contains(' ') ? address : null;
+    }
+
+    private static bool IsDomainOrSubdomain(string candidate, string expected) =>
+        candidate.Equals(expected, StringComparison.OrdinalIgnoreCase) ||
+        candidate.EndsWith("." + expected, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsSafeForAutomaticTrash(EmailMessage? email, IEnumerable<string>? whitelistDomains)
+    {
+        if (email == null || !IsSafeToClean(email, whitelistDomains)) return false;
+        var address = GetSenderAddress(email.From);
+        if (address == null) return false;
+
+        var subject = email.Subject ?? string.Empty;
+        const string technicalAlert = @"(?i)(failed\s+deployment|deployment\s+failed|summary\s+of\s+failures|security\s+alert|sign[- ]?in|đăng nhập|oauth|automatically\s+paused|verification|critical\s+alert)";
+        if (!Regex.IsMatch(subject, technicalAlert, RegexOptions.None, RegexTimeout)) return true;
+
+        return address == "notifications@vercel.com" &&
+               Regex.IsMatch(subject, @"(?i)\b(failed\s+deployment|deployment\s+failed)\b", RegexOptions.None, RegexTimeout);
     }
 
     /// <summary>

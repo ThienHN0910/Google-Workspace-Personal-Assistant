@@ -43,6 +43,7 @@ public class MongoDbContext
             nameof(BackupRecord) => "backup_records",
             nameof(EmailActionLog) => "email_action_logs",
             nameof(CleanupFeedback) => "cleanup_feedbacks",
+            nameof(CleanupReview) => "cleanup_reviews",
             nameof(AppConfiguration) => "appconfigurations",
             _ => typeName.ToLowerInvariant() + "s"
         };

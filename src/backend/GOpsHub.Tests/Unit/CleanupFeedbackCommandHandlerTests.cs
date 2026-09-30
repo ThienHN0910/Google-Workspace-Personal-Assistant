@@ -6,6 +6,9 @@ using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using GOpsHub.Domain.Enums;
 using Xunit;
 
 namespace GOpsHub.Tests.Unit;
@@ -16,6 +19,32 @@ public class CleanupFeedbackCommandHandlerTests
     private readonly IRepository<EmailActionLog> _actionLogRepo = Substitute.For<IRepository<EmailActionLog>>();
     private readonly IGmailService _gmailService = Substitute.For<IGmailService>();
     private readonly ILogger<SubmitCleanupFeedbackCommandHandler> _logger = Substitute.For<ILogger<SubmitCleanupFeedbackCommandHandler>>();
+
+    [Fact]
+    public void LegacyFeedbackDefaultsToTrash()
+    {
+        var oldDocument = new BsonDocument
+        {
+            { "_id", ObjectId.GenerateNewId() },
+            { "emailId", "old-message" },
+            { "reason", "Previously approved deletion" }
+        };
+
+        var feedback = BsonSerializer.Deserialize<CleanupFeedback>(oldDocument);
+        feedback.Decision.Should().Be(CleanupDecision.Trash);
+    }
+
+    [Fact]
+    public async Task FeedbackRequiresWrittenReason()
+    {
+        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _actionLogRepo, _gmailService, _logger);
+        var command = new SubmitCleanupFeedbackCommand("mail-1", "seller@example.com", "Sale", "Discount", "  ", new List<string> { "Promo" });
+
+        var act = () => handler.HandleAsync(command);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        await _gmailService.DidNotReceive().TrashEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task SubmitCleanupFeedbackCommand_ShouldCreateFeedback_TrashEmail_AndLogAction()

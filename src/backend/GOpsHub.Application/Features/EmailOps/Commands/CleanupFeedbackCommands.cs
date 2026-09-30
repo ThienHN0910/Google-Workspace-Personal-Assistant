@@ -36,6 +36,9 @@ public class SubmitCleanupFeedbackCommandHandler : ICommandHandler<SubmitCleanup
 
     public async Task<CleanupFeedback> HandleAsync(SubmitCleanupFeedbackCommand command, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(command.Reason))
+            throw new ArgumentException("A written deletion reason is required.", nameof(command));
+
         string? domain = ExtractDomain(command.Sender);
 
         var feedback = new CleanupFeedback
@@ -44,8 +47,8 @@ public class SubmitCleanupFeedbackCommandHandler : ICommandHandler<SubmitCleanup
             Sender = command.Sender,
             SenderDomain = domain,
             Subject = command.Subject,
-            Snippet = command.Snippet,
-            Reason = command.Reason,
+            Snippet = command.Snippet is { Length: > 300 } ? command.Snippet[..300] : command.Snippet,
+            Reason = command.Reason.Trim(),
             Tags = command.Tags ?? new List<string>(),
             CreatedAt = DateTime.UtcNow
         };

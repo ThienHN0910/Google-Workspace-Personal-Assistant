@@ -41,6 +41,12 @@ public class CleanupRule : BaseEntity
 
     [BsonElement("isAutoLearned")]
     public bool IsAutoLearned { get; set; }
+
+    [BsonElement("approvalStatus")]
+    public CleanupRuleApprovalStatus ApprovalStatus { get; set; } = CleanupRuleApprovalStatus.Draft;
+
+    [BsonElement("sourceFeedbackId")]
+    public string? SourceFeedbackId { get; set; }
 }
 
 /// <summary>
@@ -134,5 +140,37 @@ public class CleanupFeedback : BaseEntity
 
     [BsonElement("tags")]
     public List<string> Tags { get; set; } = new();
+
+    [BsonElement("decision")]
+    public CleanupDecision Decision { get; set; } = CleanupDecision.Trash;
+
+    [BsonElement("reviewId")]
+    public string? ReviewId { get; set; }
 }
 
+public class CleanupReview : BaseEntity
+{
+    [BsonElement("emailId")]
+    public string EmailId { get; set; } = string.Empty;
+
+    [BsonElement("status")]
+    public CleanupReviewStatus Status { get; set; } = CleanupReviewStatus.Pending;
+
+    [BsonElement("sender")]
+    public string Sender { get; set; } = string.Empty;
+
+    [BsonElement("subject")]
+    public string? Subject { get; set; }
+
+    [BsonElement("snippet")]
+    public string? Snippet { get; set; }
+
+    [BsonElement("aiReason")]
+    public string AiReason { get; set; } = string.Empty;
+
+    [BsonElement("proposedRuleId")]
+    public string? ProposedRuleId { get; set; }
+
+    [BsonElement("resolvedReason")]
+    public string? ResolvedReason { get; set; }
+}

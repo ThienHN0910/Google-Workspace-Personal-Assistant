@@ -328,4 +328,25 @@ public class EmailSafetyRulesTests
         var isSafe = EmailSafetyRules.IsSafeToClean(email, null);
         isSafe.Should().BeFalse();
     }
+
+    [Fact]
+    public void VerifiedVercelFailureMayPassTechnicalAlertGuard()
+    {
+        var email = new EmailMessage { From = "Vercel <notifications@vercel.com>", Subject = "Failed deployment for project alpha" };
+        EmailSafetyRules.IsSafeForAutomaticTrash(email, Array.Empty<string>()).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SpoofedVercelDisplayNameIsBlocked()
+    {
+        var email = new EmailMessage { From = "notifications@vercel.com <attacker@example.net>", Subject = "Failed deployment for project alpha" };
+        EmailSafetyRules.IsSafeForAutomaticTrash(email, Array.Empty<string>()).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FinancialSenderIsNeverAutoTrashed()
+    {
+        var email = new EmailMessage { From = "Bank <notice@techcombank.com.vn>", Subject = "Monthly promotion" };
+        EmailSafetyRules.IsSafeForAutomaticTrash(email, Array.Empty<string>()).Should().BeFalse();
+    }
 }
