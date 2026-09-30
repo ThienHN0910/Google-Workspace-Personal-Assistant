@@ -251,13 +251,12 @@ public class EmailOpsController : ControllerBase
     }
 
     /// <summary>
-    /// Approve an uncertain email action awaiting human confirmation (Trash or Archive)
+    /// Legacy action-log approval is retired; use reason-required cleanup reviews.
     /// </summary>
     [HttpPost("action-logs/{id}/approve")]
     public async Task<ActionResult<ApiResponse<EmailActionLog>>> ApproveEmailAction(string id, [FromBody] ApproveEmailActionRequest request)
     {
-        var updatedLog = await _dispatcher.SendAsync(new ApproveEmailActionCommand(id, request.Action ?? "Trash"));
-        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã phê duyệt và thực thi dọn dẹp email."));
+        return StatusCode(410, ApiResponse<EmailActionLog>.Fail("Use /emailops/cleanup/reviews/{id}/resolve with a written reason."));
     }
 
     /// <summary>
@@ -266,8 +265,7 @@ public class EmailOpsController : ControllerBase
     [HttpPost("action-logs/{id}/reject")]
     public async Task<ActionResult<ApiResponse<EmailActionLog>>> DismissEmailAction(string id)
     {
-        var updatedLog = await _dispatcher.SendAsync(new DismissEmailActionCommand(id));
-        return Ok(ApiResponse<EmailActionLog>.Ok(updatedLog, "Đã bỏ qua email khỏi danh sách chờ duyệt."));
+        return StatusCode(410, ApiResponse<EmailActionLog>.Fail("Use /emailops/cleanup/reviews/{id}/resolve with a written reason."));
     }
 
     /// <summary>
@@ -305,10 +303,9 @@ public class EmailOpsController : ControllerBase
     /// Batch approve or dismiss uncertain email actions awaiting human confirmation
     /// </summary>
     [HttpPost("action-logs/pending/batch-action")]
-    public async Task<ActionResult<ApiResponse<BatchPendingEmailActionResult>>> BatchPendingEmailActions([FromBody] BatchPendingEmailActionCommand command)
+    public async Task<ActionResult<ApiResponse<bool>>> BatchPendingEmailActions([FromBody] object? request)
     {
-        var result = await _dispatcher.SendAsync(command);
-        return Ok(ApiResponse<BatchPendingEmailActionResult>.Ok(result, $"Đã xử lý {result.SuccessCount}/{result.TotalRequested} email chờ duyệt."));
+        return StatusCode(410, ApiResponse<bool>.Fail("Batch legacy cleanup actions are retired; resolve each cleanup review with a reason."));
     }
 
     /// <summary>

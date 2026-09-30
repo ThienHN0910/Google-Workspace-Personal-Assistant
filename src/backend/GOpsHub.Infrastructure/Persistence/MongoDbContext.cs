@@ -33,7 +33,7 @@ public class MongoDbContext
             {
                 Unique = true,
                 Name = "ux_cleanup_feedback_review_id",
-                PartialFilterExpression = Builders<CleanupFeedback>.Filter.Ne(x => x.ReviewId, null)
+                PartialFilterExpression = new JsonFilterDefinition<CleanupFeedback>("{ reviewId: { $type: 'string' } }")
             }));
     }
 

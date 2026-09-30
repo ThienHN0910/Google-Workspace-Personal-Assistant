@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace GOpsHub.Application.Features.EmailOps.Commands;
 
-public record ResolveCleanupReviewCommand(string ReviewId, CleanupDecision Decision, string Reason) : ICommand<CleanupReview>;
+public record ResolveCleanupReviewCommand(string ReviewId, CleanupDecision Decision, string Reason,
+    List<string>? Tags = null) : ICommand<CleanupReview>;
 
 public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanupReviewCommand, CleanupReview>
 {
@@ -16,15 +17,18 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
     private readonly IRepository<EmailActionLog> _logs;
     private readonly IGmailService _gmail;
     private readonly ILogger<ResolveCleanupReviewCommandHandler> _logger;
+    private readonly IRepository<CleanupRule>? _rules;
 
     public ResolveCleanupReviewCommandHandler(ICleanupReviewStore reviews, IRepository<CleanupFeedback> feedback,
-        IRepository<EmailActionLog> logs, IGmailService gmail, ILogger<ResolveCleanupReviewCommandHandler> logger)
+        IRepository<EmailActionLog> logs, IGmailService gmail, ILogger<ResolveCleanupReviewCommandHandler> logger,
+        IRepository<CleanupRule>? rules = null)
     {
         _reviews = reviews;
         _feedback = feedback;
         _logs = logs;
         _gmail = gmail;
         _logger = logger;
+        _rules = rules;
     }
 
     public async Task<CleanupReview> HandleAsync(ResolveCleanupReviewCommand command, CancellationToken ct = default)
@@ -48,7 +52,7 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
             else if (review.Status != CleanupReviewStatus.Kept)
                 throw new InvalidOperationException("Review has a different decision.");
 
-            await EnsureFeedbackAsync(review, CleanupDecision.Keep, reason, ct);
+            await EnsureFeedbackAsync(review, CleanupDecision.Keep, reason, command.Tags, ct);
             await EnsureLogAsync(review, "Kept", reason, ct);
             return await _reviews.GetByIdAsync(review.Id, ct) ?? review;
         }
@@ -81,6 +85,8 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
         {
             if (review.UpdatedAt > DateTime.UtcNow.AddMinutes(-1))
                 throw new InvalidOperationException("Trash operation is still in progress.");
+            if (!await _reviews.TryClaimRecoveryAsync(review.Id, DateTime.UtcNow.AddMinutes(-1), ct))
+                throw new InvalidOperationException("Trash recovery was claimed concurrently.");
 
             var gmailMessage = await _gmail.GetEmailByIdAsync(review.EmailId, ct);
             if (gmailMessage == null)
@@ -91,16 +97,27 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
         else
             throw new InvalidOperationException("Review has a different decision.");
 
-        await EnsureFeedbackAsync(review, CleanupDecision.Trash, reason, ct);
+        var savedFeedback = await EnsureFeedbackAsync(review, CleanupDecision.Trash, reason, command.Tags, ct);
+        if (review.ProposedRuleId != null && _rules != null)
+        {
+            var draft = await _rules.GetByIdAsync(review.ProposedRuleId, ct);
+            if (draft is { ApprovalStatus: CleanupRuleApprovalStatus.Draft, SourceFeedbackId: null })
+            {
+                draft.SourceFeedbackId = savedFeedback.Id;
+                await _rules.UpdateAsync(draft, ct);
+            }
+        }
         await EnsureLogAsync(review, "Trashed", reason, ct);
         return await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Trashed, reason, ct);
     }
 
-    private async Task EnsureFeedbackAsync(CleanupReview review, CleanupDecision decision, string reason, CancellationToken ct)
+    private async Task<CleanupFeedback> EnsureFeedbackAsync(CleanupReview review, CleanupDecision decision, string reason,
+        List<string>? tags, CancellationToken ct)
     {
-        if (await _feedback.FindOneAsync(x => x.ReviewId == review.Id, ct) != null) return;
+        var existing = await _feedback.FindOneAsync(x => x.ReviewId == review.Id, ct);
+        if (existing != null) return existing;
         var senderDomain = SubmitCleanupFeedbackCommandHandler.ExtractDomain(review.Sender);
-        await _feedback.CreateAsync(new CleanupFeedback
+        return await _feedback.CreateAsync(new CleanupFeedback
         {
             EmailId = review.EmailId,
             ReviewId = review.Id,
@@ -109,7 +126,8 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
             Subject = review.Subject,
             Snippet = review.Snippet,
             Decision = decision,
-            Reason = reason
+            Reason = reason,
+            Tags = tags ?? new List<string>()
         }, ct);
     }
 

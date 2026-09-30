@@ -3,12 +3,13 @@ using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Enums;
 using GOpsHub.Domain.Interfaces;
+using System.Text.RegularExpressions;
 
 namespace GOpsHub.Application.Features.EmailOps.Queries;
 
 public record PreviewCleanupRuleQuery(string RuleId) : IQuery<CleanupRulePreview>;
 
-public record CleanupRulePreview(string RuleId, IReadOnlyList<CleanupRuleMatch> Matches,
+public record CleanupRulePreview(string RuleId, DateTime RuleUpdatedAt, IReadOnlyList<CleanupRuleMatch> Matches,
     IReadOnlyList<string> Blockers);
 
 public record CleanupRuleMatch(string EmailId, string Sender, string? Subject, string Source);
@@ -41,6 +42,16 @@ public class PreviewCleanupRuleQueryHandler : IQueryHandler<PreviewCleanupRuleQu
         if (string.IsNullOrWhiteSpace(rule.SenderRegex)) blockers.Add("Sender regex is required.");
         if (string.IsNullOrWhiteSpace(rule.SubjectRegex)) blockers.Add("Sender-only rule is too broad.");
         if (IsMatchAny(rule.SenderRegex)) blockers.Add("Match-any sender regex is forbidden.");
+        if (!string.IsNullOrWhiteSpace(rule.SenderRegex) &&
+            !IsExactMailboxPattern(rule.SenderRegex))
+            blockers.Add("Sender regex must match one exact mailbox.");
+        if (IsExactMailboxPattern(rule.SenderRegex))
+        {
+            var address = rule.SenderRegex!.Replace("(?i)", "", StringComparison.OrdinalIgnoreCase)
+                .TrimStart('^').TrimEnd('$').Replace(@"\.", ".");
+            if (EmailSafetyRules.IsProtectedSender(address, null))
+                blockers.Add("Protected financial sender cannot be approved.");
+        }
         if (IsMatchAny(rule.SubjectRegex)) blockers.Add("Match-any subject regex is forbidden.");
         if (!EmailSafetyRules.IsValidRegex(rule.SenderRegex) ||
             !EmailSafetyRules.IsValidRegex(rule.SubjectRegex) ||
@@ -57,7 +68,7 @@ public class PreviewCleanupRuleQueryHandler : IQueryHandler<PreviewCleanupRuleQu
 
         if (blockers.Any(x => x is "Invalid regex." or "Match-any sender regex is forbidden." or
                 "Match-any subject regex is forbidden."))
-            return new CleanupRulePreview(rule.Id, matches, blockers);
+            return new CleanupRulePreview(rule.Id, rule.UpdatedAt, matches, blockers);
 
         var feedback = await _feedback.GetAllAsync(ct);
         foreach (var sample in feedback.Where(x => x.Decision == CleanupDecision.Keep))
@@ -88,12 +99,21 @@ public class PreviewCleanupRuleQueryHandler : IQueryHandler<PreviewCleanupRuleQu
             if (!EmailSafetyRules.IsSafeForAutomaticTrash(email, rule.WhitelistDomains))
                 blockers.Add("Rule matches a protected sender or alert.");
         }
-        return new CleanupRulePreview(rule.Id, matches.Take(20).ToList(), blockers.Distinct().ToList());
+        return new CleanupRulePreview(rule.Id, rule.UpdatedAt, matches.Take(20).ToList(), blockers.Distinct().ToList());
     }
 
     private static bool IsMatchAny(string? pattern) =>
         pattern?.Trim().Replace("(?i)", "", StringComparison.OrdinalIgnoreCase) is
             ".*" or "^.*$" or ".+" or "^.+$";
+
+    private static bool IsExactMailboxPattern(string? pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var normalized = pattern.Replace("(?i)", "", StringComparison.OrdinalIgnoreCase);
+        return Regex.IsMatch(normalized,
+            @"^\^[a-z0-9._-]+@[a-z0-9-]+(?:\\\.[a-z0-9-]+)+\$$",
+            RegexOptions.IgnoreCase, EmailSafetyRules.RegexTimeout);
+    }
 
     private static void AddMatch(List<CleanupRuleMatch> matches, EmailMessage email, string source)
     {

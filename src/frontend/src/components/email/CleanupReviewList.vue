@@ -16,13 +16,15 @@
       <p v-if="review.snippet" class="review-snippet">{{ review.snippet }}</p>
       <p v-if="review.aiReason" class="review-ai">AI gợi ý: {{ review.aiReason }}</p>
       <p v-if="review.proposedRuleId" class="review-ai">Có bản nháp regex {{ review.proposedRuleId }} đang tắt, chờ duyệt riêng.</p>
+      <p v-if="review.status === 1" class="review-ai">Thao tác Xóa đang được đối soát. Bạn có thể thử lại sau một phút.</p>
+      <p v-if="review.status === 3" class="review-ai">Email đã được chọn Giữ. Hãy lưu lại lý do nếu lần trước bị gián đoạn.</p>
       <label :for="`reason-${review.id}`">Lý do của bạn</label>
       <textarea :id="`reason-${review.id}`" v-model="reasons[review.id]" rows="2"
         placeholder="Ví dụ: Tôi luôn kiểm tra lại bản triển khai trên production" maxlength="1000" />
       <div class="review-actions">
-        <button type="button" class="trash" :disabled="busyId === review.id || !reasons[review.id]?.trim()"
+        <button v-if="review.status !== 3" type="button" class="trash" :disabled="busyId === review.id || !reasons[review.id]?.trim()"
           @click="resolve(review, 0)">Chuyển vào Thùng rác</button>
-        <button type="button" :disabled="busyId === review.id || !reasons[review.id]?.trim()"
+        <button v-if="review.status !== 1" type="button" :disabled="busyId === review.id || !reasons[review.id]?.trim()"
           @click="resolve(review, 1)">Giữ trong Inbox</button>
       </div>
     </div>
@@ -47,6 +49,8 @@ interface CleanupReview {
   snippet?: string;
   aiReason?: string;
   proposedRuleId?: string;
+  status: number;
+  resolvedReason?: string;
 }
 
 const reviews = ref<CleanupReview[]>([]);
@@ -65,6 +69,10 @@ async function load() {
     const res: any = await api.get('/emailops/cleanup/reviews', { params: { page: page.value, pageSize } });
     reviews.value = res.data?.items || [];
     totalCount.value = res.data?.totalCount || 0;
+    for (const review of reviews.value) {
+      if (!reasons.value[review.id] && review.resolvedReason)
+        reasons.value[review.id] = review.resolvedReason;
+    }
   } catch (err: any) {
     error.value = err.message || 'Không thể tải email chờ duyệt.';
   } finally {
@@ -78,6 +86,7 @@ async function goTo(nextPage: number) {
 }
 
 async function resolve(review: CleanupReview, decision: 0 | 1) {
+  if ((review.status === 3 && decision !== 1) || (review.status === 1 && decision !== 0)) return;
   const reason = reasons.value[review.id]?.trim();
   if (!reason) return;
   busyId.value = review.id;

@@ -36,6 +36,7 @@ public static class DependencyInjection
         // Repositories
         services.AddScoped(typeof(IRepository<>), typeof(MongoRepository<>));
         services.AddScoped<ICleanupReviewStore, MongoCleanupReviewStore>();
+        services.AddScoped<ICleanupRuleApprovalStore, MongoCleanupRuleApprovalStore>();
 
         // Security Services
         services.AddScoped<IGoogleAuthService, GoogleAuthService>();

@@ -1,7 +1,7 @@
 using FluentAssertions;
-using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Application.Features.EmailOps.Queries;
+using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
 using GOpsHub.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -16,9 +16,9 @@ namespace GOpsHub.Tests.Unit;
 public class CleanupFeedbackCommandHandlerTests
 {
     private readonly IRepository<CleanupFeedback> _feedbackRepo = Substitute.For<IRepository<CleanupFeedback>>();
-    private readonly IRepository<EmailActionLog> _actionLogRepo = Substitute.For<IRepository<EmailActionLog>>();
-    private readonly IGmailService _gmailService = Substitute.For<IGmailService>();
-    private readonly ILogger<SubmitCleanupFeedbackCommandHandler> _logger = Substitute.For<ILogger<SubmitCleanupFeedbackCommandHandler>>();
+    private readonly IRepository<CleanupReview> _reviews = Substitute.For<IRepository<CleanupReview>>();
+    private readonly GOpsHub.Application.Common.CQRS.ICommandHandler<ResolveCleanupReviewCommand, CleanupReview> _resolver =
+        Substitute.For<GOpsHub.Application.Common.CQRS.ICommandHandler<ResolveCleanupReviewCommand, CleanupReview>>();
 
     [Fact]
     public void LegacyFeedbackDefaultsToTrash()
@@ -37,13 +37,13 @@ public class CleanupFeedbackCommandHandlerTests
     [Fact]
     public async Task FeedbackRequiresWrittenReason()
     {
-        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _actionLogRepo, _gmailService, _logger);
+        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _reviews, _resolver);
         var command = new SubmitCleanupFeedbackCommand("mail-1", "seller@example.com", "Sale", "Discount", "  ", new List<string> { "Promo" });
 
         var act = () => handler.HandleAsync(command);
 
         await act.Should().ThrowAsync<ArgumentException>();
-        await _gmailService.DidNotReceive().TrashEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _resolver.DidNotReceiveWithAnyArgs().HandleAsync(default!, default);
     }
 
     [Fact]
@@ -59,10 +59,15 @@ public class CleanupFeedbackCommandHandlerTests
             Tags: new List<string> { "Quảng cáo / Khuyến mãi" }
         );
 
-        _feedbackRepo.CreateAsync(Arg.Any<CleanupFeedback>(), Arg.Any<CancellationToken>())
-            .Returns(args => args.Arg<CleanupFeedback>());
+        var review = new CleanupReview { Id = "review-001", EmailId = "msg-001", Status = CleanupReviewStatus.Pending };
+        _reviews.CreateAsync(Arg.Any<CleanupReview>(), Arg.Any<CancellationToken>()).Returns(review);
+        var feedback = new CleanupFeedback { EmailId = "msg-001", ReviewId = review.Id,
+            Sender = command.Sender, SenderDomain = "shopee.vn", Subject = command.Subject,
+            Reason = command.Reason, Tags = command.Tags! };
+        _feedbackRepo.FindOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupFeedback, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(feedback);
 
-        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _actionLogRepo, _gmailService, _logger);
+        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _reviews, _resolver);
 
         // Act
         var result = await handler.HandleAsync(command);
@@ -76,16 +81,32 @@ public class CleanupFeedbackCommandHandlerTests
         result.Reason.Should().Be("Quảng cáo lặp đi lặp lại không bao giờ mua");
         result.Tags.Should().Contain("Quảng cáo / Khuyến mãi");
 
-        await _feedbackRepo.Received(1).CreateAsync(Arg.Is<CleanupFeedback>(f =>
-            f.EmailId == "msg-001" &&
-            f.SenderDomain == "shopee.vn"), Arg.Any<CancellationToken>());
+        await _resolver.Received(1).HandleAsync(Arg.Is<ResolveCleanupReviewCommand>(x =>
+            x.ReviewId == "review-001" && x.Decision == CleanupDecision.Trash && x.Reason == command.Reason),
+            Arg.Any<CancellationToken>());
+    }
 
-        await _gmailService.Received(1).TrashEmailAsync("msg-001", Arg.Any<CancellationToken>());
+    [Fact]
+    public async Task GmailFailureDoesNotPersistManualTrashPreference()
+    {
+        var review = new CleanupReview { Id = "r-failed", EmailId = "m-failed", Status = CleanupReviewStatus.Pending };
+        var store = Substitute.For<ICleanupReviewStore>();
+        var logs = Substitute.For<IRepository<EmailActionLog>>();
+        var gmail = Substitute.For<IGmailService>();
+        _reviews.CreateAsync(Arg.Any<CleanupReview>(), Arg.Any<CancellationToken>()).Returns(review);
+        store.GetByIdAsync(review.Id, Arg.Any<CancellationToken>()).Returns(review);
+        store.TryClaimTrashAsync(review.Id, Arg.Any<CancellationToken>()).Returns(true);
+        gmail.TrashEmailAsync(review.EmailId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new IOException("Gmail failed")));
+        var resolver = new ResolveCleanupReviewCommandHandler(store, _feedbackRepo, logs, gmail,
+            Substitute.For<ILogger<ResolveCleanupReviewCommandHandler>>());
+        var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _reviews, resolver);
 
-        await _actionLogRepo.Received(1).CreateAsync(Arg.Is<EmailActionLog>(l =>
-            l.EmailId == "msg-001" &&
-            l.Action == "UserTaughtTrash" &&
-            l.Reason.Contains("Quảng cáo / Khuyến mãi")), Arg.Any<CancellationToken>());
+        await FluentActions.Invoking(() => handler.HandleAsync(new SubmitCleanupFeedbackCommand(
+            "m-failed", "news@example.com", "Sale", "Snippet", "Not useful", null)))
+            .Should().ThrowAsync<IOException>();
+
+        await _feedbackRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!, default);
     }
 
     [Fact]

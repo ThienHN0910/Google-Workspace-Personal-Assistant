@@ -60,16 +60,26 @@ public class EmailCleanupBackgroundJob
             return result;
         }
 
-        var pending = _reviews == null
+        var protectedReviews = _reviews == null
             ? Array.Empty<CleanupReview>()
             : (await _reviews.FindAsync(x => x.Status == CleanupReviewStatus.Pending ||
-                x.Status == CleanupReviewStatus.ProcessingTrash, ct)).ToArray();
-        var pendingIds = pending.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
+                x.Status == CleanupReviewStatus.ProcessingTrash ||
+                x.Status == CleanupReviewStatus.Kept, ct)).ToArray();
+        var pendingIds = protectedReviews.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
         var feedback = _feedback == null
             ? Array.Empty<CleanupFeedback>()
             : (await _feedback.GetAllAsync(ct)).ToArray();
         var keepIds = feedback.Where(x => x.Decision == CleanupDecision.Keep)
             .Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
+        var applicableRules = activeRules.Where(rule => !feedback.Any(sample =>
+            sample.Decision == CleanupDecision.Keep &&
+            EmailSafetyRules.IsEmailMatchingRegex(new EmailMessage
+            {
+                From = sample.Sender,
+                Subject = sample.Subject ?? string.Empty,
+                Snippet = sample.Snippet ?? string.Empty
+            }, rule))).ToList();
+        result.RulesExecuted = applicableRules.Count;
         var whitelist = activeRules.SelectMany(x => x.WhitelistDomains ?? new List<string>()).Distinct().ToArray();
         var urgentLogs = await _actions.FindAsync(x => x.Action == "UrgentNotified", ct);
         var notifiedIds = urgentLogs.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
@@ -89,7 +99,7 @@ public class EmailCleanupBackgroundJob
             }
             if (!EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist)) continue;
 
-            var rule = activeRules.FirstOrDefault(x => EmailSafetyRules.IsEmailMatchingRegex(email, x));
+            var rule = applicableRules.FirstOrDefault(x => EmailSafetyRules.IsEmailMatchingRegex(email, x));
             if (rule != null)
             {
                 await TrashAndLogAsync(email, $"RegexMatched: Rule '{rule.RuleName}'", sessionId, ct);

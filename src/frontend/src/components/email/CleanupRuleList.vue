@@ -186,6 +186,11 @@
         <div class="card-body">
           <div v-if="rule.sourceFeedbackId" class="detail-item">
             <div class="detail-label">Ví dụ nguồn: {{ rule.sourceFeedbackId }}</div>
+            <div v-if="findSourceFeedback(rule.sourceFeedbackId)" class="code-block">
+              {{ findSourceFeedback(rule.sourceFeedbackId)?.sender }} ·
+              {{ findSourceFeedback(rule.sourceFeedbackId)?.subject }} ·
+              Lý do: {{ findSourceFeedback(rule.sourceFeedbackId)?.reason }}
+            </div>
           </div>
           <!-- Legacy settings remain visible for audit but do not run in cleanup. -->
           <div v-if="rule.useAI" class="detail-item ai-item">
@@ -424,6 +429,8 @@ const filteredFeedbacks = computed(() => {
     (f.tags && f.tags.some((t: string) => t.toLowerCase().includes(q)))
   );
 });
+
+const findSourceFeedback = (id: string) => feedbacks.value.find(f => f.id === id);
 
 const filteredRules = computed(() => {
   return rules.value.filter(rule => {

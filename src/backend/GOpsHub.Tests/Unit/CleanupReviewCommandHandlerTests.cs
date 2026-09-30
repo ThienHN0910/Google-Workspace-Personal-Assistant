@@ -73,6 +73,7 @@ public class CleanupReviewCommandHandlerTests
     {
         var review = new CleanupReview { Id = "r4", EmailId = "m4", Status = CleanupReviewStatus.ProcessingTrash, UpdatedAt = DateTime.UtcNow.AddMinutes(-5) };
         _store.GetByIdAsync("r4", Arg.Any<CancellationToken>()).Returns(review);
+        _store.TryClaimRecoveryAsync("r4", Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         _gmail.GetEmailByIdAsync("m4", Arg.Any<CancellationToken>())
             .Returns(new EmailMessage { Id = "m4", Labels = new List<string> { "TRASH" } });
         _store.CompleteAsync("r4", CleanupReviewStatus.Trashed, "Old reason", Arg.Any<CancellationToken>()).Returns(review);
@@ -81,6 +82,21 @@ public class CleanupReviewCommandHandlerTests
 
         await _gmail.DidNotReceive().TrashEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _store.Received(1).CompleteAsync("r4", CleanupReviewStatus.Trashed, "Old reason", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConcurrentStaleRecoveryCannotCallGmail()
+    {
+        var review = new CleanupReview { Id = "r-stale", EmailId = "m-stale",
+            Status = CleanupReviewStatus.ProcessingTrash, UpdatedAt = DateTime.UtcNow.AddMinutes(-5) };
+        _store.GetByIdAsync("r-stale", Arg.Any<CancellationToken>()).Returns(review);
+        _store.TryClaimRecoveryAsync("r-stale", Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await FluentActions.Invoking(() => Handler().HandleAsync(
+            new ResolveCleanupReviewCommand("r-stale", CleanupDecision.Trash, "Retry")))
+            .Should().ThrowAsync<InvalidOperationException>();
+
+        await _gmail.DidNotReceiveWithAnyArgs().TrashEmailAsync(default!, default);
     }
 
     [Fact]

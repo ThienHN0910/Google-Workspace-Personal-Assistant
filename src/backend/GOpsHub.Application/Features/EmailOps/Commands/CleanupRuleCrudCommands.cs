@@ -96,10 +96,11 @@ public class ToggleCleanupRuleCommandHandler : ICommandHandler<ToggleCleanupRule
 
     public ToggleCleanupRuleCommandHandler(IRepository<CleanupRule> ruleRepo,
         IRepository<CleanupFeedback> feedback, IRepository<CleanupReview> reviews,
-        GOpsHub.Application.Common.Interfaces.IGmailService gmail)
+        GOpsHub.Application.Common.Interfaces.IGmailService gmail,
+        GOpsHub.Application.Common.Interfaces.ICleanupRuleApprovalStore approvalStore)
     {
         _ruleRepo = ruleRepo;
-        _approver = new ApproveCleanupRuleCommandHandler(ruleRepo, feedback, reviews, gmail);
+        _approver = new ApproveCleanupRuleCommandHandler(ruleRepo, feedback, reviews, gmail, approvalStore);
     }
 
     public async Task<CleanupRule> HandleAsync(ToggleCleanupRuleCommand command, CancellationToken ct = default)
@@ -123,13 +124,16 @@ public class ApproveCleanupRuleCommandHandler : ICommandHandler<ApproveCleanupRu
 {
     private readonly IRepository<CleanupRule> _rules;
     private readonly PreviewCleanupRuleQueryHandler _preview;
+    private readonly GOpsHub.Application.Common.Interfaces.ICleanupRuleApprovalStore _approvalStore;
 
     public ApproveCleanupRuleCommandHandler(IRepository<CleanupRule> rules,
         IRepository<CleanupFeedback> feedback, IRepository<CleanupReview> reviews,
-        GOpsHub.Application.Common.Interfaces.IGmailService gmail)
+        GOpsHub.Application.Common.Interfaces.IGmailService gmail,
+        GOpsHub.Application.Common.Interfaces.ICleanupRuleApprovalStore approvalStore)
     {
         _rules = rules;
         _preview = new PreviewCleanupRuleQueryHandler(rules, feedback, reviews, gmail);
+        _approvalStore = approvalStore;
     }
 
     public async Task<CleanupRule> HandleAsync(ApproveCleanupRuleCommand command,
@@ -140,9 +144,9 @@ public class ApproveCleanupRuleCommandHandler : ICommandHandler<ApproveCleanupRu
             throw new InvalidOperationException(string.Join(" ", preview.Blockers));
         var rule = await _rules.GetByIdAsync(command.RuleId, ct)
             ?? throw new KeyNotFoundException($"Cleanup rule {command.RuleId} not found.");
-        rule.ApprovalStatus = CleanupRuleApprovalStatus.Approved;
-        rule.IsActive = true;
-        await _rules.UpdateAsync(rule, ct);
-        return rule;
+        if (rule.UpdatedAt != preview.RuleUpdatedAt)
+            throw new InvalidOperationException("Rule changed after preview; preview it again.");
+        return await _approvalStore.TryApproveAsync(rule, ct)
+            ?? throw new InvalidOperationException("Rule changed concurrently; preview it again.");
     }
 }

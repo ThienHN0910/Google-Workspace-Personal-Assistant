@@ -94,7 +94,7 @@ public static class EmailSafetyRules
             Regex.IsMatch(subject, @"(?i)\b(failed\s+deployment|deployment\s+failed)\b",
                 RegexOptions.None, RegexTimeout);
         if (IsUrgentActionRequired(email) && !verifiedVercelFailure) return false;
-        const string technicalAlert = @"(?i)(failed\s+deployment|deployment\s+failed|summary\s+of\s+failures|security\s+alert|sign[- ]?in|đăng nhập|oauth|automatically\s+paused|verification|critical\s+alert)";
+        const string technicalAlert = @"(?i)(failed\s+deployment|deployment\s+failed|summary\s+of\s+failures|security\s+alert|sign[- ]?in|đăng nhập|oauth|automatically\s+paused|verification|critical\s+alert|\b(run|workflow|build|ci|pipeline|test|job|deploy(?:ment)?)\s+failed\b|\bfailed\s+(run|workflow|build|ci|pipeline|test|job|deploy(?:ment)?)\b|\b(outage|incident)\b)";
         if (!Regex.IsMatch(subject, technicalAlert, RegexOptions.None, RegexTimeout)) return true;
 
         return verifiedVercelFailure;

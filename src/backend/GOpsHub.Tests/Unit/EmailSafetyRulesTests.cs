@@ -18,6 +18,14 @@ public class EmailSafetyRulesTests
         EmailSafetyRules.IsEmailMatchingRegex(new EmailMessage { From = "Vercel notifications@vercel.com <attacker@example.com>",
             Subject = "Failed deployment for alpha" }, rule).Should().BeFalse();
     }
+
+    [Fact]
+    public void GithubWorkflowFailureCannotBeAutoTrashed()
+    {
+        var email = new EmailMessage { From = "notifications@github.com",
+            Subject = "[repo] Run failed: CI - main" };
+        EmailSafetyRules.IsSafeForAutomaticTrash(email, Array.Empty<string>()).Should().BeFalse();
+    }
     [Theory]
     [InlineData("customercare@vpb.com.vn")]
     [InlineData("no-reply@vietcombank.com.vn")]

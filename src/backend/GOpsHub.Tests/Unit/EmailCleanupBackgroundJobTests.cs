@@ -96,6 +96,26 @@ public class EmailCleanupBackgroundJobTests
     }
 
     [Fact]
+    public async Task KeptReviewProtectsEmailEvenIfFeedbackWriteFailed()
+    {
+        var reviews = Substitute.For<IRepository<CleanupReview>>();
+        reviews.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupReview, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new List<CleanupReview> { new() { EmailId = "m-kept", Status = CleanupReviewStatus.Kept } }
+                .Where(call.ArgAt<System.Linq.Expressions.Expression<Func<CleanupReview, bool>>>(0).Compile()).ToList());
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule> { new() { SenderRegex = "team@example.com", SubjectRegex = "Sale",
+                IsActive = true, ApprovalStatus = CleanupRuleApprovalStatus.Approved } });
+        _gmailService.GetEmailsAsync(Arg.Any<string>(), 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { new() { Id = "m-kept", From = "team@example.com", Subject = "Sale" } });
+        var job = new EmailCleanupBackgroundJob(_ruleRepo, _logRepo, _actionLogRepo, _gmailService,
+            _aiService, _usageTracker, _notificationService, _logger, reviewRepo: reviews);
+
+        await job.RunAutoCleanupAsync();
+
+        await _gmailService.DidNotReceive().TrashEmailAsync("m-kept", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AiRegexProposalIsSavedAsInactiveDraftOnlyOnce()
     {
         var reviews = Substitute.For<IRepository<CleanupReview>>();
@@ -158,6 +178,28 @@ public class EmailCleanupBackgroundJobTests
         await job.RunAutoCleanupAsync();
 
         await _gmailService.DidNotReceive().TrashEmailAsync("new-mail", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task KeepPreferenceMatchingRuleBlocksOtherSubjectsCoveredByThatRule()
+    {
+        var feedback = Substitute.For<IRepository<CleanupFeedback>>();
+        feedback.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<CleanupFeedback>
+        {
+            new() { EmailId = "old", Sender = "team@example.com", Subject = "Weekly report 1",
+                Decision = CleanupDecision.Keep, Reason = "Need weekly reports" }
+        });
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule> { new() { SenderRegex = "^team@example\\.com$", SubjectRegex = "Weekly report",
+                IsActive = true, ApprovalStatus = CleanupRuleApprovalStatus.Approved } });
+        _gmailService.GetEmailsAsync(Arg.Any<string>(), 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { new() { Id = "new", From = "team@example.com", Subject = "Weekly report 2" } });
+        var job = new EmailCleanupBackgroundJob(_ruleRepo, _logRepo, _actionLogRepo, _gmailService,
+            _aiService, _usageTracker, _notificationService, _logger, feedback);
+
+        await job.RunAutoCleanupAsync();
+
+        await _gmailService.DidNotReceive().TrashEmailAsync("new", Arg.Any<CancellationToken>());
     }
 
     private EmailCleanupBackgroundJob CreateJob()

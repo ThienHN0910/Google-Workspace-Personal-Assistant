@@ -21,6 +21,14 @@ public class MongoCleanupReviewStore : ICleanupReviewStore
         return await _collection.FindOneAndUpdateAsync(filter, update, cancellationToken: ct) != null;
     }
 
+    public async Task<bool> TryClaimRecoveryAsync(string reviewId, DateTime olderThan, CancellationToken ct = default)
+    {
+        var filter = Builders<CleanupReview>.Filter.Where(x => x.Id == reviewId &&
+            x.Status == CleanupReviewStatus.ProcessingTrash && x.UpdatedAt < olderThan);
+        var update = Builders<CleanupReview>.Update.Set(x => x.UpdatedAt, DateTime.UtcNow);
+        return await _collection.FindOneAndUpdateAsync(filter, update, cancellationToken: ct) != null;
+    }
+
     public async Task<bool> TryKeepAsync(string reviewId, string reason, CancellationToken ct = default)
     {
         var filter = Builders<CleanupReview>.Filter.Where(x => x.Id == reviewId && x.Status == CleanupReviewStatus.Pending);
