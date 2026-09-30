@@ -1,7 +1,7 @@
 # Email cleanup with durable user preferences
 
 Date: 2026-09-30
-Status: Awaiting review of the written spec
+Status: Approved by owner on 2026-09-30
 
 ## Purpose
 
