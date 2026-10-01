@@ -51,7 +51,7 @@ public class CreateCleanupRuleCommandHandler : ICommandHandler<CreateCleanupRule
     }
 }
 
-public record RunCleanupCommand(string? RuleId = null) : ICommand<CleanupLogResult>;
+public record RunCleanupCommand(string? RuleId = null, bool RunAsync = false) : ICommand<CleanupLogResult>;
 
 public class CleanupLogResult
 {
@@ -61,19 +61,35 @@ public class CleanupLogResult
     public int TotalArchived { get; set; }
     public int TotalSkipped { get; set; }
     public long TotalDurationMs { get; set; }
+    public string? Details { get; set; }
 }
 
 public class RunCleanupCommandHandler : ICommandHandler<RunCleanupCommand, CleanupLogResult>
 {
     private readonly EmailCleanupBackgroundJob _cleanupJob;
+    private readonly Hangfire.IRecurringJobManager? _recurringJobManager;
 
-    public RunCleanupCommandHandler(EmailCleanupBackgroundJob cleanupJob)
+    public RunCleanupCommandHandler(
+        EmailCleanupBackgroundJob cleanupJob,
+        Hangfire.IRecurringJobManager? recurringJobManager = null)
     {
         _cleanupJob = cleanupJob;
+        _recurringJobManager = recurringJobManager;
     }
 
     public async Task<CleanupLogResult> HandleAsync(RunCleanupCommand command, CancellationToken ct = default)
     {
+        if (command.RunAsync && _recurringJobManager != null)
+        {
+            _recurringJobManager.Trigger("email-cleanup");
+            return new CleanupLogResult
+            {
+                TotalProcessed = 0,
+                TotalTrashed = 0,
+                Details = "BackgroundJobTriggered: email-cleanup"
+            };
+        }
+
         return await _cleanupJob.RunAutoCleanupAsync(ct);
     }
 }

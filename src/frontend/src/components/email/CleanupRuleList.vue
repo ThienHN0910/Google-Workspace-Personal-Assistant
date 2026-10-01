@@ -462,13 +462,17 @@ const filteredRules = computed(() => {
 const handleRunAll = async () => {
   runningCleanup.value = true;
   try {
-    const res: any = await api.post('/emailops/rules/run', {});
+    const res: any = await api.post('/emailops/rules/run', { runAsync: true });
     if (res.success) {
-      alert(`✅ Dọn dẹp Inbox hoàn tất!\n• Đã chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Thời gian: ${res.data.totalDurationMs}ms`);
+      if (res.data?.details?.includes('BackgroundJobTriggered')) {
+        alert('🚀 Đã kích hoạt tác vụ dọn dẹp ngầm thành công!\nHệ thống đang quét dọn trong nền và sẽ gửi thông báo đến bạn khi hoàn tất.');
+      } else {
+        alert(`✅ Dọn dẹp Inbox hoàn tất!\n• Đã chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Thời gian: ${res.data.totalDurationMs}ms`);
+      }
       fetchRules();
     }
-  } catch (e) {
-    alert('Lỗi thực thi quy tắc dọn dẹp inbox');
+  } catch (e: any) {
+    alert(e?.response?.data?.message || 'Lỗi thực thi quy tắc dọn dẹp inbox');
   } finally {
     runningCleanup.value = false;
   }

@@ -333,4 +333,50 @@ public class EmailCleanupBackgroundJobTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task RunAutoCleanupAsync_WhenEmailMatchesSavedTrashPreference_ShouldTrashImmediatelyEvenIfAlert()
+    {
+        // Arrange: User explicitly saved a preference to trash Google Security Alerts
+        var feedback = Substitute.For<IRepository<CleanupFeedback>>();
+        feedback.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<CleanupFeedback>
+        {
+            new()
+            {
+                Id = "f-google-trash",
+                Sender = "Google <no-reply@accounts.google.com>",
+                Subject = "Security alert for thienhnde180443@fpt.edu.vn",
+                Reason = "Thông báo tự động vô ích",
+                Decision = CleanupDecision.Trash
+            }
+        });
+
+        _ruleRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CleanupRule, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CleanupRule>());
+
+        var candidate = new EmailMessage
+        {
+            Id = "google-alert-1",
+            From = "Google <no-reply@accounts.google.com>",
+            Subject = "Security alert for another-account@fpt.edu.vn",
+            Snippet = "A new sign-in was detected",
+            IsRead = false
+        };
+
+        _gmailService.GetEmailsAsync("is:unread in:inbox -is:starred", 100, Arg.Any<CancellationToken>())
+            .Returns(new List<EmailMessage> { candidate });
+
+        var job = new EmailCleanupBackgroundJob(
+            _ruleRepo, _logRepo, _actionLogRepo, _gmailService,
+            _aiService, _usageTracker, _notificationService, _logger, feedback);
+
+        // Act
+        var result = await job.RunAutoCleanupAsync();
+
+        // Assert: User preference overrides default alert protection, trashes immediately!
+        result.TotalTrashed.Should().Be(1);
+        await _gmailService.Received(1).TrashEmailAsync("google-alert-1", Arg.Any<CancellationToken>());
+        await _actionLogRepo.Received(1).CreateAsync(
+            Arg.Is<EmailActionLog>(l => l.EmailId == "google-alert-1" && l.Action == "Trashed" && l.Reason.Contains("Thông báo tự động vô ích")),
+            Arg.Any<CancellationToken>());
+    }
 }

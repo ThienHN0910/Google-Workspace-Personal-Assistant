@@ -156,10 +156,14 @@ public class EmailOpsController : ControllerBase
     /// Trigger manual email cleanup (UC01)
     /// </summary>
     [HttpPost("rules/run")]
-    public async Task<ActionResult<ApiResponse<CleanupLogResult>>> RunCleanup([FromBody] RunCleanupCommand command)
+    public async Task<ActionResult<ApiResponse<CleanupLogResult>>> RunCleanup([FromBody] RunCleanupCommand? command)
     {
-        var result = await _dispatcher.SendAsync(command);
-        return Ok(ApiResponse<CleanupLogResult>.Ok(result, "Đã thực thi quy tắc dọn dẹp inbox."));
+        var cmd = command ?? new RunCleanupCommand(RunAsync: true);
+        var result = await _dispatcher.SendAsync(cmd);
+        var message = result.Details?.StartsWith("BackgroundJobTriggered") == true
+            ? "Đã kích hoạt tác vụ dọn dẹp ngầm thành công. Hệ thống đang quét dọn và sẽ gửi thông báo khi hoàn tất."
+            : "Đã thực thi quy tắc dọn dẹp inbox.";
+        return Ok(ApiResponse<CleanupLogResult>.Ok(result, message));
     }
 
     /// <summary>
