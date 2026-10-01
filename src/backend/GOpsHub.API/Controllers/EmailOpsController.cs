@@ -196,9 +196,9 @@ public class EmailOpsController : ControllerBase
     {
         var result = await _dispatcher.SendAsync(new DeleteCleanupFeedbackCommand(id), ct);
         if (!result)
-            return NotFound(ApiResponse<bool>.Fail("Không tìm thấy mẫu phản hồi để xóa."));
+            return NotFound(ApiResponse<bool>.Fail("Không tìm thấy lý do dọn dẹp để xóa."));
 
-        return Ok(ApiResponse<bool>.Ok(true, "Đã xóa mẫu phản hồi dạy AI."));
+        return Ok(ApiResponse<bool>.Ok(true, "Đã xóa lý do dọn dẹp đã lưu."));
     }
 
     /// <summary>

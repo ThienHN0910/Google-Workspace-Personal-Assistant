@@ -98,8 +98,12 @@
             <div class="fb-sender-group">
               <span class="fb-sender">{{ fb.sender }}</span>
               <span v-if="fb.senderDomain" class="fb-domain-badge">@{{ fb.senderDomain }}</span>
+              <span class="fb-decision-badge" :class="fb.decision === 1 ? 'badge-keep' : 'badge-trash'">
+                <i class="pi" :class="fb.decision === 1 ? 'pi-shield' : 'pi-trash'"></i>
+                {{ fb.decision === 1 ? 'Giữ trong Inbox' : 'Chuyển vào Thùng rác' }}
+              </span>
             </div>
-            <button class="btn-delete-fb" @click="handleDeleteFeedback(fb.id)" title="Xóa mẫu dạy này">
+            <button class="btn-delete-fb" @click="handleDeleteFeedback(fb.id)" title="Xóa lý do dọn dẹp này">
               <i class="pi pi-trash"></i>
             </button>
           </div>
@@ -383,12 +387,12 @@ const fetchFeedbacks = async () => {
 };
 
 const handleDeleteFeedback = async (id: string) => {
-  if (confirm('Bạn có chắc muốn xóa mẫu dạy AI này không?')) {
+  if (confirm('Bạn có chắc muốn xóa lý do dọn dẹp đã lưu này không?')) {
     try {
       await api.delete(`/emailops/cleanup/feedback/${id}`);
       feedbacks.value = feedbacks.value.filter(f => f.id !== id);
     } catch (e) {
-      alert('Lỗi khi xóa mẫu feedback');
+      alert('Lỗi khi xóa lý do dọn dẹp đã lưu');
     }
   }
 };
@@ -1282,6 +1286,29 @@ onMounted(() => {
   padding: 0.1rem 0.4rem;
   border-radius: 6px;
   white-space: nowrap;
+}
+
+.fb-decision-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+
+  &.badge-keep {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+  }
+
+  &.badge-trash {
+    background: rgba(244, 63, 94, 0.15);
+    border: 1px solid rgba(244, 63, 94, 0.35);
+    color: #fda4af;
+  }
 }
 
 .btn-delete-fb {
