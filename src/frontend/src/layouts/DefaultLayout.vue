@@ -64,6 +64,10 @@
           <i class="pi pi-shield"></i>
           <span>Drive Guard</span>
         </router-link>
+        <router-link to="/background-jobs" class="nav-item" @click="closeDrawer">
+          <i class="pi pi-server"></i>
+          <span>Tác vụ chạy ngầm</span>
+        </router-link>
         <router-link to="/settings" class="nav-item" @click="closeDrawer">
           <i class="pi pi-cog"></i>
           <span>Cài đặt hệ thống</span>

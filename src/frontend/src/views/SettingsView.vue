@@ -623,9 +623,9 @@ const pendingTargetTab = ref('');
 
 const form = ref({
   // Jobs
-  driveGuardIntervalMinutes: 50,
-  bankTelemetryIntervalMinutes: 30,
-  emailCleanupIntervalHours: 12,
+  driveGuardIntervalMinutes: 120,
+  bankTelemetryIntervalMinutes: 120,
+  emailCleanupIntervalHours: 2,
   calendarExtractorIntervalHours: 2,
   bulkDeleteThreshold: 3,
 

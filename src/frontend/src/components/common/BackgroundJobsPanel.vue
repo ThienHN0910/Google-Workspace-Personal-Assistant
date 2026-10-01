@@ -5,9 +5,15 @@
         <i class="pi pi-bolt"></i>
         <h3>Trung tâm Tác vụ Chạy ngầm (Background Automation Hub)</h3>
       </div>
-      <button class="btn-refresh" @click="fetchJobs" :disabled="loading" title="Làm mới trạng thái">
-        <i class="pi" :class="loading ? 'pi-spin pi-spinner' : 'pi-refresh'"></i>
-      </button>
+      <div class="header-actions">
+        <router-link to="/background-jobs" class="btn-view-all-jobs" title="Xem trang quản lý và lịch sử chạy ngầm chi tiết">
+          <i class="pi pi-external-link"></i>
+          <span>Chi tiết & Lịch sử</span>
+        </router-link>
+        <button class="btn-refresh" @click="fetchJobs" :disabled="loading" title="Làm mới trạng thái">
+          <i class="pi" :class="loading ? 'pi-spin pi-spinner' : 'pi-refresh'"></i>
+        </button>
+      </div>
     </div>
 
     <div v-if="loading && jobs.length === 0" class="panel-loading">
@@ -188,6 +194,32 @@ onMounted(() => {
         font-weight: 700;
         color: #f8fafc;
         margin: 0;
+      }
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .btn-view-all-jobs {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.35rem;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #c7d2fe;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+
+      &:hover {
+        background: rgba(99, 102, 241, 0.25);
+        color: #fff;
       }
     }
 

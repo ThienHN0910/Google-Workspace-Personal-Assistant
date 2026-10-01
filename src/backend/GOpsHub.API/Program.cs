@@ -125,33 +125,33 @@ using (var scope = app.Services.CreateScope())
         
         var config = configRepo.FindOneAsync(c => c.Key == "DriveGuardIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult()
             ?? configRepo.FindOneAsync(c => c.Key == "DriveGuardInterval", CancellationToken.None).GetAwaiter().GetResult();
-        var driveInterval = config != null && int.TryParse(config.Value, out int min) ? min : 50;
+        var driveInterval = config != null && int.TryParse(config.Value, out int min) ? min : 120;
 
         var bankConfig = configRepo.FindOneAsync(c => c.Key == "BankTelemetryIntervalMinutes", CancellationToken.None).GetAwaiter().GetResult();
-        var bankInterval = bankConfig != null && int.TryParse(bankConfig.Value, out int bMin) ? bMin : 30;
+        var bankInterval = bankConfig != null && int.TryParse(bankConfig.Value, out int bMin) ? bMin : 120;
 
         var emailConfig = configRepo.FindOneAsync(c => c.Key == "EmailCleanupIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
-        var emailInterval = emailConfig != null && int.TryParse(emailConfig.Value, out int eHr) ? eHr : 12;
+        var emailInterval = emailConfig != null && int.TryParse(emailConfig.Value, out int eHr) ? eHr : 2;
 
         var calConfig = configRepo.FindOneAsync(c => c.Key == "CalendarExtractorIntervalHours", CancellationToken.None).GetAwaiter().GetResult();
         var calInterval = calConfig != null && int.TryParse(calConfig.Value, out int cHr) ? cHr : 2;
 
-        var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(driveInterval, defaultMinutes: 50);
-        var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(bankInterval, defaultMinutes: 30);
-        var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(emailInterval, defaultHours: 12);
+        var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(driveInterval, defaultMinutes: 120);
+        var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(bankInterval, defaultMinutes: 120);
+        var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(emailInterval, defaultHours: 2);
         var calCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(calInterval, defaultHours: 2);
 
-        // 1. Drive Guard Audit Job (UC05 & UC06)
+        // 1. Drive Guard Audit Job (UC05 & UC06 - Default: Every 2 hours)
         SafeAddOrUpdateJob<GOpsHub.Application.Features.DriveGuard.DriveGuardBackgroundJob>(
-            recurringJobManager, "drive-guard-audit", job => job.RunAuditAsync(CancellationToken.None), driveCron, "*/50 * * * *");
+            recurringJobManager, "drive-guard-audit", job => job.RunAuditAsync(CancellationToken.None), driveCron, "0 */2 * * *");
 
-        // 2. Automated Inbox Zero Cleanup Job (UC01 - Default: Every 12 hours)
+        // 2. Automated Inbox Zero Cleanup Job (UC01 - Default: Every 2 hours)
         SafeAddOrUpdateJob<GOpsHub.Application.Features.EmailOps.EmailCleanupBackgroundJob>(
-            recurringJobManager, "email-cleanup", job => job.RunAutoCleanupAsync(CancellationToken.None), emailCron, "0 */12 * * *");
+            recurringJobManager, "email-cleanup", job => job.RunAutoCleanupAsync(CancellationToken.None), emailCron, "0 */2 * * *");
 
-        // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Default: Every 30 minutes)
+        // 3. Automated Bank Telemetry & Sheets Sync Job (UC04 - Default: Every 2 hours)
         SafeAddOrUpdateJob<GOpsHub.Application.Features.Finance.BankTelemetryBackgroundJob>(
-            recurringJobManager, "bank-telemetry", job => job.RunTelemetryAsync(CancellationToken.None), bankCron, "*/30 * * * *");
+            recurringJobManager, "bank-telemetry", job => job.RunTelemetryAsync(CancellationToken.None), bankCron, "0 */2 * * *");
 
         // 4. Smart Calendar Schedule Extractor Job (UC03 - Default: Every 2 hours)
         SafeAddOrUpdateJob<GOpsHub.Application.Features.Scheduling.CalendarScheduleBackgroundJob>(

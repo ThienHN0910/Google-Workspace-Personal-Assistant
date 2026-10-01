@@ -16,9 +16,9 @@ namespace GOpsHub.Application.Features.Settings;
 public class SystemSettingsDto
 {
     // 1. Chu kỳ tác vụ ngầm & Ngưỡng an ninh
-    public int DriveGuardIntervalMinutes { get; set; } = 50;
-    public int BankTelemetryIntervalMinutes { get; set; } = 30;
-    public int EmailCleanupIntervalHours { get; set; } = 12;
+    public int DriveGuardIntervalMinutes { get; set; } = 120;
+    public int BankTelemetryIntervalMinutes { get; set; } = 120;
+    public int EmailCleanupIntervalHours { get; set; } = 2;
     public int CalendarExtractorIntervalHours { get; set; } = 2;
     public int BulkDeleteThreshold { get; set; } = 3;
 
@@ -232,9 +232,9 @@ public static class HangfireJobRescheduler
     {
         try
         {
-            var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.DriveGuardIntervalMinutes, defaultMinutes: 50);
-            var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.BankTelemetryIntervalMinutes, defaultMinutes: 30);
-            var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.EmailCleanupIntervalHours, defaultHours: 12);
+            var driveCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.DriveGuardIntervalMinutes, defaultMinutes: 120);
+            var bankCron = GOpsHub.Application.Common.CronScheduleHelper.FromMinutes(s.BankTelemetryIntervalMinutes, defaultMinutes: 120);
+            var emailCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.EmailCleanupIntervalHours, defaultHours: 2);
             var calCron = GOpsHub.Application.Common.CronScheduleHelper.FromHours(s.CalendarExtractorIntervalHours, defaultHours: 2);
 
             recurringJobManager.AddOrUpdate<DriveGuardBackgroundJob>(

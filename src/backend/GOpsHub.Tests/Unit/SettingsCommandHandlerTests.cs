@@ -19,6 +19,17 @@ public class SettingsCommandHandlerTests
     private readonly ILogger<UpdateSystemSettingsCommandHandler> _logger = Substitute.For<ILogger<UpdateSystemSettingsCommandHandler>>();
 
     [Fact]
+    public void SystemSettingsDto_ShouldDefaultAllJobsToTwoHours()
+    {
+        var dto = new SystemSettingsDto();
+
+        dto.DriveGuardIntervalMinutes.Should().Be(120);
+        dto.BankTelemetryIntervalMinutes.Should().Be(120);
+        dto.EmailCleanupIntervalHours.Should().Be(2);
+        dto.CalendarExtractorIntervalHours.Should().Be(2);
+    }
+
+    [Fact]
     public async Task GetSystemSettingsQuery_ShouldReturnPopulatedDto()
     {
         // Arrange
