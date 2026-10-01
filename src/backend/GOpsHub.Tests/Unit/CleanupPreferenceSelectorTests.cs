@@ -26,7 +26,7 @@ public class CleanupPreferenceSelectorTests
     }
 
     [Fact]
-    public void ChangedProjectInSubjectCannotAutoTrashEvenWithCitedPreference()
+    public void ChangedProjectInSubjectCanAutoTrashWhenFromSameSenderWithCitedPreference()
     {
         var candidate = new EmailMessage { From = "notifications@vercel.com", Subject = "Failed deployment for beta" };
         var cited = new CleanupFeedback { Id = "a", Sender = "notifications@vercel.com", Subject = "Failed deployment for alpha",
@@ -35,7 +35,82 @@ public class CleanupPreferenceSelectorTests
             FeedbackIds = new List<string> { "a" } };
 
         CleanupPreferenceSelector.CanAutoTrashKnownType(candidate, ai, new[] { cited }, Array.Empty<CleanupFeedback>())
-            .Should().BeFalse();
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void FindMatchingTrash_WhenSenderMatchesTrashPreference_ShouldReturnPreference()
+    {
+        var candidate = new EmailMessage { From = "Google <no-reply@accounts.google.com>", Subject = "Security alert for another-account@gmail.com" };
+        var savedTrash = new CleanupFeedback
+        {
+            Id = "f-google",
+            Sender = "Google <no-reply@accounts.google.com>",
+            Subject = "Security alert for original@gmail.com",
+            Decision = CleanupDecision.Trash,
+            Reason = "Thông báo tự động vô ích"
+        };
+
+        var match = CleanupPreferenceSelector.FindMatchingTrash(candidate, new[] { savedTrash });
+        match.Should().NotBeNull();
+        match!.Id.Should().Be("f-google");
+    }
+
+    [Fact]
+    public void FindMatchingTrash_WhenDomainMatchesCustomDomain_ShouldReturnPreference()
+    {
+        var candidate = new EmailMessage { From = "WorkBridge System <alerts@workbridge.io.vn>", Subject = "Ca làm mới ngày 10/10" };
+        var savedTrash = new CleanupFeedback
+        {
+            Id = "f-wb",
+            Sender = "noreply@workbridge.io.vn",
+            SenderDomain = "workbridge.io.vn",
+            Decision = CleanupDecision.Trash,
+            Reason = "Dự án cũ không cần nhận thông báo"
+        };
+
+        var match = CleanupPreferenceSelector.FindMatchingTrash(candidate, new[] { savedTrash });
+        match.Should().NotBeNull();
+        match!.Id.Should().Be("f-wb");
+    }
+
+    [Fact]
+    public void FindMatchingTrash_WhenBankSender_ShouldNeverMatch()
+    {
+        var candidate = new EmailMessage { From = "VPBank <customercare@vpb.com.vn>", Subject = "Biến động số dư" };
+        var savedTrash = new CleanupFeedback
+        {
+            Id = "f-bank",
+            Sender = "customercare@vpb.com.vn",
+            Decision = CleanupDecision.Trash,
+            Reason = "Spam"
+        };
+
+        var match = CleanupPreferenceSelector.FindMatchingTrash(candidate, new[] { savedTrash });
+        match.Should().BeNull();
+    }
+
+    [Fact]
+    public void FindMatchingTrash_WhenConflictingKeepPreferenceExists_ShouldReturnNull()
+    {
+        var candidate = new EmailMessage { From = "support@appflowy.io", Subject = "Important account recovery" };
+        var savedTrash = new CleanupFeedback
+        {
+            Id = "f-trash",
+            Sender = "support@appflowy.io",
+            Subject = "AppFlowy Update",
+            Decision = CleanupDecision.Trash
+        };
+        var savedKeep = new CleanupFeedback
+        {
+            Id = "f-keep",
+            Sender = "support@appflowy.io",
+            Subject = "Important account recovery",
+            Decision = CleanupDecision.Keep
+        };
+
+        var match = CleanupPreferenceSelector.FindMatchingTrash(candidate, new[] { savedTrash, savedKeep });
+        match.Should().BeNull();
     }
 
     [Fact]

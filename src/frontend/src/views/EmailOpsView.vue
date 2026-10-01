@@ -25,6 +25,11 @@
           <i class="pi pi-inbox"></i>
           <span>Hộp thư đến</span>
         </button>
+        <button :class="{ active: activeTab === 'reviews' }" @click="activeTab = 'reviews'">
+          <i class="pi pi-shield"></i>
+          <span>Chờ duyệt dọn dẹp</span>
+          <span v-if="pendingReviewsCount > 0" class="tab-badge-amber">{{ pendingReviewsCount }}</span>
+        </button>
         <button :class="{ active: activeTab === 'drafts' }" @click="activeTab = 'drafts'">
           <i class="pi pi-sparkles"></i>
           <span>Bản nháp AI chờ duyệt</span>
@@ -130,7 +135,12 @@
       <InfiniteScrollObserver v-if="!selectedEmail" :loading="loading" :has-more="!!nextPageToken" @load-more="loadMore" />
     </div>
 
-    <!-- Tab 2: Cleanup Rules -->
+    <!-- Tab 2: Cleanup Reviews (UC01) -->
+    <div v-else-if="activeTab === 'reviews'" class="tab-content">
+      <CleanupReviewList @count-change="handleReviewsCountChange" />
+    </div>
+
+    <!-- Tab 3: Cleanup Rules -->
     <div v-else-if="activeTab === 'rules'" class="tab-content">
       <CleanupRuleList />
     </div>
@@ -228,6 +238,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import { showToast } from '@/services/notification.service';
 
 // Lazy loading heavy components
+const CleanupReviewList = defineAsyncComponent(() => import('@/components/email/CleanupReviewList.vue'));
 const CleanupRuleList = defineAsyncComponent(() => import('@/components/email/CleanupRuleList.vue'));
 const Editor = defineAsyncComponent(() => import('primevue/editor'));
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
@@ -235,6 +246,23 @@ const DraftReviewCard = defineAsyncComponent(() => import('@/components/email/Dr
 const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
 const EmailActionLogList = defineAsyncComponent(() => import('@/components/email/EmailActionLogList.vue'));
 const TeachAiCleanupModal = defineAsyncComponent(() => import('@/components/email/TeachAiCleanupModal.vue'));
+
+const pendingReviewsCount = ref(0);
+
+const fetchPendingReviewsCount = async () => {
+  try {
+    const res: any = await api.get('/emailops/cleanup/reviews?page=1&pageSize=1');
+    if (res.success && res.data) {
+      pendingReviewsCount.value = res.data.totalCount || 0;
+    }
+  } catch (err) {
+    console.error('Failed to fetch pending reviews count:', err);
+  }
+};
+
+const handleReviewsCountChange = (count: number) => {
+  pendingReviewsCount.value = count;
+};
 
 const showTeachModal = ref(false);
 const teachEmailTarget = ref<any>(null);
@@ -541,6 +569,7 @@ const loadMoreLogs = () => {
 
 watch(activeTab, (newTab) => {
   if (newTab === 'inbox' && emails.value.length === 0) fetchInbox();
+  if (newTab === 'reviews') fetchPendingReviewsCount();
   if (newTab === 'drafts') fetchPendingDrafts();
   if (newTab === 'logs' && cleanupLogs.value.length === 0) fetchLogs(1);
 });
@@ -548,6 +577,7 @@ watch(activeTab, (newTab) => {
 onMounted(() => {
   fetchInbox();
   fetchPendingDrafts();
+  fetchPendingReviewsCount();
 });
 </script>
 
@@ -700,6 +730,16 @@ onMounted(() => {
         background: rgba(139, 92, 246, 0.2);
         border: 1px solid rgba(139, 92, 246, 0.4);
         color: #c084fc;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.45rem;
+        border-radius: 9999px;
+        font-weight: 700;
+      }
+
+      .tab-badge-amber {
+        background: rgba(245, 158, 11, 0.2);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        color: #fbbf24;
         font-size: 0.7rem;
         padding: 0.1rem 0.45rem;
         border-radius: 9999px;

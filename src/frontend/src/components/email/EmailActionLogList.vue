@@ -1,6 +1,5 @@
 <template>
   <div class="action-logs-container">
-    <CleanupReviewList />
     <!-- Filters & Action Bar -->
     <div class="logs-toolbar">
       <div class="filter-pills">
@@ -194,7 +193,6 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
-import CleanupReviewList from './CleanupReviewList.vue';
 import { showToast } from '@/services/notification.service';
 
 interface EmailActionLog {

@@ -90,6 +90,19 @@ public class EmailCleanupBackgroundJob
             if (pendingIds.Contains(email.Id) || keepIds.Contains(email.Id) ||
                 CleanupPreferenceSelector.HasMatchingKeep(email, feedback)) continue;
 
+            // 1. Bank domains and whitelisted domains are ALWAYS protected
+            if (EmailSafetyRules.IsProtectedSender(email.From, whitelist)) continue;
+
+            // 2. USER SAVED PREFERENCE: Highest priority override!
+            var matchingTrashPref = CleanupPreferenceSelector.FindMatchingTrash(email, feedback);
+            if (matchingTrashPref != null)
+            {
+                await TrashAndLogAsync(email, $"SavedPreference: {matchingTrashPref.Reason}", sessionId, ct);
+                result.TotalTrashed++;
+                continue;
+            }
+
+            // 3. Urgent action required (only for emails WITHOUT a saved trash preference)
             if (EmailSafetyRules.IsUrgentActionRequired(email) &&
                 !EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist))
             {
@@ -97,17 +110,24 @@ public class EmailCleanupBackgroundJob
                     await NotifyUrgentAsync(email, sessionId, ct);
                 continue;
             }
-            if (!EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist)) continue;
 
+            // 4. Active Regex rules
             var rule = applicableRules.FirstOrDefault(x => EmailSafetyRules.IsEmailMatchingRegex(email, x));
             if (rule != null)
             {
-                await TrashAndLogAsync(email, $"RegexMatched: Rule '{rule.RuleName}'", sessionId, ct);
-                result.TotalTrashed++;
-                continue;
+                if (EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist))
+                {
+                    await TrashAndLogAsync(email, $"RegexMatched: Rule '{rule.RuleName}'", sessionId, ct);
+                    result.TotalTrashed++;
+                    continue;
+                }
             }
 
-            remaining.Add(email);
+            // 5. Eligible for AI cleanup analysis
+            if (EmailSafetyRules.IsSafeToClean(email, whitelist))
+            {
+                remaining.Add(email);
+            }
         }
 
         if (remaining.Count > 0 && await _usage.CanRunBackgroundAiAsync(ct))
@@ -123,11 +143,15 @@ public class EmailCleanupBackgroundJob
                 {
                     if (!byId.TryGetValue(email.Id, out var decision)) continue;
                     if (decision.Outcome == AICleanupOutcome.Keep) continue;
-                    if (decision.Outcome == AICleanupOutcome.Trash &&
+
+                    var matchingTrash = CleanupPreferenceSelector.FindMatchingTrash(email, feedback);
+                    bool isKnownType = matchingTrash != null ||
                         CleanupPreferenceSelector.CanAutoTrashKnownType(email, decision,
                             examples.Where(x => decision.FeedbackIds.Contains(x.Id)).ToList(),
-                            feedback.Where(x => x.Decision == CleanupDecision.Keep).ToList()) &&
-                        EmailSafetyRules.IsSafeForAutomaticTrash(email, whitelist))
+                            feedback.Where(x => x.Decision == CleanupDecision.Keep).ToList());
+
+                    if (decision.Outcome == AICleanupOutcome.Trash && isKnownType &&
+                        !EmailSafetyRules.IsProtectedSender(email.From, whitelist))
                     {
                         await TrashAndLogAsync(email, $"AiKnownPreference: {decision.Reason}", sessionId, ct);
                         result.TotalTrashed++;
@@ -149,20 +173,22 @@ public class EmailCleanupBackgroundJob
         result.TotalSkipped = Math.Max(0, result.TotalProcessed - result.TotalTrashed);
         result.TotalArchived = 0;
         result.TotalDurationMs = watch.ElapsedMilliseconds;
+
+        await _runs.CreateAsync(new CleanupLog
+        {
+            RuleName = "AutoCleanupBackgroundJob",
+            SessionId = sessionId,
+            ExecutedAt = DateTime.UtcNow,
+            TotalProcessed = result.TotalProcessed,
+            TotalTrashed = result.TotalTrashed,
+            TotalArchived = 0,
+            TotalSkipped = result.TotalSkipped,
+            DurationMs = result.TotalDurationMs,
+            Details = $"{result.TotalTrashed} moved to Trash, {result.TotalSkipped} skipped"
+        }, ct);
+
         if (result.TotalTrashed > 0)
         {
-            await _runs.CreateAsync(new CleanupLog
-            {
-                RuleName = "AutoCleanupBackgroundJob",
-                SessionId = sessionId,
-                ExecutedAt = DateTime.UtcNow,
-                TotalProcessed = result.TotalProcessed,
-                TotalTrashed = result.TotalTrashed,
-                TotalArchived = 0,
-                TotalSkipped = result.TotalSkipped,
-                DurationMs = result.TotalDurationMs,
-                Details = $"{result.TotalTrashed} moved to Trash"
-            }, ct);
             await _notifications.SendNotificationAsync("Dọn dẹp Inbox hoàn tất",
                 $"Đã chuyển {result.TotalTrashed} email vào Thùng rác.", "info", ct);
         }
