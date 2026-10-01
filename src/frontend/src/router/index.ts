@@ -86,6 +86,12 @@ const routes = [
         meta: { title: 'DriveGuard Bảo Mật' },
       },
       {
+        path: 'background-jobs',
+        name: 'BackgroundJobs',
+        component: () => import('@/views/BackgroundJobsView.vue'),
+        meta: { title: 'Tác Vụ Chạy Ngầm & Giám Sát' },
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),
