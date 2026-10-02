@@ -224,9 +224,23 @@
             <div v-if="item.location"><i class="pi pi-map-marker"></i> {{ item.location }}</div>
             <div class="source"><i class="pi pi-envelope"></i> Nguồn: {{ item.sourceEmailSubject }}</div>
           </div>
-          <div class="actions" v-if="item.status !== 2">
-            <button class="confirm-btn" @click="handleConfirmExtracted(item.id)">
+          <div class="actions">
+            <button 
+              v-if="item.status !== 2" 
+              class="confirm-btn" 
+              @click="handleConfirmExtracted(item.id)"
+              :disabled="actionInProgressId === item.id"
+            >
               <i class="pi pi-check"></i> Xác nhận & Đồng bộ Calendar
+            </button>
+            <button 
+              class="delete-btn" 
+              :class="{ 'delete-btn-ghost': item.status === 2 }"
+              @click="handleDeleteExtracted(item.id, item.status === 2)"
+              :disabled="actionInProgressId === item.id"
+              :title="item.status === 2 ? 'Xóa bản ghi trích xuất khỏi database (không xóa trên Google Calendar)' : 'Từ chối lịch hẹn và xóa khỏi database'"
+            >
+              <i class="pi pi-trash"></i> {{ item.status === 2 ? 'Xóa bản ghi (Dọn nhẹ DB)' : 'Xóa / Từ chối' }}
             </button>
           </div>
         </div>
@@ -976,7 +990,10 @@ const loadMoreExtracted = () => {
   }
 };
 
+const actionInProgressId = ref<string | null>(null);
+
 const handleConfirmExtracted = async (id: string) => {
+  actionInProgressId.value = id;
   try {
     const res: any = await api.post(`/scheduling/${id}/confirm`);
     if (res.success) {
@@ -995,6 +1012,43 @@ const handleConfirmExtracted = async (id: string) => {
       summary: 'Lỗi',
       detail: 'Không thể xác nhận sự kiện.',
     });
+  } finally {
+    actionInProgressId.value = null;
+  }
+};
+
+const handleDeleteExtracted = async (id: string, isConfirmed: boolean) => {
+  const confirmMsg = isConfirmed
+    ? 'Bạn có chắc chắn muốn xóa bản ghi trích xuất này khỏi cơ sở dữ liệu để làm nhẹ DB? (Sự kiện đã đồng bộ lên Google Calendar vẫn được giữ nguyên).'
+    : 'Bạn có chắc chắn muốn xóa lịch hẹn này khỏi hệ thống? (Lịch hẹn sẽ bị hủy bỏ và không đưa lên Google Calendar).';
+
+  if (!confirm(confirmMsg)) return;
+
+  actionInProgressId.value = id;
+  try {
+    const res: any = await api.delete(`/scheduling/${id}`);
+    if (res.success) {
+      showToast({
+        severity: 'info',
+        summary: 'Đã xóa',
+        detail: 'Đã xóa lịch trích xuất thành công.',
+      });
+      extractedSchedules.value = extractedSchedules.value.filter(s => s.id !== id);
+    } else {
+      showToast({
+        severity: 'error',
+        summary: 'Lỗi xóa',
+        detail: res.message || 'Không thể xóa lịch trích xuất.',
+      });
+    }
+  } catch (e: any) {
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi hệ thống',
+      detail: e.message || 'Không thể xóa lịch trích xuất.',
+    });
+  } finally {
+    actionInProgressId.value = null;
   }
 };
 
@@ -1738,6 +1792,11 @@ onMounted(async () => {
 
   .actions {
     margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+
     .confirm-btn {
       background: #10b981;
       color: #fff;
@@ -1750,7 +1809,56 @@ onMounted(async () => {
       display: flex;
       align-items: center;
       gap: 0.4rem;
-      &:hover { background: #059669; }
+      transition: background-color 0.2s ease, transform 0.15s ease;
+
+      &:hover:not(:disabled) {
+        background: #059669;
+        transform: translate3d(0, -1px, 0);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+
+    .delete-btn {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      padding: 0.5rem 0.9rem;
+      border-radius: 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+
+      &:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.85);
+        color: #ffffff;
+        border-color: #ef4444;
+        transform: translate3d(0, -1px, 0);
+      }
+
+      &.delete-btn-ghost {
+        background: rgba(148, 163, 184, 0.08);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+
+        &:hover:not(:disabled) {
+          background: rgba(239, 68, 68, 0.2);
+          color: #fca5a5;
+          border-color: rgba(239, 68, 68, 0.4);
+        }
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
     }
   }
 }
