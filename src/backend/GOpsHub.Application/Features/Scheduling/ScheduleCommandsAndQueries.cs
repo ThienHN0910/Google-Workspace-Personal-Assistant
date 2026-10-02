@@ -87,6 +87,28 @@ public class ConfirmScheduleCommandHandler : ICommandHandler<ConfirmScheduleComm
     }
 }
 
+public record DeleteExtractedScheduleCommand(string ScheduleId) : ICommand<bool>;
+
+public class DeleteExtractedScheduleCommandHandler : ICommandHandler<DeleteExtractedScheduleCommand, bool>
+{
+    private readonly IRepository<ExtractedSchedule> _scheduleRepo;
+
+    public DeleteExtractedScheduleCommandHandler(IRepository<ExtractedSchedule> scheduleRepo)
+    {
+        _scheduleRepo = scheduleRepo;
+    }
+
+    public async Task<bool> HandleAsync(DeleteExtractedScheduleCommand command, CancellationToken ct = default)
+    {
+        var schedule = await _scheduleRepo.GetByIdAsync(command.ScheduleId, ct);
+        if (schedule == null)
+            throw new KeyNotFoundException($"Extracted schedule {command.ScheduleId} not found.");
+
+        await _scheduleRepo.DeleteAsync(command.ScheduleId, ct);
+        return true;
+    }
+}
+
 public record GetSchedulesQuery(int Page = 1, int PageSize = 10) : IQuery<PagedResult<ExtractedSchedule>>;
 
 public class GetSchedulesQueryHandler : IQueryHandler<GetSchedulesQuery, PagedResult<ExtractedSchedule>>

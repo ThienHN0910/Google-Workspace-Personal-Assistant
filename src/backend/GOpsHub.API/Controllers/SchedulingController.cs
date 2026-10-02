@@ -56,6 +56,16 @@ public class SchedulingController : ControllerBase
     }
 
     /// <summary>
+    /// Delete an extracted schedule from database (UC03)
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteSchedule(string id)
+    {
+        var result = await _dispatcher.SendAsync(new DeleteExtractedScheduleCommand(id));
+        return Ok(ApiResponse<bool>.Ok(result, "Đã xóa lịch trích xuất thành công."));
+    }
+
+    /// <summary>
     /// Get all user calendars (UC03)
     /// </summary>
     [HttpGet("calendars")]
