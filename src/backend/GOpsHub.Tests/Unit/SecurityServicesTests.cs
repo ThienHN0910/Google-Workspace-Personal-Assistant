@@ -78,4 +78,23 @@ public class SecurityServicesTests
 
         decrypted.Should().Be("my-secret-refresh-token");
     }
+
+    [Fact]
+    public void TokenValidationParameters_InitializesWithoutAssemblyResolutionFailure()
+    {
+        var key = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes("TestSigningKeyForJwtValidation32CharsLong!"));
+        var parameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = "gopshub",
+            ValidAudience = "gopshub-client",
+            IssuerSigningKey = key
+        };
+
+        parameters.IssuerSigningKey.Should().Be(key);
+        parameters.ValidIssuer.Should().Be("gopshub");
+    }
 }

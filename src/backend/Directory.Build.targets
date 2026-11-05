@@ -9,12 +9,12 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0' and Exists('$(MSBuildThisFileDirectory)GOpsHub.API\bin\Debug\net8.0\MongoDB.Driver.dll')">
     <Reference Include="$(MSBuildThisFileDirectory)GOpsHub.API\bin\Debug\net8.0\*.dll"
                Exclude="$(MSBuildThisFileDirectory)GOpsHub.API\bin\Debug\net8.0\GOpsHub.*.dll">
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
     <Reference Include="$(MSBuildThisFileDirectory)GOpsHub.Tests\bin\Debug\net8.0\*.dll"
                Exclude="$(MSBuildThisFileDirectory)GOpsHub.Tests\bin\Debug\net8.0\GOpsHub.*.dll"
                Condition="'$(MSBuildProjectName)' == 'GOpsHub.Tests'">
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 </Project>
