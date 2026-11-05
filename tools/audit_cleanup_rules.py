@@ -12,39 +12,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-VERCEL_RULE_ID = "6a9c0458c31984a2b041a780"
+# Load reviewed snapshot from versioned JSON
+_SNAPSHOT_FILE = Path(__file__).parent / "cleanup_rules_snapshot.json"
+with open(_SNAPSHOT_FILE, "r", encoding="utf-8") as _f:
+    _SNAPSHOT = json.load(_f)
+
+VERCEL_RULE_ID = _SNAPSHOT["vercelRuleId"]
 VERCEL_SENDER = r"^notifications@vercel\.com$"
 VERCEL_SUBJECT = r"(?i)\b(failed\s+deployment|deployment\s+failed)\b"
 
-# Explicit allowlist after review of each of the 42 rules on 2026-09-30.
-SAFE_RULE_IDS = frozenset("""
-6a9cad26c31984a2b041a9c1 6a9d1da2c31984a2b041ab27
-6a9e8b3da3732a399a5e3f9d 6a9ed187a3732a399a5e4051
-6aa02312b92e21a21ca63734 6aa2396dab16f33ebf6c0f89
-6aa45dd5ab16f33ebf6c1a93 6aa7c5b6c47cd974e7b37463
-6aa8d0e0c47cd974e7b37917 6aaaf564c47cd974e7b380ee
-6aac46d8c47cd974e7b38589 6aafaeb4c47cd974e7b38f35
-6ab0b9e3c47cd974e7b39335 6ab3e9b71a5b7b674ef86b7c
-6ab413ca1a5b7b674ef872ee 6ab4ca81ff57085e6fc6ebd4
-6ab557339f4a7a84ad7a59ab 6ab5814b9f4a7a84ad7a5efa
-6ab77b94573221b4d8f44b66 6ab7c231573221b4d8f4551d
-""".split())
+# Explicit allowlist after review of each of the 42 rules
+SAFE_RULE_IDS = frozenset(_SNAPSHOT["safeRuleIds"])
 
 # Account, login, security, broad cross-service, match-any, and ambiguous
 # technical/social rules remain stored for rollback but cannot auto-trash.
-DISABLE_RULE_IDS = frozenset("""
-6aa1bad0b92e21a21ca63da2 6aa41795ab16f33ebf6c19a1
-6aa56910c47cd974e7b36a7b 6aa6743ac47cd974e7b36f64
-6aa88a90c47cd974e7b37824 6aa9a3d6c47cd974e7b37be2
-6ab421cc1a5b7b674ef87440 6ab45a001a5b7b674ef87976
-6ab4cef8f336a2b0fba89be0 6ab4cef9f336a2b0fba89be1
-6ab556d79f4a7a84ad7a5887 6ab5570a9f4a7a84ad7a5935
-6ab69a929f4a7a84ad7a7d98 6ab7de06573221b4d8f45abb
-6ab8245e573221b4d8f463bf 6ab9ae0e573221b4d8f48d32
-6ab9f46a573221b4d8f49571 6aba1e90573221b4d8f499a4
-6abaff9c573221b4d8f4b357 6abb53ee573221b4d8f4bd99
-6abbd288573221b4d8f4cae7
-""".split())
+DISABLE_RULE_IDS = frozenset(_SNAPSHOT["disableRuleIds"])
 
 EXPECTED_RULE_IDS = SAFE_RULE_IDS | DISABLE_RULE_IDS | {VERCEL_RULE_ID}
 BACKUP_FIELDS = ("action", "isActive", "approvalStatus", "senderRegex",

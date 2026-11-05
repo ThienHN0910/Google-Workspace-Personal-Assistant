@@ -66,9 +66,19 @@ public class EmailCleanupBackgroundJob
                 x.Status == CleanupReviewStatus.ProcessingTrash ||
                 x.Status == CleanupReviewStatus.Kept, ct)).ToArray();
         var pendingIds = protectedReviews.Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
-        var feedback = _feedback == null
-            ? Array.Empty<CleanupFeedback>()
-            : (await _feedback.GetAllAsync(ct)).ToArray();
+        var cutoff = DateTime.UtcNow.AddDays(-90);
+        var feedbackList = _feedback == null
+            ? (IReadOnlyList<CleanupFeedback>)Array.Empty<CleanupFeedback>()
+            : await _feedback.FindAsync(x => x.CreatedAt >= cutoff, ct);
+        if (feedbackList.Count == 0 && _feedback != null)
+        {
+            var all = await _feedback.GetAllAsync(ct);
+            if (all.Count > 0)
+            {
+                feedbackList = all.Where(x => x.CreatedAt >= cutoff).ToList();
+            }
+        }
+        var feedback = feedbackList.ToArray();
         var keepIds = feedback.Where(x => x.Decision == CleanupDecision.Keep)
             .Select(x => x.EmailId).ToHashSet(StringComparer.Ordinal);
         var applicableRules = activeRules.Where(rule => !feedback.Any(sample =>

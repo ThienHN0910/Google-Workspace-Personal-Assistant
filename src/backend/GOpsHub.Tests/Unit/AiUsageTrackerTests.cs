@@ -50,13 +50,12 @@ public class AiUsageTrackerTests
     }
 
     [Fact]
-    public async Task CanRunBackgroundAiAsync_ShouldAlwaysReturnTrue_AsMonthlyQuotaIsRemoved()
+    public async Task CanRunBackgroundAiAsync_WhenUnderQuota_ShouldReturnTrue()
     {
-        // Arrange: even if tokens exceed previous 250k limit
         var record = new AiTokenUsageMonthly
         {
             YearMonth = DateTime.UtcNow.ToString("yyyy-MM"),
-            TotalTokens = 999_999,
+            TotalTokens = 150_000,
             MonthlyQuotaLimit = 250_000
         };
 
@@ -65,10 +64,48 @@ public class AiUsageTrackerTests
 
         var tracker = new AiUsageTracker(_usageRepo, _notificationService, _logger, _configRepo);
 
-        // Act
         var canRun = await tracker.CanRunBackgroundAiAsync();
 
-        // Assert: Never blocked by monthly token count
+        canRun.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CanRunBackgroundAiAsync_WhenExceedsQuota_ShouldReturnFalse()
+    {
+        var record = new AiTokenUsageMonthly
+        {
+            YearMonth = DateTime.UtcNow.ToString("yyyy-MM"),
+            TotalTokens = 260_000,
+            MonthlyQuotaLimit = 250_000
+        };
+
+        _usageRepo.FindOneAsync(Arg.Any<Expression<Func<AiTokenUsageMonthly, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(record);
+
+        var tracker = new AiUsageTracker(_usageRepo, _notificationService, _logger, _configRepo);
+
+        var canRun = await tracker.CanRunBackgroundAiAsync();
+
+        canRun.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CanRunBackgroundAiAsync_WhenQuotaZeroOrNegative_ShouldReturnTrue()
+    {
+        var record = new AiTokenUsageMonthly
+        {
+            YearMonth = DateTime.UtcNow.ToString("yyyy-MM"),
+            TotalTokens = 999_999,
+            MonthlyQuotaLimit = 0
+        };
+
+        _usageRepo.FindOneAsync(Arg.Any<Expression<Func<AiTokenUsageMonthly, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(record);
+
+        var tracker = new AiUsageTracker(_usageRepo, _notificationService, _logger, _configRepo);
+
+        var canRun = await tracker.CanRunBackgroundAiAsync();
+
         canRun.Should().BeTrue();
     }
 

@@ -29,22 +29,22 @@ public class AiUsageTracker : IAiUsageTracker
         var currentMonth = DateTime.UtcNow.ToString("yyyy-MM");
         var record = await _usageRepo.FindOneAsync(u => u.YearMonth == currentMonth, ct);
 
-        long configuredQuota = 250_000;
-        long configuredWarning = 200_000;
-
-        if (_configRepo != null)
-        {
-            var quotaConfig = await _configRepo.FindOneAsync(c => c.Key == "AiMonthlyTokenQuota", ct);
-            if (quotaConfig != null && long.TryParse(quotaConfig.Value, out var qVal) && qVal > 0)
-                configuredQuota = qVal;
-
-            var warnConfig = await _configRepo.FindOneAsync(c => c.Key == "AiWarningTokenThreshold", ct);
-            if (warnConfig != null && long.TryParse(warnConfig.Value, out var wVal) && wVal > 0)
-                configuredWarning = wVal;
-        }
-
         if (record == null)
         {
+            long configuredQuota = 250_000;
+            long configuredWarning = 200_000;
+
+            if (_configRepo != null)
+            {
+                var quotaConfig = await _configRepo.FindOneAsync(c => c.Key == "AiMonthlyTokenQuota", ct);
+                if (quotaConfig != null && long.TryParse(quotaConfig.Value, out var qVal))
+                    configuredQuota = qVal;
+
+                var warnConfig = await _configRepo.FindOneAsync(c => c.Key == "AiWarningTokenThreshold", ct);
+                if (warnConfig != null && long.TryParse(warnConfig.Value, out var wVal))
+                    configuredWarning = wVal;
+            }
+
             record = new AiTokenUsageMonthly
             {
                 YearMonth = currentMonth,
@@ -65,12 +65,26 @@ public class AiUsageTracker : IAiUsageTracker
             };
             record = await _usageRepo.CreateAsync(record, ct);
         }
-        else
+        else if (_configRepo != null)
         {
-            if (record.MonthlyQuotaLimit != configuredQuota || record.WarningThreshold != configuredWarning)
+            var quotaConfig = await _configRepo.FindOneAsync(c => c.Key == "AiMonthlyTokenQuota", ct);
+            var warnConfig = await _configRepo.FindOneAsync(c => c.Key == "AiWarningTokenThreshold", ct);
+            bool updated = false;
+
+            if (quotaConfig != null && long.TryParse(quotaConfig.Value, out var qVal) && record.MonthlyQuotaLimit != qVal)
             {
-                record.MonthlyQuotaLimit = configuredQuota;
-                record.WarningThreshold = configuredWarning;
+                record.MonthlyQuotaLimit = qVal;
+                updated = true;
+            }
+
+            if (warnConfig != null && long.TryParse(warnConfig.Value, out var wVal) && record.WarningThreshold != wVal)
+            {
+                record.WarningThreshold = wVal;
+                updated = true;
+            }
+
+            if (updated)
+            {
                 await _usageRepo.UpdateAsync(record, ct);
             }
         }
@@ -78,10 +92,11 @@ public class AiUsageTracker : IAiUsageTracker
         return record;
     }
 
-    public Task<bool> CanRunBackgroundAiAsync(CancellationToken ct = default)
+    public async Task<bool> CanRunBackgroundAiAsync(CancellationToken ct = default)
     {
-        // Theo dõi hạn mức tháng không còn giới hạn token hàng tháng; tác vụ ngầm chạy bình thường
-        return Task.FromResult(true);
+        var current = await GetCurrentMonthlyUsageAsync(ct);
+        if (current.MonthlyQuotaLimit <= 0) return true;
+        return current.TotalTokens < current.MonthlyQuotaLimit;
     }
 
     public async Task<long> GetRemainingTokensAsync(CancellationToken ct = default)

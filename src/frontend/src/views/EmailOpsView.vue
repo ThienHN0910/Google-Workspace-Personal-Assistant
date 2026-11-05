@@ -74,7 +74,7 @@
           <p>Từ: {{ selectedEmail.from }} | Lúc: {{ formatDate(selectedEmail.receivedAt) }}</p>
         </div>
         <div class="detail-body email-html-body">
-          <div v-html="selectedEmail.body || selectedEmail.snippet"></div>
+          <div v-html="sanitize(selectedEmail.body || selectedEmail.snippet)"></div>
         </div>
         <div class="detail-actions">
           <button class="btn-cancel" :class="{ 'text-yellow': selectedEmail.isStarred }" @click="toggleStar(selectedEmail)">
@@ -236,6 +236,8 @@ import { ref, onMounted, watch, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import { showToast } from '@/services/notification.service';
+import { sanitize } from '@/composables/useSanitize';
+import { formatDateTime as formatDate } from '@/utils/formatters';
 
 // Lazy loading heavy components
 const CleanupReviewList = defineAsyncComponent(() => import('@/components/email/CleanupReviewList.vue'));
@@ -527,14 +529,6 @@ const handleRejectDraft = async ({ id }: { id: string }) => {
       detail: err.message || 'Không thể từ chối bản nháp.',
     });
   }
-};
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
 };
 
 const pageLogs = ref(1);

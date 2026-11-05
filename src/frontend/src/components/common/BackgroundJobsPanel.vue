@@ -67,6 +67,7 @@
 import { ref, onMounted } from 'vue';
 import api from '@/services/api.service';
 import { showToast } from '@/services/notification.service';
+import { formatDateTime as formatDate } from '@/utils/formatters';
 
 interface JobInfo {
   id: string;
@@ -144,18 +145,6 @@ const getJobColor = (id: string) => {
     case 'calendar-extractor': return 'color-amber';
     default: return 'color-blue';
   }
-};
-
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleString('vi-VN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
 };
 
 onMounted(() => {

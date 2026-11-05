@@ -13,8 +13,12 @@ public class TokenEncryptionService : ITokenEncryptionService
     {
         var keyStr = configuration["TOKEN_ENCRYPTION_KEY"] 
             ?? configuration["Security:TokenEncryptionKey"] 
-            ?? "GOpsHubDefaultEncryptionKey32Chars!";
-        _key = Encoding.UTF8.GetBytes(keyStr.PadRight(32).Substring(0, 32));
+            ?? throw new InvalidOperationException("TOKEN_ENCRYPTION_KEY is not configured. Set the environment variable on the server.");
+        if (keyStr.Length < 32)
+        {
+            throw new InvalidOperationException("TOKEN_ENCRYPTION_KEY must be at least 32 characters long.");
+        }
+        _key = Encoding.UTF8.GetBytes(keyStr.Substring(0, 32));
     }
 
     public string Encrypt(string plainText)

@@ -78,4 +78,26 @@ public class GeminiRateLimiterTests
         firstPeak.Should().BeTrue();
         secondPeak.Should().BeFalse(); // Suppressed by 5-minute cooldown
     }
+
+    [Fact]
+    public async Task WaitForSlotAsync_ConcurrentCallsDoNotDeadlock()
+    {
+        var limiter = new GeminiRateLimiter();
+
+        // Run 5 concurrent requests with simulated input tokens
+        var tasks = Enumerable.Range(0, 5).Select(async i =>
+        {
+            await limiter.WaitForSlotAsync(estimatedInputTokens: 1000);
+            limiter.RecordInputTokens(1000);
+        });
+
+        var timeoutTask = Task.Delay(5000);
+        var completed = await Task.WhenAny(Task.WhenAll(tasks), timeoutTask);
+
+        completed.Should().NotBe(timeoutTask, "Concurrent requests should complete within 5 seconds without deadlocking");
+        var (minuteCount, tpm, dailyCount, _) = limiter.GetStatus();
+        minuteCount.Should().Be(5);
+        dailyCount.Should().Be(5);
+        tpm.Should().Be(5000);
+    }
 }

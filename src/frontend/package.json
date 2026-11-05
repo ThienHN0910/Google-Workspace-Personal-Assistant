@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test \"src/**/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",
     "@primevue/themes": "^4.0.0",
     "axios": "^1.7.2",
+    "dompurify": "^3.4.17",
     "pinia": "^2.1.7",
-    "primeflex": "^3.3.1",
     "primeicons": "^7.0.0",
     "primevue": "^4.0.0",
     "quill": "^2.0.2",

@@ -505,13 +505,6 @@ const newTask = ref({
 
 const activeTasks = computed(() => tasks.value.filter(t => t.status !== 'completed'));
 const completedTasks = computed(() => tasks.value.filter(t => t.status === 'completed'));
-const starredTasksCount = computed(() => tasks.value.filter(t => t.isStarred).length);
-
-const dueTasksCount = computed(() => {
-  const now = new Date();
-  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  return tasks.value.filter(t => t.due && new Date(t.due) <= endOfDay && t.status !== 'completed').length;
-});
 
 // Aggregate Board Tasks
 const allBoardTasks = computed(() => {

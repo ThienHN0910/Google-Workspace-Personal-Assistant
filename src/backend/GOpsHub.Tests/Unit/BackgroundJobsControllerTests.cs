@@ -30,7 +30,7 @@ public class BackgroundJobsControllerTests
         var apiResponse = okResult.Value.Should().BeOfType<ApiResponse<List<JobInfoDto>>>().Subject;
         apiResponse.Success.Should().BeTrue();
         apiResponse.Data.Should().NotBeNull();
-        apiResponse.Data.Should().HaveCountGreaterOrEqualTo(4);
+        apiResponse.Data.Count.Should().BeGreaterThanOrEqualTo(4);
 
         var jobIds = apiResponse.Data.Select(j => j.Id).ToList();
         jobIds.Should().Contain(new[] { "drive-guard-audit", "email-cleanup", "bank-telemetry", "calendar-extractor" });

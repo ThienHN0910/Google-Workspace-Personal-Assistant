@@ -335,6 +335,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import { showToast } from '@/services/notification.service';
 
 const rules = ref<any[]>([]);
 const feedbacks = ref<any[]>([]);
@@ -391,8 +392,9 @@ const handleDeleteFeedback = async (id: string) => {
     try {
       await api.delete(`/emailops/cleanup/feedback/${id}`);
       feedbacks.value = feedbacks.value.filter(f => f.id !== id);
+      showToast({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa lý do dọn dẹp.' });
     } catch (e) {
-      alert('Lỗi khi xóa lý do dọn dẹp đã lưu');
+      showToast({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xóa lý do dọn dẹp.' });
     }
   }
 };
@@ -465,14 +467,26 @@ const handleRunAll = async () => {
     const res: any = await api.post('/emailops/rules/run', { runAsync: true });
     if (res.success) {
       if (res.data?.details?.includes('BackgroundJobTriggered')) {
-        alert('🚀 Đã kích hoạt tác vụ dọn dẹp ngầm thành công!\nHệ thống đang quét dọn trong nền và sẽ gửi thông báo đến bạn khi hoàn tất.');
+        showToast({
+          severity: 'info',
+          summary: 'Đang dọn dẹp ngầm',
+          detail: 'Hệ thống đang quét dọn trong nền và sẽ gửi thông báo đến bạn khi hoàn tất.'
+        });
       } else {
-        alert(`✅ Dọn dẹp Inbox hoàn tất!\n• Đã chuyển vào Thùng rác: ${res.data.totalTrashed} email\n• Thời gian: ${res.data.totalDurationMs}ms`);
+        showToast({
+          severity: 'success',
+          summary: 'Dọn dẹp hoàn tất',
+          detail: `Đã chuyển vào Thùng rác: ${res.data?.totalTrashed || 0} email (${res.data?.totalDurationMs || 0}ms)`
+        });
       }
       fetchRules();
     }
   } catch (e: any) {
-    alert(e?.response?.data?.message || 'Lỗi thực thi quy tắc dọn dẹp inbox');
+    showToast({
+      severity: 'error',
+      summary: 'Lỗi',
+      detail: e?.response?.data?.message || 'Lỗi thực thi quy tắc dọn dẹp inbox'
+    });
   } finally {
     runningCleanup.value = false;
   }
@@ -520,8 +534,9 @@ const handleSubmit = async () => {
     }
     closeModal();
     fetchRules();
+    showToast({ severity: 'success', summary: 'Thành công', detail: isEditing.value ? 'Đã cập nhật quy tắc.' : 'Đã tạo mới quy tắc.' });
   } catch (e) {
-    alert('Lỗi khi lưu quy tắc');
+    showToast({ severity: 'error', summary: 'Lỗi', detail: 'Lỗi khi lưu quy tắc.' });
   } finally {
     submitting.value = false;
   }
@@ -532,8 +547,9 @@ const handleDelete = async (id: string) => {
     try {
       await api.delete(`/emailops/rules/${id}`);
       fetchRules();
+      showToast({ severity: 'success', summary: 'Thành công', detail: 'Đã xóa quy tắc.' });
     } catch (e) {
-      alert('Lỗi khi xóa quy tắc');
+      showToast({ severity: 'error', summary: 'Lỗi', detail: 'Lỗi khi xóa quy tắc.' });
     }
   }
 };
@@ -544,8 +560,9 @@ const handleToggle = async (id: string) => {
   try {
     await api.patch(`/emailops/rules/${id}/toggle`, {});
     await fetchRules();
+    showToast({ severity: 'info', summary: 'Đã cập nhật', detail: 'Đã chuyển trạng thái quy tắc.' });
   } catch (e) {
-    alert('Lỗi khi chuyển trạng thái quy tắc');
+    showToast({ severity: 'error', summary: 'Lỗi', detail: 'Lỗi khi chuyển trạng thái quy tắc.' });
     fetchRules();
   }
 };
@@ -556,7 +573,7 @@ const previewRule = async (id: string) => {
     const res: any = await api.get(`/emailops/rules/${id}/preview`);
     preview.value = res.data;
   } catch (e: any) {
-    alert(e.message || 'Không thể xem trước quy tắc');
+    showToast({ severity: 'error', summary: 'Lỗi', detail: e.message || 'Không thể xem trước quy tắc.' });
   }
 };
 
@@ -566,9 +583,10 @@ const approveRule = async (id: string) => {
     await api.post(`/emailops/rules/${id}/approve`, {});
     preview.value = null;
     await fetchRules();
+    showToast({ severity: 'success', summary: 'Đã duyệt', detail: 'Quy tắc đã được duyệt và kích hoạt.' });
   } catch (e: any) {
     await previewRule(id);
-    alert(e.message || 'Quy tắc không thể kích hoạt');
+    showToast({ severity: 'error', summary: 'Lỗi', detail: e.message || 'Quy tắc không thể kích hoạt.' });
   } finally {
     approvingRule.value = false;
   }
@@ -577,7 +595,7 @@ const approveRule = async (id: string) => {
 const copyText = (text: string) => {
   if (!text) return;
   navigator.clipboard.writeText(text);
-  alert(`Đã sao chép vào bộ nhớ tạm:\n${text}`);
+  showToast({ severity: 'success', summary: 'Đã sao chép', detail: 'Đã lưu vào bộ nhớ tạm.' });
 };
 
 onMounted(() => {

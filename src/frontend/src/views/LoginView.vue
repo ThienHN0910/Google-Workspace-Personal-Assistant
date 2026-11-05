@@ -186,6 +186,7 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
+import api from '@/services/api.service';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -198,12 +199,34 @@ const handleGoogleSignIn = () => {
 };
 
 onMounted(async () => {
-  const token = route.query.token as string;
+  const code = route.query.code as string;
+  const legacyToken = route.query.token as string;
   const error = route.query.error as string;
 
-  if (token) {
-    authStore.token = token;
-    localStorage.setItem('gopshub_token', token);
+  if (code) {
+    router.replace({ path: '/login', query: {} });
+    try {
+      authStore.loading = true;
+      const res: any = await api.post('/auth/exchange', { code });
+      if (res.success && res.data) {
+        authStore.setToken(res.data);
+        await authStore.fetchCurrentUser();
+        if (authStore.user) {
+          router.push('/dashboard');
+        } else {
+          authStore.error = 'Không thể tải thông tin quản trị viên.';
+          authStore.logout();
+        }
+      } else {
+        authStore.error = res.message || 'Mã xác thực không hợp lệ hoặc đã hết hạn.';
+      }
+    } catch (err: any) {
+      authStore.error = err.message || 'Mã xác thực không hợp lệ hoặc đã hết hạn.';
+    } finally {
+      authStore.loading = false;
+    }
+  } else if (legacyToken) {
+    authStore.setToken(legacyToken);
     router.replace({ path: '/login', query: {} });
     
     await authStore.fetchCurrentUser();

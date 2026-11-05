@@ -129,6 +129,7 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'Login' };
   }
+  return true;
 });
 
 router.afterEach((to) => {
