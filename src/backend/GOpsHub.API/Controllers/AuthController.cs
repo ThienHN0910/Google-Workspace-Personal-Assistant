@@ -14,6 +14,8 @@ namespace GOpsHub.API.Controllers;
 [Route("api/v1/[controller]")]
 public class AuthController : ControllerBase
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Jwt, DateTime ExpiresAt)> _exchangeCodes = new();
+    private static readonly HttpClient _httpClient = new();
     private readonly IDispatcher _dispatcher;
     private readonly IGoogleTokenService _tokenService;
     private readonly IRepository<AdminUser> _userRepository;
@@ -140,13 +142,50 @@ public class AuthController : ControllerBase
             // Generate internal JWT
             var jwt = _jwtService.GenerateToken(user);
 
-            // Redirect to frontend with JWT token
-            return Redirect($"{frontendUrl}/login?token={jwt}");
+            // One-time 60s exchange code to avoid exposing raw JWT in redirect URL
+            var exchangeCode = Guid.NewGuid().ToString("N");
+            _exchangeCodes[exchangeCode] = (jwt, DateTime.UtcNow.AddSeconds(60));
+
+            // Prune expired codes
+            var now = DateTime.UtcNow;
+            foreach (var kvp in _exchangeCodes)
+            {
+                if (kvp.Value.ExpiresAt <= now)
+                {
+                    _exchangeCodes.TryRemove(kvp.Key, out _);
+                }
+            }
+
+            // Redirect to frontend with one-time exchange code
+            return Redirect($"{frontendUrl}/login?code={exchangeCode}");
         }
         catch (Exception ex)
         {
             return Redirect($"{frontendUrl}/login?error={Uri.EscapeDataString(ex.Message)}");
         }
+    }
+
+    /// <summary>
+    /// Exchange one-time auth code for JWT token
+    /// </summary>
+    [HttpPost("exchange")]
+    [AllowAnonymous]
+    public ActionResult<ApiResponse<string>> ExchangeCode([FromBody] ExchangeCodeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Code))
+        {
+            return BadRequest(ApiResponse<string>.Fail("Mã xác thực không hợp lệ."));
+        }
+
+        if (_exchangeCodes.TryRemove(request.Code, out var entry))
+        {
+            if (entry.ExpiresAt > DateTime.UtcNow)
+            {
+                return Ok(ApiResponse<string>.Ok(entry.Jwt, "Xác thực thành công."));
+            }
+        }
+
+        return BadRequest(ApiResponse<string>.Fail("Mã xác thực không hợp lệ hoặc đã hết hạn."));
     }
 
     /// <summary>
@@ -202,9 +241,9 @@ public class AuthController : ControllerBase
 
     private async Task<GoogleUserInfo?> GetGoogleUserInfoAsync(string accessToken, CancellationToken ct)
     {
-        using var client = new HttpClient();
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-        var response = await client.GetAsync("https://www.googleapis.com/oauth2/v3/userinfo", ct);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/oauth2/v3/userinfo");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        var response = await _httpClient.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return null;
 
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -214,6 +253,8 @@ public class AuthController : ControllerBase
         });
     }
 }
+
+public record ExchangeCodeRequest(string Code);
 
 internal class GoogleUserInfo
 {

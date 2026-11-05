@@ -4,6 +4,7 @@ using GOpsHub.API.Middleware;
 using GOpsHub.Application;
 using GOpsHub.Infrastructure;
 using Hangfire;
+using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -114,7 +115,10 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseHangfireDashboard("/hangfire");
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireAuthorizationFilter() }
+});
 
 using (var scope = app.Services.CreateScope())
 {
@@ -221,6 +225,26 @@ static void SafeAddOrUpdateJob<T>(IRecurringJobManager manager, string jobId, Sy
         {
             Console.WriteLine($"[HangfireStartup] Error: Fallback registration also failed for job '{jobId}': {fallbackEx.Message}");
         }
+    }
+}
+
+public class HangfireAuthorizationFilter : Hangfire.Dashboard.IDashboardAuthorizationFilter
+{
+    public bool Authorize(Hangfire.Dashboard.DashboardContext context)
+    {
+        var httpContext = context.GetHttpContext();
+        if (httpContext == null) return false;
+
+        // Allow loopback / localhost in development
+        var connection = httpContext.Connection;
+        if (connection.RemoteIpAddress != null && System.Net.IPAddress.IsLoopback(connection.RemoteIpAddress))
+        {
+            return true;
+        }
+
+        // Allow authenticated admin users
+        return httpContext.User.Identity?.IsAuthenticated == true &&
+               (httpContext.User.IsInRole("Admin") || httpContext.User.HasClaim(System.Security.Claims.ClaimTypes.Role, "Admin"));
     }
 }
 

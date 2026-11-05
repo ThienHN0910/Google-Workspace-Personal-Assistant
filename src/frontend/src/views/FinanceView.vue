@@ -199,6 +199,7 @@ import { ref, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
 import { showToast } from '@/services/notification.service';
+import { formatDateTime as formatDate, formatCurrency } from '@/utils/formatters';
 
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
@@ -393,14 +394,6 @@ const loadMore = () => {
   if (!loading.value && hasMore.value) {
     fetchTransactions(page.value + 1);
   }
-};
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('vi-VN');
-};
-
-const formatCurrency = (val: number) => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
 };
 
 onMounted(() => {

@@ -68,21 +68,32 @@ public class GeminiRateLimiter
             }
 
             // 4. Check and clean up sliding minute window for input tokens (240,000 TPM)
-            lock (_tokenLock)
+            while (true)
             {
-                CleanOldTokenEntries(now);
-                while (_minuteTokenEntries.Count > 0 && 
-                       (_minuteTokenEntries.Sum(e => e.InputTokens) + estimatedInputTokens) > MaxInputTokensPerMinute)
+                TimeSpan waitTime = TimeSpan.Zero;
+                lock (_tokenLock)
                 {
-                    var oldest = _minuteTokenEntries.Peek();
-                    var waitTime = TimeSpan.FromSeconds(60) - (now - oldest.Timestamp) + TimeSpan.FromMilliseconds(100);
-                    if (waitTime > TimeSpan.Zero)
-                    {
-                        Task.Delay(waitTime, ct).GetAwaiter().GetResult();
-                    }
-
                     now = DateTime.UtcNow;
                     CleanOldTokenEntries(now);
+                    if (_minuteTokenEntries.Count > 0 && 
+                        (_minuteTokenEntries.Sum(e => e.InputTokens) + estimatedInputTokens) > MaxInputTokensPerMinute)
+                    {
+                        var oldest = _minuteTokenEntries.Peek();
+                        var calculated = TimeSpan.FromSeconds(60) - (now - oldest.Timestamp) + TimeSpan.FromMilliseconds(100);
+                        if (calculated > TimeSpan.Zero)
+                        {
+                            waitTime = calculated;
+                        }
+                    }
+                }
+
+                if (waitTime > TimeSpan.Zero)
+                {
+                    await Task.Delay(waitTime, ct);
+                }
+                else
+                {
+                    break;
                 }
             }
 

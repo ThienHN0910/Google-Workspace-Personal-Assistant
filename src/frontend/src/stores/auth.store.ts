@@ -19,19 +19,22 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isAuthenticated: (state) => !!state.token,
-    isAdmin: (state) => state.user?.email === 'hnt.vn.vn@gmail.com',
+    isAdmin: (state) => state.user?.role?.toLowerCase() === 'admin' || state.user?.email === 'hnt.vn.vn@gmail.com',
   },
 
   actions: {
+    setToken(token: string) {
+      this.token = token;
+      localStorage.setItem('gopshub_token', token);
+    },
     async googleLogin(idToken: string) {
       this.loading = true;
       this.error = null;
       try {
         const res: any = await api.post('/auth/google-login', { idToken });
         if (res.success && res.data) {
-          this.token = res.data.accessToken;
+          this.setToken(res.data.accessToken);
           this.user = res.data.user;
-          localStorage.setItem('gopshub_token', res.data.accessToken);
           return true;
         }
         return false;

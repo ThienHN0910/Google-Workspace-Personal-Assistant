@@ -31,17 +31,17 @@ public class ExceptionHandlingMiddleware
     private static Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         var code = HttpStatusCode.InternalServerError;
-        var message = $"Đã xảy ra lỗi máy chủ nội bộ: {exception.Message}";
+        var message = "Đã xảy ra lỗi máy chủ nội bộ. Vui lòng thử lại sau.";
 
         if (exception is UnauthorizedAccessException)
         {
             code = HttpStatusCode.Forbidden;
-            message = exception.Message;
+            message = string.IsNullOrWhiteSpace(exception.Message) ? "Bạn không có quyền thực hiện thao tác này." : exception.Message;
         }
         else if (exception is KeyNotFoundException)
         {
             code = HttpStatusCode.NotFound;
-            message = exception.Message;
+            message = string.IsNullOrWhiteSpace(exception.Message) ? "Không tìm thấy tài nguyên yêu cầu." : exception.Message;
         }
         else if (exception is ArgumentException)
         {

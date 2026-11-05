@@ -17,9 +17,14 @@ public class JwtService : IJwtService
         _configuration = configuration;
     }
 
+    private string GetSigningKey() =>
+        _configuration["JWT_SECRET"] ?? _configuration["Jwt:Secret"]
+        ?? throw new InvalidOperationException(
+            "JWT_SECRET is not configured. Ensure the .env file exists in the publish output or set the environment variable on the server.");
+
     public string GenerateToken(AdminUser user)
     {
-        var secret = _configuration["JWT_SECRET"] ?? _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
+        var secret = GetSigningKey();
         var issuer = _configuration["JWT_ISSUER"] ?? _configuration["Jwt:Issuer"] ?? "gopshub";
         var audience = _configuration["JWT_AUDIENCE"] ?? _configuration["Jwt:Audience"] ?? "gopshub-client";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
@@ -46,7 +51,7 @@ public class JwtService : IJwtService
 
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
-        var secret = _configuration["JWT_SECRET"] ?? _configuration["Jwt:Secret"] ?? "SuperSecretKeyForGOpsHubApplication2026!MustBeLongEnough";
+        var secret = GetSigningKey();
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false,

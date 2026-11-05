@@ -1,4 +1,6 @@
 import axios from 'axios';
+import router from '@/router';
+import { useAuthStore } from '@/stores/auth.store';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -21,8 +23,17 @@ api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
-      // Clear token on auth error
-      localStorage.removeItem('gopshub_token');
+      // Clear token and memory state on auth error
+      try {
+        const authStore = useAuthStore();
+        authStore.logout();
+      } catch {
+        localStorage.removeItem('gopshub_token');
+      }
+
+      if (router.currentRoute.value.path !== '/login') {
+        router.push('/login');
+      }
     }
     return Promise.reject(error.response?.data || error);
   }

@@ -262,6 +262,7 @@
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import { showToast } from '@/services/notification.service';
+import { formatDateTime as formatDate, formatBytes } from '@/utils/formatters';
 
 const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
@@ -303,15 +304,6 @@ const getTypeBadgeClass = (mimeType: string) => {
   if (mimeType.includes('document') || mimeType.includes('word')) return 'badge-doc';
   if (mimeType.includes('image')) return 'badge-image';
   return 'badge-file';
-};
-
-const formatBytes = (bytes?: number) => {
-  if (bytes === undefined || bytes === null) return '-';
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
 const formatMimeType = (mimeType: string) => {
@@ -634,10 +626,6 @@ const handleResolveAlert = async (alertId: string) => {
       detail: 'Không thể cập nhật trạng thái cảnh báo.',
     });
   }
-};
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('vi-VN');
 };
 
 onMounted(fetchData);

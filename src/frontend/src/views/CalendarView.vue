@@ -660,9 +660,13 @@ const monthGridDays = computed(() => {
   const startDate = new Date(firstDay);
   startDate.setDate(startDate.getDate() - diffToMon);
 
+  const lastDay = new Date(year, month + 1, 0);
+  const totalDaysNeeded = Math.ceil((diffToMon + lastDay.getDate()) / 7) * 7;
+  const cellCount = Math.max(35, totalDaysNeeded);
+
   const days: Date[] = [];
   const iter = new Date(startDate);
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < cellCount; i++) {
     days.push(new Date(iter));
     iter.setDate(iter.getDate() + 1);
   }

@@ -831,18 +831,6 @@ const aiUsage = ref({
   usagePercentage: 0,
 });
 
-const usageBarClass = computed(() => {
-  const pct = aiUsage.value.usagePercentage;
-  if (pct >= 100) return 'bar-danger';
-  if (pct >= 80) return 'bar-warning';
-  return 'bar-safe';
-});
-
-const warningPercentage = computed(() => {
-  if (aiUsage.value.monthlyQuotaLimit <= 0) return 80;
-  return Math.round((aiUsage.value.warningThreshold / aiUsage.value.monthlyQuotaLimit) * 100);
-});
-
 const nextResetDate = computed(() => {
   const now = new Date();
   const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);

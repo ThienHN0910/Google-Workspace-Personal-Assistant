@@ -193,6 +193,7 @@ import { ref, onMounted, defineAsyncComponent } from 'vue';
 import { useAuthStore } from '@/stores/auth.store';
 import api from '@/services/api.service';
 import { showToast } from '@/services/notification.service';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 const LoadingSpinner = defineAsyncComponent(() => import('@/components/common/LoadingSpinner.vue'));
 const ComposeEmailModal = defineAsyncComponent(() => import('@/components/email/ComposeEmailModal.vue'));
@@ -225,14 +226,6 @@ const loadingQuickDrafts = ref(false);
 
 const tasks = ref<any[]>([]);
 const loadingTasks = ref(true);
-
-const formatCurrency = (val: number) => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
-};
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('vi-VN');
-};
 
 const formatTokens = (val: number) => {
   if (!val && val !== 0) return '0';
