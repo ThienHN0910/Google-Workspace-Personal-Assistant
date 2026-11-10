@@ -72,4 +72,32 @@ public class GoogleLoginCommandHandlerTests
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
             .WithMessage("*không có quyền truy cập*");
     }
+
+    [Fact]
+    public async Task HandleAsync_WithMixedCaseAdminEmail_ShouldSucceedAndNormalizeEmail()
+    {
+        // Arrange
+        var command = new GoogleLoginCommand("valid-token");
+        var payload = new GooglePayloadInfo
+        {
+            Email = "HnT.Vn.Vn@GMAIL.COM",
+            Name = "Thien HN",
+            Picture = "https://avatar.com/me.png",
+            Subject = "google-id-123"
+        };
+
+        _googleAuthService.VerifyIdTokenAsync("valid-token").Returns(payload);
+        _userRepository.FindOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<AdminUser, bool>>>())
+            .Returns((AdminUser?)null);
+
+        _jwtService.GenerateToken(Arg.Any<AdminUser>()).Returns("generated-jwt-token");
+
+        // Act
+        var result = await _handler.HandleAsync(command);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.AccessToken.Should().Be("generated-jwt-token");
+        result.User.Email.Should().Be("hnt.vn.vn@gmail.com");
+    }
 }

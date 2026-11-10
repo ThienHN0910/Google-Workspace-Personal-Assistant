@@ -1,81 +1,28 @@
-using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
 using GOpsHub.Application.Common.Interfaces;
-using GOpsHub.Domain.Entities;
-using GOpsHub.Domain.Interfaces;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace GOpsHub.Infrastructure.GoogleApis;
 
 public class GmailApiService : IGmailService
 {
-    private readonly IRepository<AdminUser> _userRepo;
-    private readonly ITokenEncryptionService _encryptionService;
-    private readonly IGoogleTokenService _googleTokenService;
-    private readonly IConfiguration _configuration;
+    private readonly IAdminGoogleCredentialProvider _credentialProvider;
     private readonly ILogger<GmailApiService> _logger;
-    private readonly string _adminEmail;
 
     public GmailApiService(
-        IRepository<AdminUser> userRepo,
-        ITokenEncryptionService encryptionService,
-        IGoogleTokenService googleTokenService,
-        IConfiguration configuration,
+        IAdminGoogleCredentialProvider credentialProvider,
         ILogger<GmailApiService> logger)
     {
-        _userRepo = userRepo;
-        _encryptionService = encryptionService;
-        _googleTokenService = googleTokenService;
-        _configuration = configuration;
+        _credentialProvider = credentialProvider;
         _logger = logger;
-        _adminEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
     }
 
     private async Task<GmailService?> GetGmailClientAsync(CancellationToken ct = default)
     {
-        var user = await _userRepo.FindOneAsync(u => u.Email == _adminEmail, ct);
-        if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
-        {
-            _logger.LogWarning("Admin user token not found for Gmail API calls. Please complete Google OAuth login first.");
-            return null;
-        }
-
-        var accessToken = _encryptionService.Decrypt(user.GoogleAccessToken);
-
-        // Auto-refresh token if expired or about to expire (within 5 minutes)
-        if (user.GoogleTokenExpiresAt.HasValue && user.GoogleTokenExpiresAt.Value <= DateTime.UtcNow.AddMinutes(5))
-        {
-            if (!string.IsNullOrEmpty(user.GoogleRefreshToken))
-            {
-                try
-                {
-                    var refreshToken = _encryptionService.Decrypt(user.GoogleRefreshToken);
-                    var newTokens = await _googleTokenService.RefreshAccessTokenAsync(refreshToken, ct);
-
-                    accessToken = newTokens.AccessToken;
-                    user.GoogleAccessToken = _encryptionService.Encrypt(newTokens.AccessToken);
-                    user.GoogleTokenExpiresAt = DateTime.UtcNow.AddSeconds(newTokens.ExpiresInSeconds);
-                    await _userRepo.UpdateAsync(user, ct);
-
-                    _logger.LogInformation("Successfully refreshed Google access token for Gmail API.");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to refresh Google access token. User may need to re-authenticate.");
-                    return null;
-                }
-            }
-            else
-            {
-                _logger.LogWarning("Google access token expired and no refresh token available.");
-                return null;
-            }
-        }
-
-        var credential = GoogleCredential.FromAccessToken(accessToken);
+        var credential = await _credentialProvider.GetCredentialAsync("Gmail", ct);
+        if (credential == null) return null;
 
         return new GmailService(new BaseClientService.Initializer
         {

@@ -1,3 +1,4 @@
+using GOpsHub.Application.Common;
 using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
@@ -11,6 +12,7 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IRepository<AdminUser> _userRepository;
     private readonly IJwtService _jwtService;
+    private readonly IConfiguration _configuration;
     private readonly string _allowedAdminEmail;
 
     public GoogleLoginCommandHandler(
@@ -22,8 +24,8 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
         _googleAuthService = googleAuthService;
         _userRepository = userRepository;
         _jwtService = jwtService;
-        var email = configuration["ADMIN_EMAIL"] ?? configuration["Security:AdminEmail"];
-        _allowedAdminEmail = string.IsNullOrWhiteSpace(email) ? "hnt.vn.vn@gmail.com" : email;
+        _configuration = configuration;
+        _allowedAdminEmail = AdminAccount.ResolveEmail(configuration);
     }
 
     public async Task<GoogleLoginResult> HandleAsync(GoogleLoginCommand command, CancellationToken ct = default)
@@ -34,7 +36,7 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
             throw new UnauthorizedAccessException("Xác thực Google ID Token không thành công.");
         }
 
-        if (!string.Equals(payload.Email, _allowedAdminEmail, StringComparison.OrdinalIgnoreCase))
+        if (!AdminAccount.IsAdmin(payload.Email, _configuration))
         {
             throw new UnauthorizedAccessException($"Tài khoản {payload.Email} không có quyền truy cập hệ thống này.");
         }
@@ -44,7 +46,7 @@ public class GoogleLoginCommandHandler : ICommandHandler<GoogleLoginCommand, Goo
         {
             user = new AdminUser
             {
-                Email = payload.Email,
+                Email = _allowedAdminEmail,
                 DisplayName = payload.Name,
                 AvatarUrl = payload.Picture,
                 GoogleId = payload.Subject,
