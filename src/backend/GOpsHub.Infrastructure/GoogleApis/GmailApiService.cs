@@ -1,6 +1,9 @@
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
+using System.Net;
+using Google;
+using GOpsHub.Application.Common;
 using GOpsHub.Application.Common.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -129,8 +132,8 @@ public class GmailApiService : IGmailService
 
     public async Task TrashEmailAsync(string messageId, CancellationToken ct = default)
     {
-        var service = await GetGmailClientAsync(ct);
-        if (service == null) return;
+        // Throw instead of silently returning: callers record the email as trashed afterwards.
+        var service = await GetGmailClientAsync(ct) ?? throw new GoogleAccountNotConnectedException("Gmail");
 
         await service.Users.Messages.Trash("me", messageId).ExecuteAsync(ct);
     }
@@ -251,13 +254,20 @@ public class GmailApiService : IGmailService
         await service.Users.Drafts.Delete("me", draftId).ExecuteAsync(ct);
     }
 
+    /// <summary>Returns null only when the message no longer exists in Gmail.</summary>
     public async Task<EmailMessage?> GetEmailByIdAsync(string messageId, CancellationToken ct = default)
     {
-        var service = await GetGmailClientAsync(ct);
-        if (service == null) return null;
+        var service = await GetGmailClientAsync(ct) ?? throw new GoogleAccountNotConnectedException("Gmail");
 
-        var msg = await service.Users.Messages.Get("me", messageId).ExecuteAsync(ct);
-        return msg == null ? null : MapToEmailMessage(msg);
+        try
+        {
+            var msg = await service.Users.Messages.Get("me", messageId).ExecuteAsync(ct);
+            return msg == null ? null : MapToEmailMessage(msg);
+        }
+        catch (GoogleApiException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
     }
 
     private static EmailMessage MapToEmailMessage(Message msg)

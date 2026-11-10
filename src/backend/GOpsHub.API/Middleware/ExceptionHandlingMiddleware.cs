@@ -43,6 +43,11 @@ public class ExceptionHandlingMiddleware
             code = HttpStatusCode.NotFound;
             message = string.IsNullOrWhiteSpace(exception.Message) ? "Không tìm thấy tài nguyên yêu cầu." : exception.Message;
         }
+        else if (exception is GOpsHub.Application.Common.GoogleAccountNotConnectedException)
+        {
+            code = HttpStatusCode.Conflict;
+            message = exception.Message;
+        }
         else if (exception is ArgumentException)
         {
             code = HttpStatusCode.BadRequest;

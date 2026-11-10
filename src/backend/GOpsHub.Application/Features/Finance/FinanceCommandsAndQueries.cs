@@ -90,6 +90,14 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
             {
                 if (string.IsNullOrEmpty(aiResult.EmailId)) continue;
 
+                // Idempotent: a previous run may have saved this email and then failed before
+                // MarkAsRead (e.g. Sheets error). Never record the same bank email twice.
+                if (await _transactionRepo.FindOneAsync(t => t.SourceEmailId == aiResult.EmailId, ct) != null)
+                {
+                    await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
+                    continue;
+                }
+
                 var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
                     ? TransactionType.Credit
                     : TransactionType.Debit;
@@ -249,6 +257,9 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
     {
         var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
         if (email == null) return null;
+
+        var alreadyRecorded = await _transactionRepo.FindOneAsync(t => t.SourceEmailId == email.Id, ct);
+        if (alreadyRecorded != null) return alreadyRecorded;
 
         // Rate Limit (10 req/min = 6 seconds delay)
         await Task.Delay(6000, ct);
