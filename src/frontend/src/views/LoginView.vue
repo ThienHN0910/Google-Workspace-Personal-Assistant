@@ -118,7 +118,7 @@
             </div>
             <div class="clearance-details">
               <div class="clearance-role">TÀI KHOẢN ĐƯỢC ỦY QUYỀN</div>
-              <div class="clearance-address">hnt.vn.vn@gmail.com</div>
+              <div class="clearance-address">Chỉ tài khoản Google của chủ sở hữu</div>
             </div>
             <span class="clearance-tag">Admin</span>
           </div>
