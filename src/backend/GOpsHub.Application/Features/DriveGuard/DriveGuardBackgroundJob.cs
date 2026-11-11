@@ -49,6 +49,17 @@ public class DriveGuardBackgroundJob
                 var currentFileIds = files.Select(f => f.Id).ToHashSet();
                 var knownFileIds = folder.KnownFileIds.ToHashSet();
 
+                // First scan of a newly monitored folder: record a baseline only. Without this every
+                // pre-existing file was logged as "newly added" and archives raised false alerts.
+                if (folder.LastCheckedAt == null)
+                {
+                    folder.KnownFileIds = currentFileIds.ToList();
+                    folder.LastCheckedAt = DateTime.UtcNow;
+                    await _folderRepo.UpdateAsync(folder, ct);
+                    _logger.LogInformation("Drive Guard baseline recorded for {FolderName} ({Count} files)", folder.FolderName, currentFileIds.Count);
+                    continue;
+                }
+
                 // 1. Tìm các file mới thêm (Có trong files, nhưng KHÔNG có trong knownFileIds)
                 var newFiles = files.Where(f => !knownFileIds.Contains(f.Id)).ToList();
                 foreach (var file in newFiles)

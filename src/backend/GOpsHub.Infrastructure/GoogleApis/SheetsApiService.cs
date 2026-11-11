@@ -121,7 +121,8 @@ public class SheetsApiService : ISheetsService
                 "Tài khoản ghi",
                 "Tên người hưởng",
                 "Danh mục",
-                "Nội dung"
+                "Nội dung",
+                "Số dư sau GD"
             };
 
             var valueRange = new ValueRange { Values = new List<IList<object>> { headers } };

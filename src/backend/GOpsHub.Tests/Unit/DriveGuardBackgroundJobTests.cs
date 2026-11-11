@@ -43,7 +43,8 @@ public class DriveGuardBackgroundJobTests
             IsActive = true,
             AlertOnBulkDelete = true,
             BulkDeleteThreshold = 3,
-            KnownFileIds = new List<string> { "f1", "f2", "f3", "f4" }
+            KnownFileIds = new List<string> { "f1", "f2", "f3", "f4" },
+            LastCheckedAt = DateTime.UtcNow.AddMinutes(-10)
         };
 
         _folderRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<MonitoredFolder, bool>>>(), Arg.Any<CancellationToken>())
@@ -81,7 +82,8 @@ public class DriveGuardBackgroundJobTests
             FolderName = "Shared Team",
             GoogleFolderId = "g-folder-2",
             IsActive = true,
-            KnownFileIds = new List<string>()
+            KnownFileIds = new List<string>(),
+            LastCheckedAt = DateTime.UtcNow.AddMinutes(-10)
         };
 
         _folderRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<MonitoredFolder, bool>>>(), Arg.Any<CancellationToken>())
@@ -106,5 +108,34 @@ public class DriveGuardBackgroundJobTests
             Arg.Is<string>(s => s.Contains(".ps1")),
             "critical",
             Arg.Any<CancellationToken>());
+    }
+    [Fact]
+    public async Task RunAuditAsync_FirstScanOfNewFolder_RecordsBaselineWithoutAlerts()
+    {
+        var folder = new MonitoredFolder
+        {
+            Id = "folder-3",
+            FolderName = "Archive",
+            GoogleFolderId = "g-folder-3",
+            IsActive = true,
+            LastCheckedAt = null
+        };
+        _folderRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<MonitoredFolder, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<MonitoredFolder> { folder });
+        _driveService.ListFilesInFolderAsync(folder.GoogleFolderId, Arg.Any<CancellationToken>())
+            .Returns(new List<DriveFileInfo>
+            {
+                new() { Id = "old-1", Name = "backup.zip", MimeType = "application/zip" },
+                new() { Id = "old-2", Name = "notes.txt", MimeType = "text/plain" }
+            });
+
+        await _job.RunAuditAsync(CancellationToken.None);
+
+        folder.KnownFileIds.Should().BeEquivalentTo(new[] { "old-1", "old-2" });
+        folder.LastCheckedAt.Should().NotBeNull();
+        await _folderRepo.Received(1).UpdateAsync(folder, Arg.Any<CancellationToken>());
+        await _logRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!, default);
+        await _alertRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!, default);
+        await _notificationService.DidNotReceiveWithAnyArgs().SendNotificationAsync(default!, default!, default!, default);
     }
 }

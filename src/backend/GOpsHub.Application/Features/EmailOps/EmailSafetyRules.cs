@@ -252,14 +252,7 @@ public static class EmailSafetyRules
         if (string.IsNullOrEmpty(c1) || string.IsNullOrEmpty(c2)) return false;
         if (c1.Equals(c2, StringComparison.OrdinalIgnoreCase)) return true;
 
-        // Substring check for keywords of length >= 3
-        if (c1.Length >= 3 && c2.Length >= 3)
-        {
-            if (c1.Contains(c2, StringComparison.OrdinalIgnoreCase) || c2.Contains(c1, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
+        if (KeywordsOverlap(c1, c2)) return true;
 
         // Branch-level comparison for OR constructs
         var branches1 = p1.Split('|', StringSplitOptions.RemoveEmptyEntries)
@@ -273,15 +266,28 @@ public static class EmailSafetyRules
 
         if (branches1.Count > 0 && branches2.Count > 0)
         {
-            if (branches1.Any(b1 => branches2.Any(b2 =>
-                b1.Equals(b2, StringComparison.OrdinalIgnoreCase) ||
-                (b1.Length >= 3 && b2.Length >= 3 && (b1.Contains(b2, StringComparison.OrdinalIgnoreCase) || b2.Contains(b1, StringComparison.OrdinalIgnoreCase))))))
+            if (branches1.Any(b1 => branches2.Any(b2 => KeywordsOverlap(b1, b2))))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Two cleaned keywords overlap when equal, when the shorter (>= 3 chars) is a prefix of the
+    /// longer ("grab" / "grabfood"), or when the shorter is long enough (>= 6 chars) to be
+    /// meaningful anywhere inside the longer ("newsletter" / "weeklynewsletter").
+    /// Short mid-word hits such as "card" in "discard" are not treated as duplicates.
+    /// </summary>
+    private static bool KeywordsOverlap(string a, string b)
+    {
+        if (a.Equals(b, StringComparison.OrdinalIgnoreCase)) return true;
+        var (shorter, longer) = a.Length <= b.Length ? (a, b) : (b, a);
+        if (shorter.Length < 3) return false;
+        if (longer.StartsWith(shorter, StringComparison.OrdinalIgnoreCase)) return true;
+        return shorter.Length >= 6 && longer.Contains(shorter, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

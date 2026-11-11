@@ -179,7 +179,7 @@ public class EmailOpsController : ControllerBase
             return BadRequest(ApiResponse<CleanupFeedback>.Fail("Vui lòng cung cấp ít nhất một lý do hoặc tag xóa email."));
 
         var result = await _dispatcher.SendAsync(command, ct);
-        return Ok(ApiResponse<CleanupFeedback>.Ok(result, "Đã xóa email và lưu mẫu huấn luyện AI thành công."));
+        return Ok(ApiResponse<CleanupFeedback>.Ok(result, "Đã chuyển email vào Thùng rác và lưu lý do (CleanupFeedback)."));
     }
 
     /// <summary>
