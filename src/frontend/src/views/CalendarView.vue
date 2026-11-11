@@ -78,6 +78,8 @@
 
       <LoadingSpinner v-if="loading.upcoming" text="Đang đồng bộ Google Calendar..." />
 
+      <GoogleReconnectNotice v-else-if="googleError" :message="googleError" />
+
       <div v-else class="calendar-viewport">
         <!-- 1. WEEK VIEW -->
         <div v-if="viewMode === 'week'" class="week-grid">
@@ -531,7 +533,12 @@
 import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import GoogleReconnectNotice from '@/components/common/GoogleReconnectNotice.vue';
+import { isGoogleDisconnectedError, googleDisconnectedMessage } from '@/utils/googleConnection';
 import { showToast } from '@/services/notification.service';
+
+const googleError = ref<string | null>(null);
+
 
 const InfiniteScrollObserver = defineAsyncComponent(() => import('@/components/common/InfiniteScrollObserver.vue'));
 
@@ -570,9 +577,13 @@ const fetchCalendars = async () => {
       calendars.value = res.data;
       const primary = res.data.find((c: any) => c.primary);
       if (primary) selectedCalendarId.value = primary.id;
+      googleError.value = null;
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch calendars', e);
+    if (isGoogleDisconnectedError(e)) {
+      googleError.value = googleDisconnectedMessage(e);
+    }
   }
 };
 
@@ -722,9 +733,13 @@ const fetchCalendarEvents = async () => {
     const res: any = await api.get(`/scheduling/upcoming?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}&calendarId=${encodeURIComponent(selectedCalendarId.value)}`);
     if (res.success && res.data) {
       upcomingEvents.value = res.data;
+      googleError.value = null;
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to load Google Calendar events:', e);
+    if (isGoogleDisconnectedError(e)) {
+      googleError.value = googleDisconnectedMessage(e);
+    }
   } finally {
     loading.value.upcoming = false;
   }
@@ -1082,7 +1097,11 @@ const formatDateTime = (dateStr: string) => {
 
 onMounted(async () => {
   await fetchCalendars();
-  fetchCalendarEvents();
+  if (!googleError.value) {
+    fetchCalendarEvents();
+  } else {
+    loading.value.upcoming = false;
+  }
   fetchExtracted(1);
 });
 </script>

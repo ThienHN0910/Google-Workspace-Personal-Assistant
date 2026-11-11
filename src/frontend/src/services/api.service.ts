@@ -35,6 +35,13 @@ api.interceptors.response.use(
         router.push('/login');
       }
     }
+    const errorData = error.response?.data;
+    if (errorData && typeof errorData === 'object') {
+      if (errorData.status === undefined && error.response?.status !== undefined) {
+        errorData.status = error.response.status;
+      }
+      return Promise.reject(errorData);
+    }
     return Promise.reject(error.response?.data || error);
   }
 );
