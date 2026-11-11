@@ -1,4 +1,5 @@
 using FluentAssertions;
+using GOpsHub.Application.Common;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Features.EmailOps.Commands;
 using GOpsHub.Domain.Entities;
@@ -66,6 +67,37 @@ public class CleanupReviewCommandHandlerTests
         await Handler().HandleAsync(new ResolveCleanupReviewCommand("r3", CleanupDecision.Trash, "Repeat"));
 
         await _gmail.DidNotReceive().TrashEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AStaleClaimForAnEmailDeletedOutsideTheAppCompletesAsTrashed()
+    {
+        var review = new CleanupReview { Id = "r5", EmailId = "m5", Status = CleanupReviewStatus.ProcessingTrash, UpdatedAt = DateTime.UtcNow.AddMinutes(-5) };
+        _store.GetByIdAsync("r5", Arg.Any<CancellationToken>()).Returns(review);
+        _store.TryClaimRecoveryAsync("r5", Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _gmail.GetEmailByIdAsync("m5", Arg.Any<CancellationToken>()).Returns((EmailMessage?)null);
+        _store.CompleteAsync("r5", CleanupReviewStatus.Trashed, "Gone", Arg.Any<CancellationToken>()).Returns(review);
+
+        await Handler().HandleAsync(new ResolveCleanupReviewCommand("r5", CleanupDecision.Trash, "Gone"));
+
+        await _gmail.DidNotReceive().TrashEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _store.Received(1).CompleteAsync("r5", CleanupReviewStatus.Trashed, "Gone", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TrashWhileGoogleIsDisconnectedReleasesTheReviewForRetry()
+    {
+        var review = new CleanupReview { Id = "r6", EmailId = "m6", Status = CleanupReviewStatus.Pending };
+        _store.GetByIdAsync("r6", Arg.Any<CancellationToken>()).Returns(review);
+        _store.TryClaimTrashAsync("r6", Arg.Any<CancellationToken>()).Returns(true);
+        _gmail.TrashEmailAsync("m6", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new GoogleAccountNotConnectedException("Gmail")));
+
+        var act = () => Handler().HandleAsync(new ResolveCleanupReviewCommand("r6", CleanupDecision.Trash, "Spam"));
+
+        await act.Should().ThrowAsync<GoogleAccountNotConnectedException>();
+        await _store.Received(1).CompleteAsync("r6", CleanupReviewStatus.Pending, "Spam", Arg.Any<CancellationToken>());
+        await _store.DidNotReceive().CompleteAsync("r6", CleanupReviewStatus.Trashed, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

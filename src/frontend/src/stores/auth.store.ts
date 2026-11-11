@@ -19,7 +19,8 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isAuthenticated: (state) => !!state.token,
-    isAdmin: (state) => state.user?.role?.toLowerCase() === 'admin' || state.user?.email === 'hnt.vn.vn@gmail.com',
+    // Single-owner app: the backend only issues tokens to ADMIN_EMAIL, so a session is an admin session.
+    isAdmin: (state) => !!state.token,
   },
 
   actions: {

@@ -1,3 +1,4 @@
+using GOpsHub.Application.Common;
 using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
@@ -69,13 +70,23 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
             {
                 await _gmail.TrashEmailAsync(review.EmailId, ct);
             }
+            catch (GoogleAccountNotConnectedException)
+            {
+                // Nothing happened in Gmail; release the claim so the owner can retry after reconnecting.
+                await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Pending, reason, ct);
+                throw;
+            }
             catch (Exception ex)
             {
-                var gmailMessage = await _gmail.GetEmailByIdAsync(review.EmailId, ct);
-                if (gmailMessage?.Labels.Contains("TRASH") != true)
+                var gmailMessage = await GetEmailOrReleaseAsync(review, reason, ct);
+                if (gmailMessage == null)
                 {
-                    if (gmailMessage != null)
-                        await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Pending, reason, ct);
+                    // The email was already deleted outside the app: the owner's intent is fulfilled.
+                    _logger.LogInformation("Email {EmailId} no longer exists; completing review {ReviewId} as trashed", review.EmailId, review.Id);
+                }
+                else if (!gmailMessage.Labels.Contains("TRASH"))
+                {
+                    await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Pending, reason, ct);
                     _logger.LogWarning(ex, "Could not confirm Trash for cleanup review {ReviewId}", review.Id);
                     throw;
                 }
@@ -88,10 +99,9 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
             if (!await _reviews.TryClaimRecoveryAsync(review.Id, DateTime.UtcNow.AddMinutes(-1), ct))
                 throw new InvalidOperationException("Trash recovery was claimed concurrently.");
 
-            var gmailMessage = await _gmail.GetEmailByIdAsync(review.EmailId, ct);
-            if (gmailMessage == null)
-                throw new InvalidOperationException("Cannot verify Gmail status; review requires reconciliation.");
-            if (!gmailMessage.Labels.Contains("TRASH"))
+            var gmailMessage = await GetEmailOrReleaseAsync(review, reason, ct);
+            // null = already deleted outside the app, which also fulfils the Trash decision.
+            if (gmailMessage != null && !gmailMessage.Labels.Contains("TRASH"))
                 await _gmail.TrashEmailAsync(review.EmailId, ct);
         }
         else
@@ -109,6 +119,23 @@ public class ResolveCleanupReviewCommandHandler : ICommandHandler<ResolveCleanup
         }
         await EnsureLogAsync(review, "Trashed", reason, ct);
         return await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Trashed, reason, ct);
+    }
+
+    /// <summary>
+    /// Reads the email's current Gmail state (null = no longer exists). If Google is not connected,
+    /// the review is released back to Pending so it never stays stuck in ProcessingTrash.
+    /// </summary>
+    private async Task<EmailMessage?> GetEmailOrReleaseAsync(CleanupReview review, string reason, CancellationToken ct)
+    {
+        try
+        {
+            return await _gmail.GetEmailByIdAsync(review.EmailId, ct);
+        }
+        catch (GoogleAccountNotConnectedException)
+        {
+            await _reviews.CompleteAsync(review.Id, CleanupReviewStatus.Pending, reason, ct);
+            throw;
+        }
     }
 
     private async Task<CleanupFeedback> EnsureFeedbackAsync(CleanupReview review, CleanupDecision decision, string reason,

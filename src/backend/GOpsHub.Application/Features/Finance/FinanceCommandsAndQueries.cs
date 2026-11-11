@@ -90,6 +90,14 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
             {
                 if (string.IsNullOrEmpty(aiResult.EmailId)) continue;
 
+                // Idempotent: a previous run may have saved this email and then failed before
+                // MarkAsRead (e.g. Sheets error). Never record the same bank email twice.
+                if (await _transactionRepo.FindOneAsync(t => t.SourceEmailId == aiResult.EmailId, ct) != null)
+                {
+                    await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
+                    continue;
+                }
+
                 var transactionType = aiResult.TransactionType.Equals("credit", StringComparison.OrdinalIgnoreCase)
                     ? TransactionType.Credit
                     : TransactionType.Debit;
@@ -114,7 +122,7 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
                 };
 
                 var saved = await _transactionRepo.CreateAsync(transaction, ct);
-                await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
+                await FinanceSheetSync.AppendTransactionAsync(saved, command.SpreadsheetId, _configRepo, _driveService, _sheetsService, ct);
                 
                 // Đánh dấu đã đọc thay vì xóa
                 await _gmailService.MarkAsReadAsync(aiResult.EmailId, ct);
@@ -137,87 +145,6 @@ public class SyncBankTransactionsCommandHandler : ICommandHandler<SyncBankTransa
         return totalProcessed;
     }
 
-    private async Task SyncToMonthlyGoogleSheetAsync(Transaction saved, string? customSpreadsheetId, CancellationToken ct)
-    {
-        try
-        {
-            string spreadsheetId = customSpreadsheetId ?? string.Empty;
-
-            var folderConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_FolderId", ct);
-            var patternConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_FileNamePattern", ct);
-            var fixedSheetConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_SpreadsheetId", ct);
-
-            string? folderId = folderConfig?.Value;
-            string fileNamePattern = !string.IsNullOrWhiteSpace(patternConfig?.Value) ? patternConfig.Value : "BaoCaoTaiChinh_{yyyy_MM}";
-
-            if (string.IsNullOrEmpty(spreadsheetId) && !string.IsNullOrWhiteSpace(fixedSheetConfig?.Value))
-            {
-                spreadsheetId = fixedSheetConfig.Value;
-            }
-
-            if (string.IsNullOrEmpty(spreadsheetId))
-            {
-                var fileName = FormatFileNamePattern(fileNamePattern, saved.TransactionDate);
-                var existingId = await _driveService.FindFileByNameAsync(fileName, "application/vnd.google-apps.spreadsheet", folderId, ct);
-                if (!string.IsNullOrEmpty(existingId))
-                {
-                    spreadsheetId = existingId;
-                }
-                else
-                {
-                    spreadsheetId = await _sheetsService.CreateSpreadsheetAsync(fileName, ct);
-                    if (!string.IsNullOrEmpty(spreadsheetId) && !string.IsNullOrEmpty(folderId))
-                    {
-                        try
-                        {
-                            await _driveService.MoveFileAsync(spreadsheetId, folderId, ct);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Failed to move spreadsheet to target folder: {ex.Message}");
-                        }
-                    }
-                }
-            }
-
-            if (!string.IsNullOrEmpty(spreadsheetId))
-            {
-                var rowValues = new List<object>
-                {
-                    saved.TransactionCode ?? "",
-                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                    saved.BankName,
-                    saved.TransactionType == TransactionType.Credit ? "+ Nhận" : "- Chi",
-                    saved.Amount,
-                    saved.FeeAmount,
-                    saved.SourceAccount ?? "",
-                    saved.TargetAccount ?? "",
-                    saved.BeneficiaryName ?? "",
-                    saved.Category,
-                    saved.Description
-                };
-
-                await _sheetsService.AppendRowAsync(spreadsheetId, "A1", rowValues, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to sync transaction to Google Sheets: {ex.Message}");
-        }
-    }
-
-    private static string FormatFileNamePattern(string pattern, DateTime date)
-    {
-        if (string.IsNullOrWhiteSpace(pattern)) pattern = "BaoCaoTaiChinh_{yyyy_MM}";
-
-        string result = pattern
-            .Replace("{yyyy_MM}", date.ToString("yyyy_MM"))
-            .Replace("{yyyy-MM}", date.ToString("yyyy-MM"))
-            .Replace("{yyyy}", date.ToString("yyyy"))
-            .Replace("{MM}", date.ToString("MM"));
-
-        return result;
-    }
 }
 
 public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransactionEmailCommand, Transaction?>
@@ -250,8 +177,10 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
         var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
         if (email == null) return null;
 
-        // Rate Limit (10 req/min = 6 seconds delay)
-        await Task.Delay(6000, ct);
+        var alreadyRecorded = await _transactionRepo.FindOneAsync(t => t.SourceEmailId == email.Id, ct);
+        if (alreadyRecorded != null) return alreadyRecorded;
+
+        await AiThrottle.WaitTurnAsync(ct);
 
         var contentToParse = !string.IsNullOrWhiteSpace(email.Body) ? email.Body : email.Snippet;
         var aiResult = await _aiService.ParseTransactionEmailAsync(contentToParse, command.BankName, ct);
@@ -282,7 +211,7 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
 
         var saved = await _transactionRepo.CreateAsync(transaction, ct);
 
-        await SyncToMonthlyGoogleSheetAsync(saved, command.SpreadsheetId, ct);
+        await FinanceSheetSync.AppendTransactionAsync(saved, command.SpreadsheetId, _configRepo, _driveService, _sheetsService, ct);
 
         // Mark email as read so it won't be processed again
         await _gmailService.MarkAsReadAsync(email.Id, ct);
@@ -290,88 +219,6 @@ public class ParseTransactionEmailCommandHandler : ICommandHandler<ParseTransact
         return saved;
     }
 
-    private async Task SyncToMonthlyGoogleSheetAsync(Transaction saved, string? customSpreadsheetId, CancellationToken ct)
-    {
-        try
-        {
-            string spreadsheetId = customSpreadsheetId ?? string.Empty;
-
-            var folderConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_FolderId", ct);
-            var patternConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_FileNamePattern", ct);
-            var fixedSheetConfig = await _configRepo.FindOneAsync(c => c.Key == "Finance_SpreadsheetId", ct);
-
-            string? folderId = folderConfig?.Value;
-            string fileNamePattern = !string.IsNullOrWhiteSpace(patternConfig?.Value) ? patternConfig.Value : "BaoCaoTaiChinh_{yyyy_MM}";
-
-            if (string.IsNullOrEmpty(spreadsheetId) && !string.IsNullOrWhiteSpace(fixedSheetConfig?.Value))
-            {
-                spreadsheetId = fixedSheetConfig.Value;
-            }
-
-            if (string.IsNullOrEmpty(spreadsheetId))
-            {
-                var fileName = FormatFileNamePattern(fileNamePattern, saved.TransactionDate);
-                var existingId = await _driveService.FindFileByNameAsync(fileName, "application/vnd.google-apps.spreadsheet", folderId, ct);
-                if (!string.IsNullOrEmpty(existingId))
-                {
-                    spreadsheetId = existingId;
-                }
-                else
-                {
-                    spreadsheetId = await _sheetsService.CreateSpreadsheetAsync(fileName, ct);
-                    if (!string.IsNullOrEmpty(spreadsheetId) && !string.IsNullOrEmpty(folderId))
-                    {
-                        try
-                        {
-                            await _driveService.MoveFileAsync(spreadsheetId, folderId, ct);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Failed to move spreadsheet to target folder: {ex.Message}");
-                        }
-                    }
-                }
-            }
-
-            if (!string.IsNullOrEmpty(spreadsheetId))
-            {
-                var rowValues = new List<object>
-                {
-                    saved.TransactionCode ?? "",
-                    saved.TransactionDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                    saved.BankName,
-                    saved.TransactionType == TransactionType.Credit ? "+ Nhận" : "- Chi",
-                    saved.Amount,
-                    saved.FeeAmount,
-                    saved.SourceAccount ?? "",
-                    saved.TargetAccount ?? "",
-                    saved.BeneficiaryName ?? "",
-                    saved.Category,
-                    saved.Description,
-                    saved.BalanceAfter ?? 0
-                };
-
-                await _sheetsService.AppendRowAsync(spreadsheetId, "A1", rowValues, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to sync transaction to Google Sheets: {ex.Message}");
-        }
-    }
-
-    private static string FormatFileNamePattern(string pattern, DateTime date)
-    {
-        if (string.IsNullOrWhiteSpace(pattern)) pattern = "BaoCaoTaiChinh_{yyyy_MM}";
-
-        string result = pattern
-            .Replace("{yyyy_MM}", date.ToString("yyyy_MM"))
-            .Replace("{yyyy-MM}", date.ToString("yyyy-MM"))
-            .Replace("{yyyy}", date.ToString("yyyy"))
-            .Replace("{MM}", date.ToString("MM"));
-
-        return result;
-    }
 }
 
 public record GetTransactionsQuery(int Page = 1, int PageSize = 20) : IQuery<PagedResult<Transaction>>;
@@ -502,5 +349,31 @@ public class GetMonthlyFinanceSummaryQueryHandler : IQueryHandler<GetMonthlyFina
         var totalExpense = transactions.Where(t => t.TransactionType == TransactionType.Debit).Sum(t => t.Amount);
 
         return new FinanceMonthlySummaryDto(totalIncome, totalExpense, totalIncome - totalExpense, transactions.Count);
+    }
+}
+
+/// <summary>
+/// Keeps single-email parsing under the Gemini quota (10 req/min) by spacing calls at least
+/// 6 seconds apart. Unlike a fixed Task.Delay, an isolated request is not slowed down.
+/// </summary>
+internal static class AiThrottle
+{
+    private static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(6);
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static DateTime _lastCallUtc = DateTime.MinValue;
+
+    public static async Task WaitTurnAsync(CancellationToken ct)
+    {
+        await Gate.WaitAsync(ct);
+        try
+        {
+            var wait = _lastCallUtc + MinInterval - DateTime.UtcNow;
+            if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+            _lastCallUtc = DateTime.UtcNow;
+        }
+        finally
+        {
+            Gate.Release();
+        }
     }
 }

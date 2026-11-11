@@ -29,6 +29,11 @@ public class ExtractScheduleFromEmailCommandHandler : ICommandHandler<ExtractSch
     {
         var email = await _gmailService.GetEmailByIdAsync(command.GmailMessageId, ct);
         if (email == null) return null;
+
+        // Re-extracting the same email returns the existing record instead of creating a duplicate.
+        var existing = await _scheduleRepo.FindOneAsync(s => s.SourceEmailId == email.Id, ct);
+        if (existing != null) return existing;
+
         // Dùng Body thay vì Snippet để AI đọc được toàn bộ chi tiết lịch hẹn
         var aiResult = await _aiService.ExtractScheduleFromEmailAsync(email.Body ?? email.Snippet, ct);
         if (aiResult == null) return null;
@@ -43,7 +48,10 @@ public class ExtractScheduleFromEmailCommandHandler : ICommandHandler<ExtractSch
             Location = aiResult.Location,
             Description = aiResult.Description,
             ConfidenceScore = aiResult.ConfidenceScore,
-            Status = aiResult.ConfidenceScore >= 0.90 ? ScheduleStatus.AutoCreated : ScheduleStatus.PendingConfirm
+            // Human-in-the-loop (same as CalendarScheduleBackgroundJob): nothing reaches Google Calendar
+            // until the owner confirms. Previously high-confidence results were marked AutoCreated
+            // although no Calendar event was ever created.
+            Status = ScheduleStatus.PendingConfirm
         };
 
         return await _scheduleRepo.CreateAsync(schedule, ct);

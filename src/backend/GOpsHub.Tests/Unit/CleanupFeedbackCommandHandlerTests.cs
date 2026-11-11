@@ -98,6 +98,9 @@ public class CleanupFeedbackCommandHandlerTests
         store.TryClaimTrashAsync(review.Id, Arg.Any<CancellationToken>()).Returns(true);
         gmail.TrashEmailAsync(review.EmailId, Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new IOException("Gmail failed")));
+        // The message still exists and is not in Trash, so the failure is real.
+        gmail.GetEmailByIdAsync(review.EmailId, Arg.Any<CancellationToken>())
+            .Returns(new EmailMessage { Id = review.EmailId, Labels = new List<string> { "INBOX" } });
         var resolver = new ResolveCleanupReviewCommandHandler(store, _feedbackRepo, logs, gmail,
             Substitute.For<ILogger<ResolveCleanupReviewCommandHandler>>());
         var handler = new SubmitCleanupFeedbackCommandHandler(_feedbackRepo, _reviews, resolver);

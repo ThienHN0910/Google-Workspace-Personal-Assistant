@@ -1,11 +1,7 @@
-using System.Linq.Expressions;
 using System.Net;
 using FluentAssertions;
-using GOpsHub.Application.Common.Interfaces;
-using GOpsHub.Domain.Entities;
-using GOpsHub.Domain.Interfaces;
+using Google.Apis.Auth.OAuth2;
 using GOpsHub.Infrastructure.GoogleApis;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -14,189 +10,18 @@ namespace GOpsHub.Tests.Unit;
 
 public class DriveApiServiceTokenRefreshTests
 {
-    private readonly IRepository<AdminUser> _userRepo = Substitute.For<IRepository<AdminUser>>();
-    private readonly ITokenEncryptionService _encryptionService = Substitute.For<ITokenEncryptionService>();
-    private readonly IGoogleTokenService _googleTokenService = Substitute.For<IGoogleTokenService>();
-    private readonly IConfiguration _configuration = Substitute.For<IConfiguration>();
+    private readonly IAdminGoogleCredentialProvider _credentialProvider = Substitute.For<IAdminGoogleCredentialProvider>();
     private readonly ILogger<DriveApiService> _logger = Substitute.For<ILogger<DriveApiService>>();
-
-    public DriveApiServiceTokenRefreshTests()
-    {
-        _configuration["ADMIN_EMAIL"].Returns("hnt.vn.vn@gmail.com");
-    }
-
-    [Fact]
-    public async Task WhenTokenIsExpired_EnsureFreshTokenAsync_ShouldAutomaticallyRefreshTokenAndPersist()
-    {
-        // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-old-access-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddMinutes(-30) // Expired 30 mins ago
-        };
-
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-old-access-token").Returns("old-raw-access-token");
-        _encryptionService.Decrypt("encrypted-refresh-token").Returns("raw-refresh-token");
-        _encryptionService.Encrypt("new-raw-access-token").Returns("encrypted-new-access-token");
-
-        _googleTokenService.RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(new GoogleTokenResult
-            {
-                AccessToken = "new-raw-access-token",
-                RefreshToken = "raw-refresh-token",
-                ExpiresInSeconds = 3600
-            });
-
-        var driveService = new DriveApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
-
-        // Act
-        var token = await driveService.EnsureFreshTokenAsync(forceRefresh: false);
-
-        // Assert
-        token.Should().Be("new-raw-access-token");
-
-        await _googleTokenService.Received(1)
-            .RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>());
-
-        adminUser.GoogleAccessToken.Should().Be("encrypted-new-access-token");
-        adminUser.GoogleTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
-
-        await _userRepo.Received(1)
-            .UpdateAsync(adminUser, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task WhenTokenIsValid_EnsureFreshTokenAsync_ShouldNotRefreshToken()
-    {
-        // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-valid-access-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddHours(1) // Still valid for 1 hour
-        };
-
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-valid-access-token").Returns("valid-raw-access-token");
-
-        var driveService = new DriveApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
-
-        // Act
-        var token = await driveService.EnsureFreshTokenAsync(forceRefresh: false);
-
-        // Assert
-        token.Should().Be("valid-raw-access-token");
-
-        await _googleTokenService.DidNotReceive()
-            .RefreshAccessTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-
-        await _userRepo.DidNotReceive()
-            .UpdateAsync(Arg.Any<AdminUser>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task WhenForceRefreshIsTrue_EnsureFreshTokenAsync_ShouldRefreshEvenIfTokenIsValid()
-    {
-        // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-valid-access-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddHours(1) // Token not expired
-        };
-
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-valid-access-token").Returns("valid-raw-access-token");
-        _encryptionService.Decrypt("encrypted-refresh-token").Returns("raw-refresh-token");
-        _encryptionService.Encrypt("forced-refreshed-token").Returns("encrypted-forced-token");
-
-        _googleTokenService.RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(new GoogleTokenResult
-            {
-                AccessToken = "forced-refreshed-token",
-                RefreshToken = "raw-refresh-token",
-                ExpiresInSeconds = 3600
-            });
-
-        var driveService = new DriveApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
-
-        // Act
-        var token = await driveService.EnsureFreshTokenAsync(forceRefresh: true);
-
-        // Assert
-        token.Should().Be("forced-refreshed-token");
-
-        await _googleTokenService.Received(1)
-            .RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>());
-
-        adminUser.GoogleAccessToken.Should().Be("encrypted-forced-token");
-        await _userRepo.Received(1)
-            .UpdateAsync(adminUser, Arg.Any<CancellationToken>());
-    }
 
     [Fact]
     public async Task WhenExecuteWithRetry_Encounter401_ShouldForceRefreshTokenAndRetrySuccessfully()
     {
         // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-initial-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddMinutes(20) // Token thought to be valid, but 401s
-        };
+        var credential = GoogleCredential.FromAccessToken("dummy-token");
+        _credentialProvider.GetCredentialAsync("Drive", Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(credential);
 
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-initial-token").Returns("initial-raw-token");
-        _encryptionService.Decrypt("encrypted-refresh-token").Returns("raw-refresh-token");
-        _encryptionService.Encrypt("fresh-raw-token").Returns("encrypted-fresh-token");
-
-        _googleTokenService.RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(new GoogleTokenResult
-            {
-                AccessToken = "fresh-raw-token",
-                RefreshToken = "raw-refresh-token",
-                ExpiresInSeconds = 3600
-            });
-
-        var driveService = new DriveApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
+        var driveService = new DriveApiService(_credentialProvider, _logger);
 
         int callCount = 0;
 
@@ -222,8 +47,42 @@ public class DriveApiServiceTokenRefreshTests
         callCount.Should().Be(2);
 
         // Forced refresh should have been called on 401
-        await _googleTokenService.Received(1)
-            .RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>());
-        adminUser.GoogleAccessToken.Should().Be("encrypted-fresh-token");
+        await _credentialProvider.Received(1)
+            .GetCredentialAsync("Drive", true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WhenCredentialProviderReturnsNull_ExecuteWithRetry_ShouldReturnDefaultValue()
+    {
+        // Arrange
+        _credentialProvider.GetCredentialAsync("Drive", Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns((GoogleCredential?)null);
+
+        var driveService = new DriveApiService(_credentialProvider, _logger);
+
+        // Act
+        var result = await driveService.ExecuteWithRetryAsync(service => Task.FromResult("success"), "default-value");
+
+        // Assert
+        result.Should().Be("default-value");
+    }
+
+    [Fact]
+    public async Task WhenActionSucceeds_ExecuteWithRetry_ShouldNotForceRefreshToken()
+    {
+        // Arrange
+        var credential = GoogleCredential.FromAccessToken("dummy-token");
+        _credentialProvider.GetCredentialAsync("Drive", Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(credential);
+
+        var driveService = new DriveApiService(_credentialProvider, _logger);
+
+        // Act
+        var result = await driveService.ExecuteWithRetryAsync(service => Task.FromResult("ok"), "failed");
+
+        // Assert
+        result.Should().Be("ok");
+        await _credentialProvider.DidNotReceive()
+            .GetCredentialAsync("Drive", true, Arg.Any<CancellationToken>());
     }
 }

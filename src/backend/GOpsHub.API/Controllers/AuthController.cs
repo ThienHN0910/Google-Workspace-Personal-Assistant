@@ -1,3 +1,4 @@
+using GOpsHub.Application.Common;
 using GOpsHub.Application.Common.CQRS;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Application.Common.Models;
@@ -106,19 +107,19 @@ public class AuthController : ControllerBase
                 return Redirect($"{frontendUrl}/login?error=Không thể lấy thông tin người dùng.");
             }
 
-            var allowedEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
-            if (!string.Equals(userInfo.Email, allowedEmail, StringComparison.OrdinalIgnoreCase))
+            var adminEmail = AdminAccount.ResolveEmail(_configuration);
+            if (!AdminAccount.IsAdmin(userInfo.Email, _configuration))
             {
                 return Redirect($"{frontendUrl}/login?error=Tài khoản {userInfo.Email} không có quyền truy cập.");
             }
 
             // Find or create admin user
-            var user = await _userRepository.FindOneAsync(u => u.Email == allowedEmail, ct);
+            var user = await _userRepository.FindOneAsync(u => u.Email == adminEmail, ct);
             if (user == null)
             {
                 user = new AdminUser
                 {
-                    Email = userInfo.Email,
+                    Email = adminEmail,
                     DisplayName = userInfo.Name,
                     AvatarUrl = userInfo.Picture,
                     GoogleId = userInfo.Sub,

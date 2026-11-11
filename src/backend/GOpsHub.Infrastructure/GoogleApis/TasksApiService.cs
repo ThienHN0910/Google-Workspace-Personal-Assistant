@@ -1,11 +1,8 @@
-using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Tasks.v1;
 using Google.Apis.Tasks.v1.Data;
 using GOpsHub.Application.Common.Interfaces;
 using GOpsHub.Domain.Entities;
-using GOpsHub.Domain.Interfaces;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using GoogleTask = Google.Apis.Tasks.v1.Data.Task;
 
@@ -13,67 +10,21 @@ namespace GOpsHub.Infrastructure.GoogleApis;
 
 public class TasksApiService : ITasksService
 {
-    private readonly IRepository<AdminUser> _userRepo;
-    private readonly ITokenEncryptionService _encryptionService;
-    private readonly IGoogleTokenService _googleTokenService;
-    private readonly IConfiguration _configuration;
+    private readonly IAdminGoogleCredentialProvider _credentialProvider;
     private readonly ILogger<TasksApiService> _logger;
-    private readonly string _adminEmail;
 
     public TasksApiService(
-        IRepository<AdminUser> userRepo,
-        ITokenEncryptionService encryptionService,
-        IGoogleTokenService googleTokenService,
-        IConfiguration configuration,
+        IAdminGoogleCredentialProvider credentialProvider,
         ILogger<TasksApiService> logger)
     {
-        _userRepo = userRepo;
-        _encryptionService = encryptionService;
-        _googleTokenService = googleTokenService;
-        _configuration = configuration;
+        _credentialProvider = credentialProvider;
         _logger = logger;
-        _adminEmail = _configuration["ADMIN_EMAIL"] ?? "hnt.vn.vn@gmail.com";
     }
 
     private async Task<TasksService?> GetTasksClientAsync(CancellationToken ct = default)
     {
-        var user = await _userRepo.FindOneAsync(u => u.Email == _adminEmail, ct);
-        if (user == null || string.IsNullOrEmpty(user.GoogleAccessToken))
-        {
-            _logger.LogWarning("Admin user token not found for Tasks API calls.");
-            return null;
-        }
-
-        var accessToken = _encryptionService.Decrypt(user.GoogleAccessToken);
-
-        // Auto-refresh token if expired or about to expire
-        if (user.GoogleTokenExpiresAt.HasValue && user.GoogleTokenExpiresAt.Value <= DateTime.UtcNow.AddMinutes(5))
-        {
-            if (!string.IsNullOrEmpty(user.GoogleRefreshToken))
-            {
-                try
-                {
-                    var refreshToken = _encryptionService.Decrypt(user.GoogleRefreshToken);
-                    var newTokens = await _googleTokenService.RefreshAccessTokenAsync(refreshToken, ct);
-
-                    accessToken = newTokens.AccessToken;
-                    user.GoogleAccessToken = _encryptionService.Encrypt(newTokens.AccessToken);
-                    user.GoogleTokenExpiresAt = DateTime.UtcNow.AddSeconds(newTokens.ExpiresInSeconds);
-                    await _userRepo.UpdateAsync(user, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to refresh Google access token for Tasks.");
-                    return null;
-                }
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        var credential = GoogleCredential.FromAccessToken(accessToken);
+        var credential = await _credentialProvider.GetCredentialAsync("Tasks", ct);
+        if (credential == null) return null;
 
         return new TasksService(new BaseClientService.Initializer
         {

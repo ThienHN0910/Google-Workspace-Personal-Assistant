@@ -1,10 +1,6 @@
-using System.Linq.Expressions;
 using FluentAssertions;
-using GOpsHub.Application.Common.Interfaces;
-using GOpsHub.Domain.Entities;
-using GOpsHub.Domain.Interfaces;
+using Google.Apis.Auth.OAuth2;
 using GOpsHub.Infrastructure.GoogleApis;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -13,103 +9,42 @@ namespace GOpsHub.Tests.Unit;
 
 public class SheetsApiServiceTokenRefreshTests
 {
-    private readonly IRepository<AdminUser> _userRepo = Substitute.For<IRepository<AdminUser>>();
-    private readonly ITokenEncryptionService _encryptionService = Substitute.For<ITokenEncryptionService>();
-    private readonly IGoogleTokenService _googleTokenService = Substitute.For<IGoogleTokenService>();
-    private readonly IConfiguration _configuration = Substitute.For<IConfiguration>();
+    private readonly IAdminGoogleCredentialProvider _credentialProvider = Substitute.For<IAdminGoogleCredentialProvider>();
     private readonly ILogger<SheetsApiService> _logger = Substitute.For<ILogger<SheetsApiService>>();
 
-    public SheetsApiServiceTokenRefreshTests()
+    [Fact]
+    public async Task WhenCredentialProviderReturnsNull_GetRangeAsync_ShouldReturnEmptyList()
     {
-        _configuration["ADMIN_EMAIL"].Returns("hnt.vn.vn@gmail.com");
+        // Arrange
+        _credentialProvider.GetCredentialAsync("Sheets", Arg.Any<CancellationToken>())
+            .Returns((GoogleCredential?)null);
+
+        var sheetsService = new SheetsApiService(_credentialProvider, _logger);
+
+        // Act
+        var result = await sheetsService.GetRangeAsync("dummy-sheet-id", "Sheet1!A1:B2");
+
+        // Assert
+        result.Should().BeEmpty();
+        await _credentialProvider.Received(1)
+            .GetCredentialAsync("Sheets", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WhenTokenIsExpired_EnsureFreshTokenAsync_ShouldAutomaticallyRefreshTokenAndPersist()
+    public async Task WhenCredentialProviderReturnsNull_CreateSheetTabAsync_ShouldReturnEmptyString()
     {
         // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-old-access-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddMinutes(-30) // Expired 30 mins ago
-        };
+        _credentialProvider.GetCredentialAsync("Sheets", Arg.Any<CancellationToken>())
+            .Returns((GoogleCredential?)null);
 
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-old-access-token").Returns("old-raw-access-token");
-        _encryptionService.Decrypt("encrypted-refresh-token").Returns("raw-refresh-token");
-        _encryptionService.Encrypt("new-raw-access-token").Returns("encrypted-new-access-token");
-
-        _googleTokenService.RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>())
-            .Returns(new GoogleTokenResult
-            {
-                AccessToken = "new-raw-access-token",
-                RefreshToken = "raw-refresh-token",
-                ExpiresInSeconds = 3600
-            });
-
-        var sheetsService = new SheetsApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
+        var sheetsService = new SheetsApiService(_credentialProvider, _logger);
 
         // Act
-        var token = await sheetsService.EnsureFreshTokenAsync(forceRefresh: false);
+        var result = await sheetsService.CreateSheetTabAsync("dummy-sheet-id", "NewTab");
 
         // Assert
-        token.Should().Be("new-raw-access-token");
-
-        await _googleTokenService.Received(1)
-            .RefreshAccessTokenAsync("raw-refresh-token", Arg.Any<CancellationToken>());
-
-        adminUser.GoogleAccessToken.Should().Be("encrypted-new-access-token");
-        adminUser.GoogleTokenExpiresAt.Should().BeAfter(DateTime.UtcNow);
-
-        await _userRepo.Received(1)
-            .UpdateAsync(adminUser, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task WhenTokenIsValid_EnsureFreshTokenAsync_ShouldNotRefreshToken()
-    {
-        // Arrange
-        var adminUser = new AdminUser
-        {
-            Id = "user-1",
-            Email = "hnt.vn.vn@gmail.com",
-            GoogleAccessToken = "encrypted-valid-access-token",
-            GoogleRefreshToken = "encrypted-refresh-token",
-            GoogleTokenExpiresAt = DateTime.UtcNow.AddHours(1) // Still valid for 1 hour
-        };
-
-        _userRepo.FindOneAsync(Arg.Any<Expression<Func<AdminUser, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(adminUser);
-
-        _encryptionService.Decrypt("encrypted-valid-access-token").Returns("valid-raw-access-token");
-
-        var sheetsService = new SheetsApiService(
-            _userRepo,
-            _encryptionService,
-            _googleTokenService,
-            _configuration,
-            _logger);
-
-        // Act
-        var token = await sheetsService.EnsureFreshTokenAsync(forceRefresh: false);
-
-        // Assert
-        token.Should().Be("valid-raw-access-token");
-
-        await _googleTokenService.DidNotReceive()
-            .RefreshAccessTokenAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-
-        await _userRepo.DidNotReceive()
-            .UpdateAsync(Arg.Any<AdminUser>(), Arg.Any<CancellationToken>());
+        result.Should().BeEmpty();
+        await _credentialProvider.Received(1)
+            .GetCredentialAsync("Sheets", Arg.Any<CancellationToken>());
     }
 }

@@ -13,7 +13,7 @@
           <p class="subtitle">Quản lý công việc đa danh sách, phân cấp subtask đồng bộ hai chiều</p>
         </div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions" v-if="!googleError">
         <!-- View Mode Switcher -->
         <div class="view-mode-toggle">
           <button 
@@ -74,8 +74,14 @@
       </div>
     </header>
 
-    <!-- Filter Tabs (Scrollable on mobile) -->
-    <div class="tabs-nav-wrapper">
+    <LoadingSpinner v-if="loading" text="Đang tải danh sách công việc..." />
+
+    <!-- Google Reconnect Notice (UC03 Auth/Token expired) -->
+    <GoogleReconnectNotice v-else-if="googleError" :message="googleError" />
+
+    <template v-else>
+      <!-- Filter Tabs (Scrollable on mobile) -->
+      <div class="tabs-nav-wrapper">
       <div class="filter-tabs">
         <button 
           class="filter-tab" 
@@ -118,9 +124,7 @@
 
     <!-- Single List View -->
     <template v-if="viewMode === 'single'">
-      <LoadingSpinner v-if="loading" text="Đang tải danh sách công việc..." />
-
-      <div v-else-if="displayTasks.length === 0" class="empty-state">
+      <div v-if="displayTasks.length === 0" class="empty-state">
         <i class="pi pi-check-circle"></i>
         <p v-if="activeFilter === 'starred'">Bạn chưa gắn sao công việc quan trọng nào.</p>
         <p v-else-if="activeFilter === 'today'">Không có công việc nào cần làm hôm nay.</p>
@@ -303,6 +307,7 @@
         </div>
       </div>
     </template>
+    </template>
 
     <!-- Manage Task Lists Modal -->
     <div v-if="showListModal" class="modal-overlay" @click.self="showListModal = false">
@@ -457,7 +462,12 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api.service';
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue';
+import GoogleReconnectNotice from '@/components/common/GoogleReconnectNotice.vue';
+import { isGoogleDisconnectedError, googleDisconnectedMessage } from '@/utils/googleConnection';
 import { showToast } from '@/services/notification.service';
+
+const googleError = ref<string | null>(null);
+
 
 const viewMode = ref<'single' | 'board'>('single');
 const tasks = ref<any[]>([]);
@@ -603,9 +613,13 @@ const fetchTaskLists = async () => {
       if (!currentListId.value) {
         currentListId.value = res.data[0].id;
       }
+      googleError.value = null;
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch task lists', e);
+    if (isGoogleDisconnectedError(e)) {
+      googleError.value = googleDisconnectedMessage(e);
+    }
   }
 };
 
@@ -620,9 +634,13 @@ const fetchTasks = async (listId?: string) => {
       if (target) {
         boardTasksMap.value[target] = res.data;
       }
+      googleError.value = null;
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch tasks:', e);
+    if (isGoogleDisconnectedError(e)) {
+      googleError.value = googleDisconnectedMessage(e);
+    }
   } finally {
     loading.value = false;
   }
@@ -638,8 +656,11 @@ const fetchBoardTasks = async () => {
         if (res.success && res.data) {
           return { listId: list.id, tasks: res.data };
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error(`Failed to fetch tasks for list ${list.id}`, e);
+        if (isGoogleDisconnectedError(e)) {
+          googleError.value = googleDisconnectedMessage(e);
+        }
       }
       return { listId: list.id, tasks: [] };
     });
@@ -986,7 +1007,11 @@ const formatDate = (dateStr: string) => {
 
 onMounted(async () => {
   await fetchTaskLists();
-  await fetchTasks(currentListId.value);
+  if (!googleError.value) {
+    await fetchTasks(currentListId.value);
+  } else {
+    loading.value = false;
+  }
 });
 </script>
 

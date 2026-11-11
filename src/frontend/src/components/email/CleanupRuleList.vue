@@ -61,7 +61,7 @@
           type="text" 
           placeholder="Tìm quy tắc theo tên, regex hoặc từ khóa..."
         />
-        <button v-if="searchQuery" class="clear-search" @click="searchQuery = ''">
+        <button v-if="searchQuery" class="clear-search" @click="searchQuery = ''" aria-label="Xóa tìm kiếm">
           <i class="pi pi-times"></i>
         </button>
       </div>
@@ -103,7 +103,7 @@
                 {{ fb.decision === 1 ? 'Giữ trong Inbox' : 'Chuyển vào Thùng rác' }}
               </span>
             </div>
-            <button class="btn-delete-fb" @click="handleDeleteFeedback(fb.id)" title="Xóa lý do dọn dẹp này">
+            <button class="btn-delete-fb" @click="handleDeleteFeedback(fb.id)" title="Xóa lý do dọn dẹp này" aria-label="Xóa lý do dọn dẹp">
               <i class="pi pi-trash"></i>
             </button>
           </div>
@@ -207,7 +207,7 @@
             <div class="detail-label"><i class="pi pi-search"></i> Gmail Query cũ (không chạy):</div>
             <div class="code-block query-box">
               <code>{{ rule.customQuery }}</code>
-              <button class="copy-btn" @click="copyText(rule.customQuery)" title="Sao chép query">
+              <button class="copy-btn" @click="copyText(rule.customQuery)" title="Sao chép query" aria-label="Sao chép query">
                 <i class="pi pi-copy"></i>
               </button>
             </div>
@@ -219,7 +219,7 @@
               <div class="detail-label"><i class="pi pi-align-left"></i> Regex Tiêu đề (Subject):</div>
               <div class="code-block">
                 <code>{{ rule.subjectRegex }}</code>
-                <button class="copy-btn" @click="copyText(rule.subjectRegex)" title="Sao chép Regex">
+                <button class="copy-btn" @click="copyText(rule.subjectRegex)" title="Sao chép Regex" aria-label="Sao chép Regex">
                   <i class="pi pi-copy"></i>
                 </button>
               </div>
@@ -229,7 +229,7 @@
               <div class="detail-label"><i class="pi pi-user"></i> Regex Người gửi (Sender):</div>
               <div class="code-block">
                 <code>{{ rule.senderRegex }}</code>
-                <button class="copy-btn" @click="copyText(rule.senderRegex)" title="Sao chép Regex">
+                <button class="copy-btn" @click="copyText(rule.senderRegex)" title="Sao chép Regex" aria-label="Sao chép Regex">
                   <i class="pi pi-copy"></i>
                 </button>
               </div>
@@ -239,7 +239,7 @@
               <div class="detail-label"><i class="pi pi-file"></i> Regex Nội dung (Body):</div>
               <div class="code-block">
                 <code>{{ rule.bodyRegex }}</code>
-                <button class="copy-btn" @click="copyText(rule.bodyRegex)" title="Sao chép Regex">
+                <button class="copy-btn" @click="copyText(rule.bodyRegex)" title="Sao chép Regex" aria-label="Sao chép Regex">
                   <i class="pi pi-copy"></i>
                 </button>
               </div>
@@ -259,11 +259,11 @@
           </span>
 
           <div class="footer-btns">
-            <button class="icon-btn edit-btn" @click="openEditModal(rule)" title="Chỉnh sửa quy tắc">
+            <button class="icon-btn edit-btn" @click="openEditModal(rule)" title="Chỉnh sửa quy tắc" aria-label="Chỉnh sửa quy tắc">
               <i class="pi pi-pencil"></i>
               <span>Sửa</span>
             </button>
-            <button class="icon-btn delete-btn" @click="handleDelete(rule.id)" title="Xóa quy tắc">
+            <button class="icon-btn delete-btn" @click="handleDelete(rule.id)" title="Xóa quy tắc" aria-label="Xóa quy tắc">
               <i class="pi pi-trash"></i>
               <span>Xóa</span>
             </button>
@@ -280,7 +280,7 @@
             <i class="pi" :class="isEditing ? 'pi-pencil' : 'pi-plus-circle'"></i>
             {{ isEditing ? 'Chỉnh sửa quy tắc dọn dẹp' : 'Tạo quy tắc dọn dẹp mới' }}
           </h3>
-          <button class="close-btn" @click="closeModal"><i class="pi pi-times"></i></button>
+          <button class="close-btn" @click="closeModal" aria-label="Đóng"><i class="pi pi-times"></i></button>
         </div>
 
         <form @submit.prevent="handleSubmit" class="modal-form">
@@ -309,7 +309,8 @@
 
             <div class="form-group">
               <label>Regex Người gửi (Sender Regex)</label>
-              <input v-model="formData.senderRegex" placeholder="Ví dụ: (?i).*(no-reply|newsletter)@domain\.com" />
+              <input v-model="formData.senderRegex" placeholder="Ví dụ: ^no-reply@domain\.com$" />
+              <small class="field-hint">Hệ thống chỉ chấp nhận duy nhất 1 hòm thư chính xác dạng ^name@domain\.com$ (ví dụ: ^no-reply@domain\.com$)</small>
             </div>
 
             <div class="form-group">
@@ -1195,6 +1196,13 @@ onMounted(() => {
       outline: none;
       border-color: #6366f1;
     }
+  }
+
+  .field-hint {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.4;
+    margin-top: 0.1rem;
   }
 }
 

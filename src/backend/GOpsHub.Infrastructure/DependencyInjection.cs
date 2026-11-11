@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IGoogleTokenService, GoogleTokenService>();
 
         // Google, AI & Alerting Services
+        services.AddScoped<IAdminGoogleCredentialProvider, AdminGoogleCredentialProvider>();
         services.AddScoped<IGmailService, GmailApiService>();
         services.AddScoped<ICalendarService, CalendarApiService>();
         services.AddScoped<ISheetsService, SheetsApiService>();
