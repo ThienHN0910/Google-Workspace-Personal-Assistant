@@ -53,18 +53,60 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtAudience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
 
 // 4. CORS
-var frontendUrl = builder.Configuration["FRONTEND_URL"] ?? "*";
+var allowedOrigins = new List<string>
+{
+    "http://localhost:5173",
+    "http://localhost:5000",
+    "https://localhost:5173",
+    "https://localhost:5000",
+    "https://gwpa.thienhn.io.vn",
+    "http://gwpa.thienhn.io.vn"
+};
+
+var configFrontendUrl = builder.Configuration["FRONTEND_URL"];
+if (!string.IsNullOrWhiteSpace(configFrontendUrl))
+{
+    foreach (var url in configFrontendUrl.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        if (!allowedOrigins.Contains(url))
+        {
+            allowedOrigins.Add(url);
+        }
+    }
+}
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(frontendUrl)
+        policy.WithOrigins(allowedOrigins.ToArray())
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin)) return false;
+                if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                {
+                    return uri.Host == "localhost" || uri.Host.EndsWith("thienhn.io.vn", StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith("runasp.net", StringComparison.OrdinalIgnoreCase);
+                }
+                return false;
+            })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();

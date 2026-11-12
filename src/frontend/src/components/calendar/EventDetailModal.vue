@@ -10,17 +10,28 @@
       </div>
 
       <div class="detail-body">
-        <!-- Google Meet Banner -->
+        <!-- Read-only Notice -->
+        <div v-if="event.canEdit === false" class="readonly-banner">
+          <div class="readonly-info">
+            <i class="pi pi-lock"></i>
+            <div>
+              <strong>Sự kiện chỉ đọc:</strong>
+              <p>Sự kiện này được tạo tự động từ Gmail hoặc từ lời mời bên ngoài. Vui lòng thao tác trên Google Calendar gốc nếu cần cập nhật.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Conference Banner -->
         <div v-if="event.meetUrl" class="meet-banner">
           <div class="meet-info">
             <i class="pi pi-video text-green"></i>
             <div>
-              <strong>Google Meet:</strong>
+              <strong>{{ getMeetingServiceLabel(event.meetUrl) }}:</strong>
               <p class="meet-url-text">{{ event.meetUrl }}</p>
             </div>
           </div>
           <a :href="event.meetUrl" target="_blank" class="btn-join-meet">
-            <i class="pi pi-video"></i> Tham gia Meet
+            <i class="pi pi-video"></i> Tham gia họp
           </a>
         </div>
 
@@ -72,10 +83,10 @@
         <a v-if="event.htmlLink" :href="event.htmlLink" target="_blank" class="btn-ext-link">
           <i class="pi pi-external-link"></i> Mở Google Calendar
         </a>
-        <button class="btn-edit" @click="$emit('edit', event)">
+        <button v-if="event.canEdit !== false" class="btn-edit" @click="$emit('edit', event)">
           <i class="pi pi-pencil"></i> Chỉnh sửa
         </button>
-        <button class="btn-danger" @click="$emit('delete', event.id)">
+        <button v-if="event.canEdit !== false" class="btn-danger" @click="$emit('delete', event.id)">
           <i class="pi pi-trash"></i> Xóa sự kiện
         </button>
       </div>
@@ -103,6 +114,16 @@ const formatDateTime = (dateStr: string) => {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   });
+};
+
+const getMeetingServiceLabel = (url?: string | null): string => {
+  if (!url) return 'Cuộc họp trực tuyến';
+  const lower = url.toLowerCase();
+  if (lower.includes('teams.microsoft.com') || lower.includes('teams.live.com')) return 'Microsoft Teams';
+  if (lower.includes('zoom.us')) return 'Zoom Meeting';
+  if (lower.includes('meet.google.com')) return 'Google Meet';
+  if (lower.includes('webex.com')) return 'Cisco Webex';
+  return 'Phòng họp trực tuyến';
 };
 </script>
 
@@ -184,6 +205,23 @@ const formatDateTime = (dateStr: string) => {
     height: 1rem;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+}
+
+.readonly-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 0.85rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+
+  .readonly-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    i { font-size: 1.25rem; color: #fbbf24; margin-top: 0.15rem; }
+    strong { color: #fbbf24; font-size: 0.85rem; }
+    p { margin: 0.2rem 0 0; font-size: 0.85rem; color: #e2e8f0; line-height: 1.4; }
   }
 }
 

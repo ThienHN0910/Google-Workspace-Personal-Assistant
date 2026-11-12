@@ -9,8 +9,8 @@
       <div v-for="item in schedules" :key="item.id" class="schedule-card">
         <div class="card-header">
           <span class="event-title">{{ item.title }}</span>
-          <span class="status-badge" :class="item.status === 2 ? 'confirmed' : 'pending'">
-            {{ item.status === 2 ? 'Đã tạo Calendar' : 'Chờ xác nhận' }}
+          <span class="status-badge" :class="(item.status === 2 || item.status === 0) ? 'confirmed' : 'pending'">
+            {{ (item.status === 2 || item.status === 0) ? 'Đã tạo Calendar' : 'Chờ xác nhận' }}
           </span>
         </div>
         <div class="event-details">
@@ -20,7 +20,7 @@
         </div>
         <div class="actions">
           <button 
-            v-if="item.status !== 2" 
+            v-if="item.status !== 2 && item.status !== 0" 
             class="confirm-btn" 
             @click="$emit('confirm', item.id)"
             :disabled="actionInProgressId === item.id"
@@ -29,12 +29,12 @@
           </button>
           <button 
             class="delete-btn" 
-            :class="{ 'delete-btn-ghost': item.status === 2 }"
-            @click="$emit('delete', item.id, item.status === 2)"
+            :class="{ 'delete-btn-ghost': item.status === 2 || item.status === 0 }"
+            @click="$emit('delete', item.id, item.status === 2 || item.status === 0)"
             :disabled="actionInProgressId === item.id"
-            :title="item.status === 2 ? 'Xóa bản ghi trích xuất khỏi database (không xóa trên Google Calendar)' : 'Từ chối lịch hẹn và xóa khỏi database'"
+            :title="(item.status === 2 || item.status === 0) ? 'Xóa bản ghi trích xuất khỏi database (không xóa trên Google Calendar)' : 'Từ chối lịch hẹn và xóa khỏi database'"
           >
-            <i class="pi pi-trash"></i> {{ item.status === 2 ? 'Xóa bản ghi (Dọn nhẹ DB)' : 'Xóa / Từ chối' }}
+            <i class="pi pi-trash"></i> {{ (item.status === 2 || item.status === 0) ? 'Xóa bản ghi (Dọn nhẹ DB)' : 'Xóa / Từ chối' }}
           </button>
         </div>
       </div>

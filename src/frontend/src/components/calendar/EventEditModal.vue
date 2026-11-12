@@ -4,37 +4,37 @@
       <h3>✏️ Chỉnh sửa sự kiện Google Calendar</h3>
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
-          <label>Tiêu đề <span class="required">*</span></label>
-          <input v-model="editForm.title" required placeholder="Họp team..." />
+          <label for="edit-title">Tiêu đề <span class="required">*</span></label>
+          <input id="edit-title" name="title" v-model="editForm.title" required placeholder="Họp team..." />
         </div>
         <div class="form-row">
           <div class="form-group half">
-            <label>Bắt đầu <span class="required">*</span></label>
-            <input type="datetime-local" v-model="editForm.start" required />
+            <label for="edit-start">Bắt đầu <span class="required">*</span></label>
+            <input id="edit-start" name="start" type="datetime-local" v-model="editForm.start" required />
           </div>
           <div class="form-group half">
-            <label>Kết thúc</label>
-            <input type="datetime-local" v-model="editForm.end" />
+            <label for="edit-end">Kết thúc</label>
+            <input id="edit-end" name="end" type="datetime-local" v-model="editForm.end" />
           </div>
         </div>
 
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="editForm.isAllDay" />
+          <label for="edit-allday">
+            <input id="edit-allday" name="isAllDay" type="checkbox" v-model="editForm.isAllDay" />
             Sự kiện cả ngày (All-day event)
           </label>
         </div>
 
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="editForm.createMeetLink" />
+          <label for="edit-meet">
+            <input id="edit-meet" name="createMeetLink" type="checkbox" v-model="editForm.createMeetLink" />
             📹 Tạo/Giữ link Google Meet tự động
           </label>
         </div>
 
         <div class="form-group">
-          <label>👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
-          <input v-model="editForm.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
+          <label for="edit-attendees">👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
+          <input id="edit-attendees" name="attendees" v-model="editForm.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
         </div>
 
         <div class="form-group">
@@ -53,8 +53,8 @@
         </div>
 
         <div class="form-group">
-          <label>⏰ Nhắc nhở trước</label>
-          <select v-model="editForm.reminderMinutes" class="form-select">
+          <label for="edit-reminder">⏰ Nhắc nhở trước</label>
+          <select id="edit-reminder" name="reminderMinutes" v-model="editForm.reminderMinutes" class="form-select">
             <option :value="null">Mặc định Google Calendar</option>
             <option :value="10">10 phút trước</option>
             <option :value="30">30 phút trước</option>
@@ -64,16 +64,16 @@
         </div>
 
         <div class="form-group">
-          <label>Địa điểm</label>
-          <input v-model="editForm.location" placeholder="Phòng họp A / Google Meet..." />
+          <label for="edit-location">Địa điểm</label>
+          <input id="edit-location" name="location" v-model="editForm.location" placeholder="Phòng họp A / Google Meet..." />
         </div>
         <div class="form-group">
-          <label>Mô tả chi tiết</label>
-          <textarea v-model="editForm.description" rows="3" placeholder="Ghi chú nội dung họp..."></textarea>
+          <label for="edit-desc">Mô tả chi tiết</label>
+          <textarea id="edit-desc" name="description" v-model="editForm.description" rows="3" placeholder="Ghi chú nội dung họp..."></textarea>
         </div>
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="editForm.isPublic" />
+          <label for="edit-public">
+            <input id="edit-public" name="isPublic" type="checkbox" v-model="editForm.isPublic" />
             Công khai sự kiện trên Public Calendar
           </label>
         </div>

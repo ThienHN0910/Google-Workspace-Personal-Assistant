@@ -48,10 +48,15 @@ public class ExceptionHandlingMiddleware
             code = HttpStatusCode.Conflict;
             message = exception.Message;
         }
-        else if (exception is ArgumentException)
+        else if (exception is ArgumentException || exception is InvalidOperationException)
         {
             code = HttpStatusCode.BadRequest;
             message = exception.Message;
+        }
+        else if (exception is Google.GoogleApiException gEx)
+        {
+            code = gEx.HttpStatusCode;
+            message = $"Lỗi từ Google Calendar / Workspace ({gEx.HttpStatusCode}): {gEx.Error?.Message ?? gEx.Message}";
         }
 
         context.Response.ContentType = "application/json";

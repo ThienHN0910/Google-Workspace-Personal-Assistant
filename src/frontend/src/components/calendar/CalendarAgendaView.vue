@@ -19,6 +19,7 @@
           <div class="agenda-title">
             {{ event.title }}
             <span v-if="event.visibility === 'private'" class="badge-private"><i class="pi pi-lock"></i> Riêng tư</span>
+            <span v-if="event.canEdit === false" class="badge-readonly"><i class="pi pi-shield"></i> Chỉ đọc</span>
           </div>
           <div v-if="event.location" class="agenda-location">
             <i class="pi pi-map-marker"></i> {{ event.location }}
@@ -28,8 +29,8 @@
           </div>
         </div>
         <div class="agenda-actions">
-          <button class="btn-icon" @click.stop="$emit('edit-event', event)" title="Chỉnh sửa"><i class="pi pi-pencil"></i></button>
-          <button class="btn-icon text-red" @click.stop="$emit('delete-event', event.id)" title="Xóa"><i class="pi pi-trash"></i></button>
+          <button v-if="event.canEdit !== false" class="btn-icon" @click.stop="$emit('edit-event', event)" title="Chỉnh sửa"><i class="pi pi-pencil"></i></button>
+          <button v-if="event.canEdit !== false" class="btn-icon text-red" @click.stop="$emit('delete-event', event.id)" title="Xóa"><i class="pi pi-trash"></i></button>
         </div>
       </div>
     </div>
@@ -124,6 +125,14 @@ const formatDateShort = (dateStr: string) => {
       color: #94a3b8;
       padding: 0.15rem 0.45rem;
       border-radius: 0.25rem;
+    }
+    .badge-readonly {
+      font-size: 0.75rem;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
+      margin-left: 0.5rem;
     }
     .agenda-location {
       font-size: 0.825rem;

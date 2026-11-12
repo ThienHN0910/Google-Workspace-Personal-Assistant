@@ -336,8 +336,8 @@ const handleUpdateEvent = async (payload: {
   } catch (err: any) {
     showToast({
       severity: 'error',
-      summary: 'Lỗi hệ thống',
-      detail: err.message || 'Không thể lưu thay đổi sự kiện.',
+      summary: 'Lỗi cập nhật',
+      detail: err.response?.data?.message || err.message || 'Không thể lưu thay đổi sự kiện.',
     });
   } finally {
     savingEdit.value = false;
@@ -362,7 +362,7 @@ const handleDeleteEvent = async (id: string) => {
     showToast({
       severity: 'error',
       summary: 'Lỗi xóa',
-      detail: err.message || 'Không thể xóa sự kiện.',
+      detail: err.response?.data?.message || err.message || 'Không thể xóa sự kiện.',
     });
   }
 };

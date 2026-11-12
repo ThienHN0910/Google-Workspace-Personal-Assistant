@@ -107,3 +107,20 @@ export interface TaskItem {
   status: string;
   notes?: string;
 }
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end?: string | null;
+  location?: string | null;
+  description?: string | null;
+  htmlLink?: string;
+  visibility?: string;
+  meetUrl?: string | null;
+  attendees?: string[];
+  colorId?: string | null;
+  isAllDay?: boolean;
+  reminderMinutes?: number | null;
+  canEdit?: boolean;
+}

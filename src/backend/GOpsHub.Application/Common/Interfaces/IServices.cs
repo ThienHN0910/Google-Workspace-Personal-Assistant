@@ -136,6 +136,7 @@ public class CalendarEvent
     public string? ColorId { get; set; }
     public bool IsAllDay { get; set; }
     public int? ReminderMinutes { get; set; }
+    public bool CanEdit { get; set; } = true;
 }
 
 public class CalendarBusySlot

@@ -134,6 +134,16 @@ public class CalendarApiService : ICalendarService
         var existing = await service.Events.Get(targetCalendar, eventId).ExecuteAsync(ct);
         if (existing == null) return;
 
+        if (string.Equals(existing.EventType, "fromGmail", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Sự kiện này được Google tạo tự động từ Gmail và mang tính chất chỉ đọc, không thể chỉnh sửa.");
+        }
+
+        if (existing.Locked == true)
+        {
+            throw new InvalidOperationException("Sự kiện này bị khóa (chỉ đọc) trên Google Calendar, không thể chỉnh sửa.");
+        }
+
         existing.Summary = title;
         existing.Location = location;
         existing.Description = description;
@@ -155,7 +165,9 @@ public class CalendarApiService : ICalendarService
             existing.ColorId = colorId;
         }
 
-        if (attendees != null)
+        // Only update attendees if organizer or explicitly provided and permitted
+        var isOrganizer = existing.Organizer == null || existing.Organizer.Self == true;
+        if (isOrganizer && attendees != null)
         {
             existing.Attendees = attendees
                 .Where(e => !string.IsNullOrWhiteSpace(e))
@@ -188,12 +200,20 @@ public class CalendarApiService : ICalendarService
         }
 
         var updateRequest = service.Events.Update(existing, targetCalendar, eventId);
-        if (createMeetLink)
+        if (createMeetLink || existing.ConferenceData != null)
         {
             updateRequest.ConferenceDataVersion = 1;
         }
 
-        await updateRequest.ExecuteAsync(ct);
+        try
+        {
+            await updateRequest.ExecuteAsync(ct);
+        }
+        catch (Google.GoogleApiException gEx)
+        {
+            _logger.LogError(gEx, "Failed to update Google Calendar event {EventId}: {Message}", eventId, gEx.Message);
+            throw new InvalidOperationException($"Lỗi Google Calendar ({gEx.HttpStatusCode}): {gEx.Error?.Message ?? gEx.Message}", gEx);
+        }
     }
 
     public async Task DeleteEventAsync(string eventId, string? calendarId = "primary", CancellationToken ct = default)
@@ -202,7 +222,15 @@ public class CalendarApiService : ICalendarService
         if (service == null) return;
 
         var targetCalendar = string.IsNullOrWhiteSpace(calendarId) ? "primary" : calendarId;
-        await service.Events.Delete(targetCalendar, eventId).ExecuteAsync(ct);
+        try
+        {
+            await service.Events.Delete(targetCalendar, eventId).ExecuteAsync(ct);
+        }
+        catch (Google.GoogleApiException gEx)
+        {
+            _logger.LogError(gEx, "Failed to delete Google Calendar event {EventId}: {Message}", eventId, gEx.Message);
+            throw new InvalidOperationException($"Lỗi Google Calendar ({gEx.HttpStatusCode}): {gEx.Error?.Message ?? gEx.Message}", gEx);
+        }
     }
 
     public async Task<IReadOnlyList<CalendarEvent>> GetUpcomingEventsAsync(int days = 7, string? calendarId = "primary", CancellationToken ct = default)
@@ -239,7 +267,10 @@ public class CalendarApiService : ICalendarService
             Attendees = e.Attendees?.Select(a => a.Email).Where(email => !string.IsNullOrEmpty(email)).ToList() ?? new List<string>(),
             ColorId = e.ColorId,
             IsAllDay = !string.IsNullOrEmpty(e.Start?.Date),
-            ReminderMinutes = e.Reminders?.Overrides?.FirstOrDefault()?.Minutes
+            ReminderMinutes = e.Reminders?.Overrides?.FirstOrDefault()?.Minutes,
+            CanEdit = !string.Equals(e.EventType, "fromGmail", StringComparison.OrdinalIgnoreCase) &&
+                      e.Locked != true &&
+                      (e.Organizer == null || e.Organizer.Self == true || e.GuestsCanModify == true)
         }).ToList();
     }
 

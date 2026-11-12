@@ -4,8 +4,8 @@
       <h3>Tạo sự kiện mới</h3>
       <form @submit.prevent="handleSubmit">
         <div class="form-group" v-if="calendars.length > 0">
-          <label>Chọn Lịch Google</label>
-          <select v-model="newEvent.calendarId" class="form-select">
+          <label for="create-calendar">Chọn Lịch Google</label>
+          <select id="create-calendar" name="calendarId" v-model="newEvent.calendarId" class="form-select">
             <option v-for="c in calendars" :key="c.id" :value="c.id">
               {{ c.summary }} {{ c.primary ? '(Chính)' : '' }}
             </option>
@@ -13,37 +13,37 @@
         </div>
 
         <div class="form-group">
-          <label>Tiêu đề <span class="required">*</span></label>
-          <input v-model="newEvent.title" required placeholder="Họp team..." autofocus />
+          <label for="create-title">Tiêu đề <span class="required">*</span></label>
+          <input id="create-title" name="title" v-model="newEvent.title" required placeholder="Họp team..." autofocus />
         </div>
         <div class="form-row">
           <div class="form-group half">
-            <label>Bắt đầu <span class="required">*</span></label>
-            <input type="datetime-local" v-model="newEvent.start" required />
+            <label for="create-start">Bắt đầu <span class="required">*</span></label>
+            <input id="create-start" name="start" type="datetime-local" v-model="newEvent.start" required />
           </div>
           <div class="form-group half">
-            <label>Kết thúc</label>
-            <input type="datetime-local" v-model="newEvent.end" />
+            <label for="create-end">Kết thúc</label>
+            <input id="create-end" name="end" type="datetime-local" v-model="newEvent.end" />
           </div>
         </div>
 
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="newEvent.isAllDay" />
+          <label for="create-allday">
+            <input id="create-allday" name="isAllDay" type="checkbox" v-model="newEvent.isAllDay" />
             Sự kiện cả ngày (All-day event)
           </label>
         </div>
 
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="newEvent.createMeetLink" />
+          <label for="create-meet">
+            <input id="create-meet" name="createMeetLink" type="checkbox" v-model="newEvent.createMeetLink" />
             📹 1-Click Tạo link họp Google Meet tự động
           </label>
         </div>
 
         <div class="form-group">
-          <label>👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
-          <input v-model="newEvent.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
+          <label for="create-attendees">👥 Khách mời / Người tham gia (Emails cách nhau bởi dấu phẩy)</label>
+          <input id="create-attendees" name="attendees" v-model="newEvent.attendees" placeholder="nguyenvana@gmail.com, colleague@company.com..." />
         </div>
 
         <div class="form-group">
@@ -62,8 +62,8 @@
         </div>
 
         <div class="form-group">
-          <label>⏰ Nhắc nhở trước</label>
-          <select v-model="newEvent.reminderMinutes" class="form-select">
+          <label for="create-reminder">⏰ Nhắc nhở trước</label>
+          <select id="create-reminder" name="reminderMinutes" v-model="newEvent.reminderMinutes" class="form-select">
             <option :value="null">Mặc định Google Calendar</option>
             <option :value="10">10 phút trước</option>
             <option :value="30">30 phút trước</option>
@@ -73,22 +73,22 @@
         </div>
 
         <div class="form-group">
-          <label>Địa điểm</label>
-          <input v-model="newEvent.location" placeholder="Phòng họp A / Google Meet..." />
+          <label for="create-location">Địa điểm</label>
+          <input id="create-location" name="location" v-model="newEvent.location" placeholder="Phòng họp A / Google Meet..." />
         </div>
         <div class="form-group">
-          <label>Mô tả</label>
-          <textarea v-model="newEvent.description" rows="3" placeholder="Ghi chú thêm..."></textarea>
+          <label for="create-desc">Mô tả</label>
+          <textarea id="create-desc" name="description" v-model="newEvent.description" rows="3" placeholder="Ghi chú thêm..."></textarea>
         </div>
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="newEvent.createTask" />
+          <label for="create-task">
+            <input id="create-task" name="createTask" type="checkbox" v-model="newEvent.createTask" />
             Đồng thời tạo nhắc nhở trong Google Tasks
           </label>
         </div>
         <div class="form-group-checkbox">
-          <label>
-            <input type="checkbox" v-model="newEvent.isPublic" />
+          <label for="create-public">
+            <input id="create-public" name="isPublic" type="checkbox" v-model="newEvent.isPublic" />
             Công khai sự kiện (Hiển thị chi tiết trên Public Calendar)
           </label>
         </div>

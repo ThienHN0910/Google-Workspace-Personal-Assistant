@@ -89,7 +89,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
-  isSameDay,
   isToday,
   isSameMonth,
   getWeekDays,
@@ -113,7 +112,13 @@ const weekDays = computed(() => getWeekDays(props.currentDate));
 const monthGridDays = computed(() => getMonthGridDays(props.currentDate));
 
 const getEventsForDay = (day: Date) => {
-  return props.events.filter(e => isSameDay(new Date(e.start), day));
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
+  const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59, 999);
+  return props.events.filter(e => {
+    const start = new Date(e.start);
+    const end = e.end ? new Date(e.end) : start;
+    return start <= dayEnd && end >= dayStart;
+  });
 };
 
 const formatDayName = (date: Date) => {
